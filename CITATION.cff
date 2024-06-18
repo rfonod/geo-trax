@@ -11,7 +11,7 @@ authors:
     orcid: 'https://orcid.org/0000-0002-9434-3156'
 identifiers:
   - type: doi
-    value: XXX
+    value: 10.5281/zenodo.12119542
     description: Zenodo archive
 repository-code: 'https://github.com/rfonod/geo-trax'
 url: 'https://github.com/rfonod/geo-trax'

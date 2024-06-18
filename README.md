@@ -1,6 +1,6 @@
 # Geo-trax: GEO-referenced TRAjectory eXtraction
 
-![GitHub Release](https://img.shields.io/github/v/release/rfonod/geo-trax?include_prereleases) [![License](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT) ![GitHub](https://img.shields.io/badge/Development-Active-brightgreen)
+[![DOI](https://zenodo.org/badge/817002220.svg)](https://zenodo.org/doi/10.5281/zenodo.12119542) ![GitHub Release](https://img.shields.io/github/v/release/rfonod/geo-trax?include_prereleases) [![License](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT) ![GitHub](https://img.shields.io/badge/Development-Active-brightgreen)
 
 🚧 **Development Notice** 🚧
 
@@ -12,7 +12,7 @@ Geo-trax is an end-to-end pipeline designed for extracting high-accuracy georefe
 2. **Vehicle Tracking** (✅): Employs a selected tracking algorithm to track the detected vehicles in the video frames.
 3. **Trajectory Stabilization** (✅): Maps each vehicle's trajectory to the reference (first) frame of the video, ensuring consistency despite any unintentional drone movements. Uses detected vehicle bounding boxes to enhance the stabilization process. Leverages the [stabilo package](https://github.com/rfonod/stabilo) for this purpose.
 4. **Georeferencing** (👷🏼): Leverages an orthomap and the reference frame to convert the stabilized trajectories into georeferenced data, mapping the vehicle paths in real-world coordinates.
-5. **Dataset Creation** (👷🏼):  Compiles trajectories and associated metadata (e.g., vehicle velocity, acceleration, and dimension estimates), into a comprehensive dataset.
+5. **Dataset Creation** (👷🏼): Compiles trajectories and associated metadata (e.g., vehicle velocity, acceleration, and dimension estimates), into a comprehensive dataset.
 6. **Visualization Tools** (👷🏼): Generates visualizations of the extracted results, including the vehicle trajectories overlaid on the video frames or various plots for traffic data analysis.
 
 This is a preliminary version of the pipeline. Future versions will include more detailed documentation, a more user-friendly interface, and additional functionalities.
@@ -153,6 +153,7 @@ license = {MIT},
 month = jun,
 title = {{Geo-trax}},
 url = {https://github.com/rfonod/geo-trax},
+doi = {10.5281/zenodo.12119542},
 version = {0.1.0},
 year = {2024}
 }
