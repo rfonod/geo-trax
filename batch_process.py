@@ -69,7 +69,6 @@ from pathlib import Path
 
 from utils import bcolors, setup_logger
 from process_video import process_video
-from visualize import visualize_results
 
 VIDEO_FORMATS = {'.mp4', '.mov'}  # Video file formats to consider (case-insensitive)
 LOGGER_PREFIX = f'[{Path(__file__).name}]'
