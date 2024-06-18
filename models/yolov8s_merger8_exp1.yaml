@@ -1,0 +1,8 @@
+# Class names the model was trained on
+
+0: Car
+1: Bus
+2: Truck
+3: Motorcycle
+4: Pedestrian
+5: Bicycle

@@ -1,0 +1,57 @@
+# This is the default configuration file (default.yaml) containing optimized parameters 
+# for the ORB detector, brute force (BF) matcher, ratio test, and projective transformation. 
+# This template serves as a starting point for users to customize according to their specific needs.
+#
+# The goal of this optimization was to balance high accuracy without compromising on speed,
+# specifically tailored for high-altitude bird's-eye view (BeV) drone imagery analysis.
+#
+# The optimization involved a set of BeV drone scenes with associated vehicle masks captured 
+# from an altitude of approximately 150 meters. With the projective transformation fixed, 
+# we then optimized all the remaining parameters in a hierarchical manner.
+#
+# Details of the optimization process will be available soon at: 
+# https://github.com/rfonod/stabilo-benchmark
+#
+# The detailed description of each parameter is explained in the stabilo.py module.
+
+
+# Image pre-processing related
+clahe: false  # Contrast Limited Adaptive Histogram Equalization (CLAHE); [true, false]
+downsample_ratio: 0.5  # Downsample ratio for image resizing; (0.0, 1.0]
+
+# Feature detectors and descriptors related
+detector_name: 'orb'  # Feature detector name; ['orb', 'sift', 'rsift', 'brisk', 'kaze', 'akaze']
+max_features: 2000  # Maximum number of features to detect; [0, inf)
+ref_multiplier: 2.0  # Reference multiplier for the number of features; (0.0, inf)
+
+# Feature matching and filtering related
+matcher_name: 'bf'  # Feature matcher name; ['bf', 'flann']
+filter_type: 'ratio'  # Filter type; ['none', 'ratio', 'distance']
+filter_ratio: 0.9  # Ratio test threshold; (0.0, 1.0]
+
+# Transformation matrix calculation related
+transformation_type: 'projective'  # Transformation type; ['projective', 'affine']
+ransac_method: 38  # RANSAC method; [4: LMEDS, 8: RANSAC, 16: RHO, 32: DEGENSAC, 33: DEGENSAC (with different parameters), 35: LO-RANSAC, 36: GC-RANSAC, 37: PROSAC, 38: MAGSAC++]
+ransac_epipolar_threshold: 2.0  # Epipolar threshold for RANSAC; (0.0, inf)
+ransac_max_iter: 5000  # Maximum number of iterations for RANSAC; (0, inf]
+ransac_confidence: 0.999999  # Confidence level for RANSAC; (0.0, 1.0]
+
+# Mask related
+mask_use: true  # Use mask for feature matching; [true, false]
+mask_margin_ratio: 0.15  # Margin ratio for mask generation; [0.0, 1.0]
+
+# Default thresholds for BRISK, KAZE, and AKAZE (if threshold analysis not performed)
+brisk_threshold: 130  # BRISK threshold; (0, 255]
+kaze_threshold: 0.01  # KAZE threshold; (0.0, inf]
+akaze_threshold: 0.01  # AKAZE threshold; (0.0, inf]
+
+# Computation related
+gpu: false  # Use GPU for computation; [true, false]
+
+# Miscellaneous
+viz: false  # Store features and matches for visualization; [true, false]
+benchmark: false  # Benchmark mode; [true, false]
+
+# Debug related
+min_good_match_count_warning: 20  # Minimum good match count warning; [0, inf]
+min_inliers_match_count_warning: 10  # Minimum inliers match count warning; [0, inf]

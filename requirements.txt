@@ -1,0 +1,13 @@
+# Geo-trax core requirements
+# Usage: pip install -r requirements.txt
+
+# Detection and Tracking -----------------------
+ultralytics==8.0.209
+lapx>=0.5.2 
+
+# Video Stabilization --------------------------
+git+https://github.com/rfonod/stabilo.git@v0.1.0
+
+# Ensure numpy<2.0
+numpy>=1.26.4,<2.0
+

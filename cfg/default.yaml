@@ -1,0 +1,42 @@
+# This is the default main configuration file (default.yaml) for geo-trax.
+#
+# This configuration file sets and links parameters for various stages of the geo-trax pipeline, including:
+#   - Detection
+#   - Tracking
+#   - Video stabilization
+#   - Georeferencing
+#   - Traffic data estimation
+#
+# The parameters provided here are optimized for use with the DJI Mavic 3 drone at altitudes of 
+# 140m-150m, with video captured at 4K resolution. Users can customize these parameters to 
+# suit different hardware or analysis requirements.
+#
+# Detailed descriptions and further customization guidance are available in the respective modules
+# and documentation:
+#   - For more information on the Stabilo module, visit: https://github.com/rfonod/stabilo
+#   - For more information on the Ultralytics module, visit: https://github.com/ultralytics/ultralytics
+
+
+# Detection and tracking related (Ultralytics module)
+cfg_ultralytics: cfg/ultralytics/default.yaml  # Ultralytics config filepath
+cfg_tracker: cfg/tracker/default_botsort.yaml  # Tracker config filepath, default choices=[*/default_botsort.yaml, */default_bytetrack.yaml]
+
+# Video stabilization related (Stabilo module)
+cfg_stabilo: cfg/stabilo/default.yaml  # Stabilo config filepath
+stabilize: True  # Stabilize the extracted trajectories (bounding boxes). Creates 4 additional columns (6:9) in the results 'track/*.txt' [default: True]
+save_stab: True  # Save stabilization results (homography matrices) into 'track/*_transf.txt' [default: True]
+
+# Vehicle dimension estimation related
+gsd: 0.02725  # Ground sample distance (GSD) in meters/pixel (averaged for DJI Mavic 3 at 140m and 150m altitude, 4K resolution)
+eps: 4  # Tolerance margin in pixels to filter out partially visible bounding boxes
+r0: 1.25  # Desired radius in meters for vehicle movement before azimuth computation
+theta_bar: 15  # Angle threshold in degrees to filter out non-parallel vehicle paths
+tau_c:  # Vehicle-class dependent length/width ratio thresholds assessing non-squareness of stationary vehicles
+  0: 1.83  # Car (incl. vans, SUVs, etc.)
+  1: 2.85  # Bus
+  2: 1.7   # Truck
+  3: 1.8   # Motorcycle
+  -1: 1.7  # Unknown
+
+# Trajectory visualization related
+tail_length: 30  # Number of frames to consider for the tail of the trajectory visualization

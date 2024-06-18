@@ -1,0 +1,36 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Environments
+.env
+.venv
+.idea
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Logging
+.comet.config
+*.log
+
+# VSCode
+.vscode/
+
+# Mac OS
+.DS_Store
+
+# Google Drive related
+.tmp.driveupload
+.tmp.drivedownload
+
+# Data and projects
+data/
+projects/
+
+# Misc
+TODOs.txt
+

@@ -1,0 +1,20 @@
+cff-version: 1.2.0
+title: Geo-trax
+abstract: Geo-trax is an end-to-end pipeline to extract and analyze georeferenced vehicle trajectories from quasi-stationary drone imagery.
+message: If you use this software, please cite it as below.
+type: software
+authors:
+  - given-names: Robert
+    family-names: Fonod
+    email: robert.fonod@ieee.org
+    affiliation: EPFL
+    orcid: 'https://orcid.org/0000-0002-9434-3156'
+identifiers:
+  - type: doi
+    value: XXX
+    description: Zenodo archive
+repository-code: 'https://github.com/rfonod/geo-trax'
+url: 'https://github.com/rfonod/geo-trax'
+license: MIT
+version: 0.1.0
+date-released: '2024-06-18'
