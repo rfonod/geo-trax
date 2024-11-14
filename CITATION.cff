@@ -1,7 +1,6 @@
 cff-version: 1.2.0
-title: Geo-trax
-abstract: Geo-trax is an end-to-end pipeline to extract and analyze georeferenced vehicle trajectories from quasi-stationary drone imagery.
-message: If you use this software, please cite it as below.
+title: "Geo-trax: A Comprehensive Framework for Georeferenced Vehicle Trajectory Extraction from Drone Imagery"
+message: "If you use this software, please cite the software and the paper."
 type: software
 authors:
   - given-names: Robert
@@ -16,5 +15,24 @@ identifiers:
 repository-code: 'https://github.com/rfonod/geo-trax'
 url: 'https://github.com/rfonod/geo-trax'
 license: MIT
-version: 0.1.0
-date-released: '2024-06-18'
+version: 0.2.0
+date-released: '2024-11-14'
+preferred-citation:
+  type: article
+  authors:
+  - family-names: "Fonod"
+    given-names: "Robert"
+  - family-names: "Cho"
+    given-names: "Haechan"
+  - family-names: "Yeo"
+    given-names: "Hwasoo"
+  - family-names: "Geroliminis"
+    given-names: "Nikolas"
+  title: "Advanced computer vision for extracting georeferenced vehicle trajectories from drone imagery"
+  year: 2024
+  month: 11
+  journal: "arXiv"
+  doi: "10.48550/arXiv.2411.02136"
+  url: "https://arxiv.org/abs/2411.02136"
+  publisher: 
+    name: "arXiv"
