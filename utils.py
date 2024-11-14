@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
 # Author: Robert Fonod (robert.fonod@ieee.org)
 
-import sys
-import logging
-from pathlib import Path
-from typing import Tuple, Dict
 import argparse
+import logging
+import sys
+from pathlib import Path
+from typing import Dict, Tuple
 
 import yaml
 
@@ -70,7 +70,7 @@ def setup_logger(name: str, verbose: bool = False, log_file: str = '') -> loggin
 
     if log_file:
         file_handler = logging.FileHandler(log_file)
-        file_handler.setFormatter(file_formatter)        
+        file_handler.setFormatter(file_formatter)
         file_handler.setLevel(logging.INFO)  # Set file handler to log INFO and above
         logger.addHandler(file_handler)
         logger.info(f"[{name}] Logging to file: {log_file}.")
@@ -82,7 +82,6 @@ def load_config_all(args: argparse.Namespace, logger: logging.Logger, script_cal
     """
     Load all configuration files and return the contents as dictionaries
     """
-    
     # Load the main config file for geo-trax
     kwargs_main = load_config(args.cfg, logger, script_caller)
     kwargs_main['args'] = args
@@ -140,7 +139,7 @@ def load_class_names(class_names_filepath: Path, logger: logging.Logger, script_
             class_names = yaml.safe_load(f)
     except FileNotFoundError:
         logger.error(f"{script_caller} Class names '{class_names_filepath}' not found. Using default class names.")
-        class_names = {0: 'class_0', 1: 'class_1', 2: 'class_2', 3: 'class_3', 4: 'class_4', 5: 'class_5', 6: 'class_6', 7: 'class_7', 8: 'class_8', 9: 'class_9'}
+        class_names = {i: f'class_{i}' for i in range(100)}
     else:
         logger.info(f"{script_caller} Class names '{class_names_filepath}' loaded successfully.")
     return class_names
@@ -159,7 +158,7 @@ def detect_delimiter(filepath: str, lines_to_check: int = 5) -> str:
             delimiters[','] += line.count(',')
             delimiters[' '] += line.count(' ')
             delimiters['\t'] += line.count('\t')
-            
+
     return max(delimiters, key=delimiters.get)
 
 
@@ -176,13 +175,13 @@ def convert_to_serializable(obj):
     elif isinstance(obj, list):
         return [convert_to_serializable(i) for i in obj]
     else:
-        return obj    
+        return obj
 
 class Colors:
     """Color palette for plotting."""
     def __init__(self):
-        hexs = ('1F77B4', 'D62728', 'FF7F0E', '006400', '8C564B', '9467BD', 
-                '0000FF', 'FF0000', 'A52A2A', '000000', '00FF00', '800080')        
+        hexs = ('1F77B4', 'D62728', 'FF7F0E', '006400', '8C564B', '9467BD',
+                '0000FF', 'FF0000', 'A52A2A', '000000', '00FF00', '800080')
         self.palette = [self.hex2rgb(f'#{c}') for c in hexs]
         self.n = len(self.palette)
         self.txt_color = (255, 255, 255)
@@ -195,5 +194,5 @@ class Colors:
     @staticmethod
     def hex2rgb(h):  # rgb order (PIL)
         return tuple(int(h[1 + i:1 + i + 2], 16) for i in (0, 2, 4))
-    
+
 

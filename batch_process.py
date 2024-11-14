@@ -5,8 +5,8 @@
 """
 batch_process.py - Batch Process Videos for Detection, Tracking, Stabilization, and Visualization
 
-This script manages the batch processing of video files, applying vehicle detection, tracking, and 
-trajectory stabilization techniques to generate and visualize results. It supports handling either single video files 
+This script manages the batch processing of video files, applying vehicle detection, tracking, and
+trajectory stabilization techniques to generate and visualize results. It supports handling either single video files
 or entire directories of videos, including subdirectories.
 
 Usage:
@@ -26,7 +26,7 @@ Shared Processing and Visualization Options:
   --log-file, -lf LOG_FILE : Specify log file name for saving detailed execution logs [default: None].
   --verbose, -v          : Enable verbose output [default: False].
   --cut-frame-left, -cfl CUT_FRAME_LEFT : Start processing from this frame number [default: 0].
-  --cut-frame-right, -cfr CUT_FRAME_RIGHT : Stop processing at this frame number [default: None].    
+  --cut-frame-right, -cfr CUT_FRAME_RIGHT : Stop processing at this frame number [default: None].
 
 Processing Options:
   --classes C            : Specify classes to detect and track (e.g., 0 1 2) [default: as per cfg file].
@@ -47,7 +47,7 @@ Examples:
      python batch_process.py path/to/videos/
 
   2. Process a directory and save output videos:
-     python batch_process.py path/to/videos/ --save 
+     python batch_process.py path/to/videos/ --save
 
   3. Customize arguments for a specific video:
      python batch_process.py video.mp4 -c cfg/custom_config.yaml
@@ -67,8 +67,9 @@ import argparse
 import logging
 from pathlib import Path
 
-from utils import bcolors, setup_logger
 from process_video import process_video
+from utils import bcolors, setup_logger
+from visualize import visualize_results
 
 VIDEO_FORMATS = {'.mp4', '.mov'}  # Video file formats to consider (case-insensitive)
 LOGGER_PREFIX = f'[{Path(__file__).name}]'
@@ -93,7 +94,7 @@ def process_input(args: argparse.Namespace, logger: logging.Logger) -> None:
         logger.warning(f"{LOGGER_PREFIX} Batch processing interrupted by user.")
     else:
         logger.info(f"{LOGGER_PREFIX} {bcolors.OKGREEN}Batch processing completed successfully.{bcolors.ENDC}")
-    
+
 def process_file(file: Path, args: argparse.Namespace, logger: logging.Logger) -> None:
     """
     Process the file if it is a video file and not in the results directory.
@@ -106,7 +107,7 @@ def process_file(file: Path, args: argparse.Namespace, logger: logging.Logger) -
         if not args.viz_only:
             should_process = determine_if_should_process(file, args, logger, "Processing")
             if should_process:
-                logger.info(f"{LOGGER_PREFIX} Processing {file}")                
+                logger.info(f"{LOGGER_PREFIX} Processing {file}")
                 if not args.dry_run:
                     args.source = file
                     process_video(args, logger)
@@ -114,14 +115,14 @@ def process_file(file: Path, args: argparse.Namespace, logger: logging.Logger) -
         if args.save or args.show:
             should_visualize = determine_if_should_process(file, args, logger, "Visualizing")
             if should_visualize:
-                #logger.info(f"{LOGGER_PREFIX} Visualizing {file}")
+                logger.info(f"{LOGGER_PREFIX} Visualizing {file}")
                 if not args.dry_run:
                     args.source = file
-                    #visualize_results(args, logger)
-                    pass
+                    visualize_results(args, logger)
+                    #pass
 
     except Exception as e:
-        logger.error(f"{LOGGER_PREFIX} Error with {file}: {e}")      
+        logger.error(f"{LOGGER_PREFIX} Error with {file}: {e}")
 
 def determine_if_should_process(file: Path, args: argparse.Namespace, logger: logging.Logger, action: str) -> bool:
     """
@@ -164,7 +165,7 @@ def check_if_results_visualized(file: Path, viz_mode: int) -> bool:
     Checks if the visualization results exist.
     """
     results_dir = file.parent / 'results'
-    vid_file_paths = [results_dir / f"{file.stem}_mode{viz_mode}.{ext}" for ext in ('mp4', 'avi')]
+    vid_file_paths = [results_dir / f"{file.stem}_mode_{viz_mode}.{ext}" for ext in ('mp4', 'avi')]
     return any(vid_file_path.exists() for vid_file_path in vid_file_paths)
 
 def parse_args() -> argparse.Namespace:
@@ -177,32 +178,35 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument('input', type=Path, help='Path to the input directory or video file (e.g., path/to/video_dir/)')
 
     # Batch processing options
-    parser.add_argument('--yes', '-y', action='store_true', help='Automatically confirm prompts without waiting for user input [default: False]')
-    parser.add_argument('--overwrite', '-o', action='store_true', help='Overwrite existing files that have already been processed [default: False]')
-    parser.add_argument('--dry-run', '-dr', action='store_true', help='Simulate the command execution without actually running any processes [default: False]')
-    parser.add_argument('--viz-only', '-vo', action='store_true', help='Only visualize the results; skip any processing operations [default: False]')
+    parser.add_argument('--yes', '-y', action='store_true', help='Automatically confirm prompts without waiting for user input')
+    parser.add_argument('--overwrite', '-o', action='store_true', help='Overwrite existing files that have already been processed')
+    parser.add_argument('--dry-run', '-dr', action='store_true', help='Simulate the command execution without actually running any processes')
+    parser.add_argument('--viz-only', '-vo', action='store_true', help='Only visualize the results; skip any processing operations')
 
     # Shared arguments for processing and visualization
-    parser.add_argument('--cfg', '-c', type=str, default='cfg/default.yaml', help='Path to the main configuration file [default: cfg/default.yaml]')
-    parser.add_argument('--log-file', '-lf', type=str, default=None, help='Filename for detailed logs (e.g., info.log). Saved in the script directory [default: None]')
-    parser.add_argument('--verbose', '-v', action='store_true', help='Set verbosity level [default: False]')
-    parser.add_argument('--cut-frame-left', '-cfl', type=int, default=0, help='Cut video from the start at this frame number [default: 0]')
-    parser.add_argument('--cut-frame-right', '-cfr', type=int, default=None, help='Cut video from the end at this frame number [default: None]')
+    parser.add_argument('--cfg', '-c', type=str, default='cfg/default.yaml', help='Path to the main configuration file')
+    parser.add_argument('--log-file', '-lf', type=str, default=None, help='Filename for detailed logs (e.g., info.log). Saved in the script directory')
+    parser.add_argument('--verbose', '-v', action='store_true', help='Set verbosity level')
+    parser.add_argument('--cut-frame-left', '-cfl', type=int, default=0, help='Cut video from the start at this frame number')
+    parser.add_argument('--cut-frame-right', '-cfr', type=int, default=None, help='Cut video from the end at this frame number')
 
-    # Processing options    
+    # Processing options
     parser.add_argument('--classes', nargs='+', type=int, help='Overwrite default classes to extract (e.g., --classes 0 1 2) [default: see cfg -> cfg_ultralytics -> classes]')
-    parser.add_argument('--interpolate', '-i', action='store_true', help='Interpolate tracks between missing frames (not implemented yet) [default: False]')
-    
+    parser.add_argument('--interpolate', '-i', action='store_true', help='Interpolate tracks between missing frames (not implemented yet)')
+
     # Visualization options
     group = parser.add_mutually_exclusive_group(required=False)
-    group.add_argument('--save', '-s', action='store_true', help='Save the processing results to a video file [default: False]')
-    group.add_argument('--show', '-sh', action='store_true', help='visualize results after processing [default: False]')
-    parser.add_argument('--viz-mode', '-vm', type=int, default=0, choices=[0, 1, 2], help='Set visualization mode for the output video: 0 - original, 1 - stabilized, 2 - reference frame [default: 0]')
-    parser.add_argument('--hide-labels', '-hl', action='store_true', help='Hide labels on the visualization output video [default: False]')
-    parser.add_argument('--hide-tracks', '-ht', action='store_true', help='Hide tracking lines in the visualization output video [default: False]')
-    parser.add_argument('--hide-conf', '-hc', action='store_true', help='Hide confidence scores on the visualization output video [default: False]')
-    parser.add_argument('--line-width', '-lw', type=int, default=2, help='Set the line width for bounding boxes [default: 2].')
-    parser.add_argument('--class-filter', '-cf', type=int, nargs='+', help='exclude specified classes (e.g., -cf 1 2) [default: None]')
+    group.add_argument('--save', '-s', action='store_true', help='Save the processing results to a video file')
+    group.add_argument('--show', '-sh', action='store_true', help='visualize results after processing')
+    parser.add_argument('--viz-mode', '-vm', type=int, default=0, choices=[0, 1, 2], help='Set visualization mode for the output video: 0 - original, 1 - stabilized, 2 - reference frame')
+    parser.add_argument("--show-conf", "-sc", action="store_true", help="show confidence values")
+    parser.add_argument("--show_lanes", "-sl", action="store_true", help="show lane numbers")
+    parser.add_argument("--show-class-names", "-scn", action="store_true", help="show class names")
+    parser.add_argument("--hide-labels", "-hl", action="store_true", help="hide labels entirely")
+    parser.add_argument("--hide-tracks", "-ht", action="store_true", help="hide the trailing lines")
+    parser.add_argument("--hide-speed", "-hs", action="store_true", help="hide speed values (if present)")
+    parser.add_argument("--line-width", "-lw", type=int, default=2, help="bounding box line width")
+    parser.add_argument('--class-filter', '-cf', type=int, nargs='+', help='exclude specified classes (e.g., -cf 1 2)')
 
     return parser.parse_args()
 
