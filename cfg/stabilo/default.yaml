@@ -10,9 +10,10 @@
 # we then optimized all the remaining parameters in a hierarchical manner.
 #
 # Details of the optimization process will be available soon at: 
-# https://github.com/rfonod/stabilo-benchmark
+# https://github.com/rfonod/stabilo-optimize
 #
-# The detailed description of each parameter is explained in the stabilo.py module.
+# The detailed description of each parameter is explained in the stabilo library:
+# https://github.com/rfonod/stabilo
 
 
 # Image pre-processing related
