@@ -1,0 +1,32 @@
+[project]
+name = "geo-trax"
+version = "0.2.0"
+description = "A Comprehensive Framework for Georeferenced Vehicle Trajectory Extraction fromDrone Imagery"
+authors = [
+    { name = "Robert Fonod", email = "robert.fonod@ieee.org" },
+]
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.9"
+keywords = ["trajectory-extraction", "trajectory-analysis", "object-detection", "object-tracking", "object-stabilization", "georeferencing", "computer-vision", "deep-learning", ]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Software Development",
+    "Topic :: Scientific/Engineering",
+]
+
+[project.urls]
+homepage = "https://github.com/rfonod/geo-trax/"
+repository = "https://github.com/rfonod/geo-trax/"
+issues = "https://github.com/rfonod/geo-trax/issues/"
+releases = "https://github.com/rfonod/geo-trax/releases"
+
+[tool.ruff]
+line-length = 120
+
+[tool.ruff.lint]
+select = ['E', 'F', 'W', 'A', "B", 'PLC', 'PLE', 'PLW', 'I']
