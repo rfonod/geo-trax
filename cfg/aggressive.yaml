@@ -1,4 +1,4 @@
-# This is the default main geo-trax configuration file (default.yaml).
+# This is a custom main geo-trax configuration file aimed at aggressive video stabilization (aggressive.yaml).
 #
 # This configuration file sets and links parameters for various stages of the geo-trax pipeline, including:
 #   - Detection
@@ -20,7 +20,7 @@
 # General settings
 cfg_ultralytics: cfg/ultralytics/default.yaml  # Ultralytics config filepath
 cfg_tracker: cfg/tracker/default_botsort.yaml  # Tracker config filepath, default choices=[*/default_botsort.yaml, */default_bytetrack.yaml]
-cfg_stabilo: cfg/stabilo/default.yaml          # Stabilo config filepath
+cfg_stabilo: cfg/stabilo/aggressive.yaml       # Stabilo config filepath
 cfg_georef: cfg/georef/default.yaml            # Georeferencing config filepath
 
 # Stabilization related settings (Stabilo module)

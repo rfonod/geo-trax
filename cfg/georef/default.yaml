@@ -1,0 +1,26 @@
+# This is the default configuration file (default.yaml) for the georeferencing module.
+
+# Transformation configuration
+transformation:
+  source_crs: epsg:4326           # Orthophoto source CRS (e.g., epsg:4326 for WGS84); string
+  target_crs: epsg:5186           # Target CRS for local coordinates transformation (e.g., epsg:5186 for Korea); string
+
+# Image matching configuration
+matching:
+  max_features: 250000            # Maximum number of features to detect; [0, inf)
+  filter_ratio: 0.55              # Ratio test threshold; (0.0, 1.0]
+  ransac_method: 38               # RANSAC method; [4: LMEDS, 8: RANSAC, 16: RHO, 32: DEGENSAC, 33: DEGENSAC (with different parameters), 35: LO-RANSAC, 36: GC-RANSAC, 37: PROSAC, 38: MAGSAC++]
+  ransac_epipolar_threshold: 3.0  # Epipolar threshold for RANSAC; (0.0, inf)
+  ransac_max_iter: 10000          # Maximum number of iterations for RANSAC; (0, inf]
+  ransac_confidence: 0.999999     # Confidence level for RANSAC; (0.0, 1.0]
+  rsift_eps: 0.00000001           # Epsilon value to avoid division by zero in RSIFT (-> 0.0)
+
+# Kinematics filtering configuration
+filtering:
+  filter_type: gaussian           # Trajectory filtering type; (gaussian, savgol)
+  kernel_size: 14                 # Kernel size for Gaussian or Savitzky-Golay filter; [1, inf)
+
+# Miscellaneous configuration
+min_traj_length: 15               # Minimum number of points in a trajectory; [0, inf)
+visibility_margin: 4              # Margin (in pixels) for object visibility determination in the frame; [0, inf)
+cutout_width_px: 15000            # Pixel width of the original orthophoto cutout. If None, the provided orthophoto width will be used. (Only applicable for 'center-text-file' geo-source) [0, inf) or None
