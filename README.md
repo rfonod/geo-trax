@@ -1,6 +1,6 @@
 # Geo-trax
 
-[![DOI](https://zenodo.org/badge/817002220.svg)](https://zenodo.org/doi/10.5281/zenodo.12119542) ![GitHub Release](https://img.shields.io/github/v/release/rfonod/geo-trax?include_prereleases) [![License](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT) ![GitHub](https://img.shields.io/badge/Development-Active-brightgreen)
+[![GitHub Release](https://img.shields.io/github/v/release/rfonod/geo-trax?include_prereleases)](https://github.com/rfonod/geo-trax/releases) [![License](https://img.shields.io/github/license/rfonod/geo-trax)](https://github.com/rfonod/geo-trax/blob/main/LICENSE) [![DOI](https://zenodo.org/badge/817002220.svg)](https://zenodo.org/doi/10.5281/zenodo.12119542) [![Development Status](https://img.shields.io/badge/development-active-brightgreen)](https://github.com/rfonod/geo-trax)
 
 🚧 **Development Notice** 🚧
 
@@ -15,7 +15,7 @@ The pipeline includes the following key components:
 3. **Trajectory Stabilization** (✅): Corrects for unintentional drone movement by aligning trajectories to a reference frame, using bounding boxes of detected vehicles to enhance stability. Leverages the [stabilo](https://github.com/rfonod/stabilo) 🚀 library to achieve reliable, consistent stabilization.
 4. **Georeferencing** (👷🏼): Maps stabilized trajectories to real-world coordinates using an orthophoto and image registration technique.
 5. **Dataset Creation** (👷🏼): Compiles trajectory and related metadata (e.g., velocity, acceleration, dimension estimates) into a structured dataset.
-6. **Visualization Tools** (👷🏼): Provides tools to visualize the extracted trajectories, overlaying paths on video frames and generating various plots for traffic data analysis.
+6. **Visualization Tools** (✅/👷🏼): Provides tools to visualize the extracted trajectories, overlaying paths on video frames and generating various plots for traffic data analysis.
 7. **Customization and Configuration** (✅): Offers flexible configuration options to adjust the pipeline settings, including detection and tracking parameters, stabilization methods, and visualization modes.
 
 This is a preliminary version of the pipeline with some functionalities not being implemented (👷🏼). Future releases will include more detailed documentation, a more user-friendly interface, and additional functionalities.
@@ -34,7 +34,7 @@ This is a preliminary version of the pipeline with some functionalities not bein
 - **Version >1.0.0**
     - Release tools for (re-)training the detection model.
     - Pre-processing tools for raw video input.
-    - Expanded documentation and tutorials (docs folder).
+    - Expanded documentation, tutorials (docs folder), and sample examples.
     - List of known limitations, e.g., ffmpeg backend version discrepancies in OpenCV.
     - Comprehensive unit tests for critical functions and end-to-end tests for the entire pipeline.
     - Publishing on PyPI for simplified installation and distribution.
@@ -169,7 +169,7 @@ month = nov,
 title = {Geo-trax: A Comprehensive Framework for Georeferenced Vehicle Trajectory Extraction from Drone Imagery},
 url = {https://github.com/rfonod/geo-trax},
 doi = {10.5281/zenodo.12119542},
-version = {0.2.0},
+version = {0.3.0},
 year = {2024}
 }
 ```

@@ -15,8 +15,8 @@ identifiers:
 repository-code: 'https://github.com/rfonod/geo-trax'
 url: 'https://github.com/rfonod/geo-trax'
 license: MIT
-version: 0.2.0
-date-released: '2024-11-14'
+version: 0.3.0
+date-released: '2025-01-02'
 preferred-citation:
   type: article
   authors:

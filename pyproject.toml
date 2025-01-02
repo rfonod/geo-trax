@@ -1,7 +1,7 @@
 [project]
 name = "geo-trax"
-version = "0.2.0"
-description = "A Comprehensive Framework for Georeferenced Vehicle Trajectory Extraction fromDrone Imagery"
+version = "0.3.0"
+description = "A Comprehensive Framework for Georeferenced Vehicle Trajectory Extraction from Drone Imagery"
 authors = [
     { name = "Robert Fonod", email = "robert.fonod@ieee.org" },
 ]
@@ -12,21 +12,35 @@ keywords = ["trajectory-extraction", "trajectory-analysis", "object-detection", 
 classifiers = [
     "Development Status :: 3 - Alpha",
     "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",        
     "Programming Language :: Python :: 3.9",
-    "Programming Language :: Python :: 3.10",
-    "Programming Language :: Python :: 3.11",
-    "Topic :: Software Development",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",    
     "Topic :: Scientific/Engineering",
+    "Topic :: Software Development",
+    "Topic :: Multimedia :: Video",
 ]
 
 [project.urls]
-homepage = "https://github.com/rfonod/geo-trax/"
-repository = "https://github.com/rfonod/geo-trax/"
-issues = "https://github.com/rfonod/geo-trax/issues/"
-releases = "https://github.com/rfonod/geo-trax/releases"
+Homepage = "https://github.com/rfonod/geo-trax/"
+Repository = "https://github.com/rfonod/geo-trax/"
+Changelog = "https://github.com/rfonod/geo-trax/releases"
+Issues = "https://github.com/rfonod/geo-trax/issues/"
 
 [tool.ruff]
 line-length = 120
 
 [tool.ruff.lint]
 select = ['E', 'F', 'W', 'A', "B", 'PLC', 'PLE', 'PLW', 'I']
+
+[tool.ruff.format]
+docstring-code-format = true
+quote-style = "preserve"
+
+[tool.pytest.ini_options]
+minversion = "6.0"
+addopts = "-ra"
+testpaths = [
+    "tests",
+]
