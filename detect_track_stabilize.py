@@ -3,7 +3,7 @@
 # Author: Robert Fonod (robert.fonod@ieee.org)
 
 """
-process_video.py - Performs video processing for vehicle trajectory extraction in image coordinates.
+detect_track_stabilize.py - Performs video processing for vehicle trajectory extraction in image coordinates.
 
 This script is integral to the Geo-trax pipeline, focusing on the extraction of vehicle trajectories in
 image coordinates from drone-derived video footage. Designed for quasi-stationary drone operations providing
@@ -15,34 +15,33 @@ on bounding boxes and azimuth data. The extracted trajectories are saved to a te
 metadata.
 
 Usage:
-  python process_video.py <video_source> [options]
+    python detect_track_stabilize.py <source> [options]
 
 Arguments:
-  video_source : Path to the video file.
+    source                    : Path to the video file (e.g., path/to/video/video.mp4).
 
 Options:
-  --cfg, -c CFG            : Path to the main configuration file [default: 'cfg/default.yaml'].
-  --classes CLASSES        : Specify classes to track (e.g., 0 1 2) [default: as per cfg file].
-  --log-file, -lf LOG_FILE : Specify log file name for detailed logs [default: None].
-  --verbose, -v            : Enable detailed logging to console [default: False].
-  --interpolate, -i        : Interpolate missing frames in tracks (not yet implemented).
-  --cut-frame-left, -cfl CUT_FRAME_LEFT : Start processing from this frame number [default: 0].
-  --cut-frame-right, -cfr CUT_FRAME_RIGHT : Stop processing at this frame number [default: None].
+    -h, --help                : Show this help message and exit.
+    -c, --cfg <path>          : Path to the main geo-trax configuration file (default: cfg/default.yaml).
+    -lf, --log-file <str>     : Custom filename to save detailed logs. Saved in the 'logs' folder.
+    -v, --verbose             : Set print verbosity level to INFO (default: WARNING).
+
+    --classes <int>           : Class IDs to extract (e.g., --classes 0 1 2). Defaults to cfg -> cfg_ultralytics -> classes.
+    --cut-frame-left <int>    : Skip the first N frames. Default: 0.
+    --cut-frame-right <int>   : Stop processing after this frame. Default: None.
 
 Examples:
   1. Process a video with default settings:
-     python process_video.py path/to/video.mp4
+        python detect_track_stabilize.py path/to/video.mp4
 
-  2. Use a custom config and enable verbose logging into a log file:
-     python process_video.py path/to/video.mp4 -c cfg/custom.yaml -v -lf video.log
+  2. Use a custom config and consider only the first two vehicle classes:
+        python detect_track_stabilize.py path/to/video.mp4 --cfg cfg/custom.yaml --classes 0 1
 
-  3. Specifying vehicle classes and video segment:
-     python process_video.py path/to/video.mp4 --classes 0 2 --cut-frame-right 800
+  3. Skip the first 100 frames and stop processing after frame 500:
+        python detect_track_stabilize.py path/to/video.mp4 --cut-frame-left 100 --cut-frame-right 500
 
 Notes:
-  - This script is in a pre-release state and intended for experimental use only.
-  - Features like 'interpolate' are planned but not yet implemented.
-  - Refer to 'cfg/default.yaml' for default configuration parameters.
+  - Additional configurations can be set in the main configuration file (default: cfg/default.yaml) and linked config files therein.
 """
 
 import argparse
@@ -61,19 +60,25 @@ from ultralytics import RTDETR, YOLO
 from ultralytics.utils.checks import check_yolo
 from ultralytics.utils.files import increment_path
 
-from utils import convert_to_serializable, load_config_all, setup_logger
+from utils.utils import (
+    check_if_results_exist,
+    convert_to_serializable,
+    get_video_dimensions,
+    load_config_all,
+    setup_logger,
+)
 
-LOGGER_PREFIX = f'[{Path(__file__).name}]'
 
-def process_video(args: argparse.Namespace, logger: logging.Logger) -> None:
+def detect_track_stabilize(args: argparse.Namespace, logger: logging.Logger) -> None:
     """
     Process video based on provided arguments.
     """
-    config = load_config_all(args, logger, LOGGER_PREFIX)
+    config = load_config_all(args, logger)
     model = load_detector(config['ultralytics'], logger)
     tracks, transforms = track_with_model(model, config, logger)
     tracks = postprocess_tracks(tracks, config, logger)
     save_results(tracks, transforms, config, logger)
+
 
 def track_with_model(model: Union[YOLO, RTDETR], config: Dict, logger: logging.Logger) -> Tuple[np.ndarray, np.ndarray]:
     """
@@ -83,7 +88,7 @@ def track_with_model(model: Union[YOLO, RTDETR], config: Dict, logger: logging.L
     stabilizer = Stabilizer(**config['stabilo'])
 
     frame_num, yolo_time, stab_time = 0, [], []
-    frame_arr, track_id, bbox, bbox_stab, cls, conf, transforms = [], [], [], [], [], [], []
+    frame_arr, track_id, bbox, bbox_stab, class_id, conf, transforms = [], [], [], [], [], [], []
 
     try:
         while reader.isOpened():
@@ -108,11 +113,11 @@ def track_with_model(model: Union[YOLO, RTDETR], config: Dict, logger: logging.L
                         track_ids = np.full((len(boxes), 1), -1)
                     track_id.append(track_ids)
                     bbox.append(boxes.xywh.detach().numpy(force=True).astype(np.float32))
-                    cls.append(boxes.cls.detach().numpy(force=True).astype(np.uint8).reshape(-1, 1))
+                    class_id.append(boxes.cls.detach().numpy(force=True).astype(np.uint8).reshape(-1, 1))
                     conf.append(boxes.conf.detach().numpy(force=True).astype(np.float32).reshape(-1, 1))
 
                     if config['main']['args'].verbose:
-                        unique, counts = np.unique(cls[-1], return_counts=True)
+                        unique, counts = np.unique(class_id[-1], return_counts=True)
                         class_freq.update(dict(zip(unique, counts)))
 
                 if config['main']['stabilize']:
@@ -140,20 +145,21 @@ def track_with_model(model: Union[YOLO, RTDETR], config: Dict, logger: logging.L
             frame_num += 1
             pbar.update()
     except Exception as e:
-        logger.error(f'{LOGGER_PREFIX} Error processing {config["main"]["args"].source}: {e}')
+        logger.error(f"Error processing: '{config['main']['args'].source}' due to: {e}")
         return np.array([[]]), np.array([[]])
     else:
         pbar.total = frame_num
         pbar.refresh()
-        logger.info(f"{LOGGER_PREFIX} {sum(yolo_time) / len(yolo_time):5.1f}ms - average YOLOv8 (preprocess + inference + postprocess) time.")
-        logger.info(f"{LOGGER_PREFIX} {sum(stab_time) / len(stab_time):5.1f}ms - average stabilization time.") if stab_time else None
-        logger.info(f"{LOGGER_PREFIX} {1000 / ((sum(yolo_time) + sum(stab_time)) / (1 + frame_num)):4.1f}fps - pipeline's average frames per second (fps).")
+        logger.info(f"Average YOLOv8 (preprocess + inference + postprocess) time: {sum(yolo_time) / len(yolo_time):5.1f}ms.")
+        logger.info(f"Average stabilization time: {sum(stab_time) / len(stab_time):5.1f}ms") if stab_time else None
+        logger.info(f"Average pipeline time: {1000 / ((sum(yolo_time) + sum(stab_time)) / (1 + frame_num)):4.1f}fps.")
     finally:
         reader.release()
         pbar.close()
 
-    tracks, transforms = aggregate_results(frame_arr, track_id, bbox, bbox_stab, cls, conf, transforms, logger)
+    tracks, transforms = aggregate_results(frame_arr, track_id, bbox, bbox_stab, class_id, conf, transforms, logger)
     return tracks, transforms
+
 
 def load_detector(config: Dict, logger: logging.Logger) -> Union[YOLO, RTDETR]:
     """
@@ -165,36 +171,36 @@ def load_detector(config: Dict, logger: logging.Logger) -> Union[YOLO, RTDETR]:
         if 'rtdetr' in yaml_file:
             model = RTDETR(config['model'])
     except KeyError as e:
-        logger.critical(f"{LOGGER_PREFIX} Configuration key error: {e}")
+        logger.critical(f"Configuration key error: {e}")
         sys.exit(1)
     except Exception as e:
-        logger.error(f"{LOGGER_PREFIX} Error loading the YOLOv8 model: {e}")
+        logger.error(f"Error loading the YOLOv8 model: {e}")
         sys.exit(1)
     else:
-        logger.info(f"{LOGGER_PREFIX} Detection model '{config['model']}' loaded successfully.")
+        logger.info(f"Detection model '{config['model']}' loaded successfully.")
 
     check_yolo(device=config['device'])
     return model
+
 
 def initialize_streams(config: Dict, imgsz: int, logger: logging.Logger) -> Tuple[cv2.VideoCapture, tqdm]:
     """
     Initialize video reader and progress bar.
     """
-    reader = cv2.VideoCapture(str(config['args'].source))
-    if not reader.isOpened():
-        logger.error(f"{LOGGER_PREFIX} Failed to open {config['args'].source}.")
+    video_exists, video_filepath = check_if_results_exist(config['args'].source, 'video')
+    if not video_exists:
+        logger.critical(f"Video file '{video_filepath}' not found.")
         sys.exit(1)
 
-    config['video'] = {
-        'frame_count': int(reader.get(cv2.CAP_PROP_FRAME_COUNT)),
-        'fps': reader.get(cv2.CAP_PROP_FPS),
-        'w_I': int(reader.get(cv2.CAP_PROP_FRAME_WIDTH)),
-        'h_I': int(reader.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    }
+    reader = cv2.VideoCapture(str(video_filepath))
+    if not reader.isOpened():
+        logger.error(f"Failed to open: '{video_filepath}'.")
+        sys.exit(1)
 
-    pbar = tqdm(total=config['video']['frame_count'], unit='f', leave=True, colour='yellow',
-                desc=f'{config["args"].source.name} - {"" if config["args"].verbose else "processing"} @ {imgsz}px ')
+    pbar = tqdm(total=int(reader.get(cv2.CAP_PROP_FRAME_COUNT)), unit='f', leave=True, colour='yellow',
+                desc=f'{video_filepath.name} - {"" if config["args"].verbose else "processing"} @ {imgsz}px ')
     return reader, pbar
+
 
 def update_progress_bar(pbar: tqdm, class_freq: Dict, speed: Dict, stab_time: list, config: Dict) -> None:
     """
@@ -208,7 +214,8 @@ def update_progress_bar(pbar: tqdm, class_freq: Dict, speed: Dict, stab_time: li
         postfix_txt['stab'] = f'{stab_time[-1]:.1f}ms' if stab_time else 'N/A'
         pbar.set_postfix(postfix_txt)
 
-def aggregate_results(frame_arr: list, track_id: list, bbox: list, bbox_stab: list, cls: list, conf: list, transforms: list, logger: logging.Logger) -> Tuple[np.ndarray, np.ndarray]:
+
+def aggregate_results(frame_arr: list, track_id: list, bbox: list, bbox_stab: list, class_id: list, conf: list, transforms: list, logger: logging.Logger) -> Tuple[np.ndarray, np.ndarray]:
     """
     Aggregate the results from all frames.
     """
@@ -217,17 +224,18 @@ def aggregate_results(frame_arr: list, track_id: list, bbox: list, bbox_stab: li
         track_id = np.concatenate(track_id, axis=0) if track_id else np.array([[]])
         bbox = np.concatenate(bbox, axis=0) if bbox else np.array([[]])
         bbox_stab = np.concatenate(bbox_stab, axis=0) if bbox_stab else np.array([[]]).reshape(len(track_id), 0)
-        cls = np.concatenate(cls, axis=0) if cls else np.array([[]])
+        class_id = np.concatenate(class_id, axis=0) if class_id else np.array([[]])
         conf = np.concatenate(conf, axis=0) if conf else np.array([[]])
 
-        tracks = np.concatenate([frame_arr, track_id, bbox, bbox_stab, cls, conf], axis=1, dtype=np.float32)
+        tracks = np.concatenate([frame_arr, track_id, bbox, bbox_stab, class_id, conf], axis=1, dtype=np.float32)
         tracks = tracks[tracks[:, 1] != -1]
         transforms = np.concatenate(transforms, axis=0) if transforms else np.array([[]])
     except Exception as e:
-        logger.error(f'{LOGGER_PREFIX} Error aggregating results: {e}')
+        logger.error(f'Error aggregating results: {e}')
         tracks = np.array([[]])
         transforms = np.array([[]])
     return tracks, transforms
+
 
 def postprocess_tracks(tracks: np.ndarray, config: Dict, logger: logging.Logger) -> np.ndarray:
     """
@@ -236,9 +244,8 @@ def postprocess_tracks(tracks: np.ndarray, config: Dict, logger: logging.Logger)
     tracks = remove_short_tracks(tracks, logger)
     tracks = calculate_unique_classes(tracks, config['ultralytics'])
     tracks = estimate_vehicle_dimensions(tracks, config['main'])
-    if config['main']['args'].interpolate:
-        logger.warning(f'{LOGGER_PREFIX} Track interpolation is not yet implemented.')
     return tracks
+
 
 def remove_short_tracks(tracks: np.ndarray, logger: logging.Logger, min_length: int = 3) -> np.ndarray:
     """
@@ -252,8 +259,9 @@ def remove_short_tracks(tracks: np.ndarray, logger: logging.Logger, min_length: 
             tracks = tracks[~mask]
             count += 1
     if count > 0:
-        logger.info(f'{LOGGER_PREFIX} {count} short tracks removed.')
+        logger.info(f'{count} short tracks removed.')
     return tracks
+
 
 def calculate_unique_classes(tracks: np.ndarray, config: Dict) -> np.ndarray:
     """
@@ -277,14 +285,16 @@ def calculate_unique_classes(tracks: np.ndarray, config: Dict) -> np.ndarray:
 
     return tracks
 
+
 def estimate_vehicle_dimensions(tracks: np.ndarray, config: Dict) -> np.ndarray:
     """
     Estimate vehicle dimensions based on bounding boxes and azimuths.
     """
-    w_I, h_I = config['video']['w_I'], config['video']['h_I']
+
+    w_I, h_I = get_video_dimensions(config['args'].source)
 
     # Step 1: visibility filtering
-    eps = config['eps']
+    eps = config['dimension_estimation']['eps']
     mask = (tracks[:, 2] - tracks[:, 4]/2 > eps) & (tracks[:, 3] - tracks[:, 5]/2 > eps)
     mask &= (tracks[:, 2] + tracks[:, 4]/2 < w_I - 1 - eps) & (tracks[:, 3] + tracks[:, 5]/2 < h_I - 1 - eps)
     valid_tracks = tracks[mask]
@@ -313,7 +323,13 @@ def estimate_vehicle_dimensions(tracks: np.ndarray, config: Dict) -> np.ndarray:
             id2class[track_id] = v_class
 
     # Step 3: azimuth-based filtering
-    radius, theta_bar_rad, tau_c = config['r0'] / config['gsd'], np.deg2rad(config['theta_bar']), config['tau_c']
+    r0 = config['dimension_estimation']['r0']
+    gsd = config['dimension_estimation']['gsd']
+    theta_bar = config['dimension_estimation']['theta_bar']
+    theta_bar_rad = np.deg2rad(theta_bar)
+    tau_c = config['dimension_estimation']['tau_c']
+    radius_threshold = r0 / gsd
+
     for track_id in unique_ids:
         lengths, widths = id2lengths[track_id], id2widths[track_id]
         x_centers, y_centers = id2x_centers[track_id], id2y_centers[track_id]
@@ -324,7 +340,7 @@ def estimate_vehicle_dimensions(tracks: np.ndarray, config: Dict) -> np.ndarray:
         for idx, point in enumerate(zip(x_centers[1:], y_centers[1:]), start=1):
             x_c, y_c = point
             distance = np.sqrt((x_c - x_c_prev) ** 2 + (y_c - y_c_prev) ** 2)
-            if distance >= radius:
+            if distance >= radius_threshold:
                 azimuth = np.arctan2(-(y_c - y_c_prev), x_c - x_c_prev)
                 x_c_prev, y_c_prev = x_c, y_c
                 if np.any(np.abs(azimuth - np.array([0, np.pi / 2, np.pi, -np.pi / 2, -np.pi])) <= theta_bar_rad):
@@ -352,6 +368,7 @@ def estimate_vehicle_dimensions(tracks: np.ndarray, config: Dict) -> np.ndarray:
 
     return tracks
 
+
 def save_results(tracks: np.ndarray, transforms: np.ndarray, config: Dict, logger: logging.Logger) -> None:
     """
     Save the detection, tracking, and stabilization results to files.
@@ -364,47 +381,53 @@ def save_results(tracks: np.ndarray, transforms: np.ndarray, config: Dict, logge
     try:
         if tracks.size != 0:
             np.savetxt(tracks_txt_file, tracks, fmt='%g', delimiter=',')
-            logger.info(f'{LOGGER_PREFIX} Tracking results saved to {tracks_txt_file.resolve()}')
+            logger.info(f"Tracking results saved to: '{tracks_txt_file.resolve()}'")
     except Exception as e:
-        logger.error(f'{LOGGER_PREFIX} Failed to save the tracking results to {tracks_txt_file.resolve()}: {e}')
+        logger.error(f"Failed to save the tracking results to: '{tracks_txt_file.resolve()}' due to: {e}")
 
     try:
         if transforms.size != 0 and config['main']['save_stab']:
             frame_nums = transforms[:, 0].astype(int)
             matrices = transforms[:, 1:].reshape((-1, 3, 3))
             if not np.all(np.diff(frame_nums) == 1):
-                logger.warning(f'{LOGGER_PREFIX} Missing frame ids found in {transf_txt_file}.')
+                logger.warning(f"Missing frame ids found in: '{transf_txt_file}'.")
             if not np.all(np.linalg.det(matrices) > 0):
-                logger.warning(f'{LOGGER_PREFIX} Invalid transforms found in {transf_txt_file}.')
-            np.savetxt(transf_txt_file, transforms, fmt='%g', delimiter=',')
+                logger.warning(f"Invalid transforms found in: '{transf_txt_file}'.")
+            np.savetxt(transf_txt_file, transforms, fmt='%.16g', delimiter=',')
     except Exception as e:
-        logger.error(f'{LOGGER_PREFIX} Failed to save the video stabilization results to {transf_txt_file.resolve()}: {e}')
+        logger.error(f"Failed to save the video stabilization results to: '{transf_txt_file.resolve()}' due to: {e}")
     else:
-        logger.info(f'{LOGGER_PREFIX} Video stabilization results saved to: {transf_txt_file.resolve()}')
+        logger.info(f"Video stabilization results saved to: '{transf_txt_file.resolve()}'")
 
     serializable_config = convert_to_serializable(config)
     with open(info_yaml_file, 'w') as f:
         yaml.dump(serializable_config, f, default_flow_style=False)
-    logger.info(f'{LOGGER_PREFIX} Video info and configs saved to {info_yaml_file.resolve()}')
+    logger.info(f"Video info and configs saved to: '{info_yaml_file.resolve()}'")
 
-def parse_args() -> argparse.Namespace:
+
+def parse_cli_args() -> argparse.Namespace:
     """
     Parse command-line arguments.
     """
     parser = argparse.ArgumentParser(description='Vehicle Detection, Tracking, and Stabilization Pipeline')
 
+    # Required arguments
     parser.add_argument('source', type=Path, help='Path to the video file (e.g., path/to/video/video.mp4)')
-    parser.add_argument('--cfg', '-c', type=str, default='cfg/default.yaml', help='Path to the main configuration file')
-    parser.add_argument('--classes', nargs='+', type=int, help='Overwrite classes to extract (e.g., --classes 0 1 2) [default: see cfg -> cfg_ultralytics -> classes]')
-    parser.add_argument('--log-file', '-lf', type=str, default=None, help="Filename for detailed logs. Saved in script's directory")
-    parser.add_argument('--verbose', '-v', action='store_true', help='Set verbosity level to DEBUG [default: INFO]')
-    parser.add_argument('--interpolate', '-i', action='store_true', help='Interpolate tracks between missing frames (not implemented yet)')
-    parser.add_argument('--cut-frame-left', '-cfl', type=int, default=0, help='Cut video from the start at this frame number')
-    parser.add_argument('--cut-frame-right', '-cfr', type=int, default=None, help='Cut video from the end at this frame number')
+
+    # Optional arguments
+    parser.add_argument('--cfg', '-c', type=Path, default='cfg/default.yaml', help='Path to the main geo-trax configuration file')
+    parser.add_argument('--log-file', '-lf', type=str, default=None, help="Filename to save detailed logs. Saved in the 'logs' folder.")
+    parser.add_argument('--verbose', '-v', action='store_true', help='Set print verbosity level to INFO (default: WARNING)')
+
+    # Additional arguments
+    parser.add_argument('--classes', '-cls', nargs='+', type=int, help='Class IDs to extract (e.g., --classes 0 1 2). Defaults to cfg -> cfg_ultralytics -> classes.')
+    parser.add_argument('--cut-frame-left', '-cfl', type=int, default=0, help='Skip the first N frames. Default: 0.')
+    parser.add_argument('--cut-frame-right', '-cfr', type=int, default=None, help='Stop processing after this frame. Default: None.')
 
     return parser.parse_args()
 
 if __name__ == '__main__':
-    args = parse_args()
+    args = parse_cli_args()
     logger = setup_logger(Path(__file__).name, args.verbose, args.log_file)
-    process_video(args, logger)
+
+    detect_track_stabilize(args, logger)
