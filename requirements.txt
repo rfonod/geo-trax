@@ -10,3 +10,6 @@ stabilo>=1.0.0
 
 # Ensure numpy<2.0
 numpy>=1.26.4,<2.0
+
+# Ensure torch<2.6
+torch>=1.10.0,<2.6
