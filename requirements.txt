@@ -5,8 +5,11 @@
 ultralytics==8.0.209
 lapx>=0.5.2 
 
-# Video Stabilization --------------------------
+# Stabilization --------------------------
 stabilo>=1.0.0
+
+# Georeferencing -------------------------------
+geopandas>=1.0.0
 
 # Ensure numpy<2.0
 numpy>=1.26.4,<2.0
