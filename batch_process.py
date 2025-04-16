@@ -22,6 +22,7 @@ Batch Processing Options:
     -go, --geo-only   : Only run georeferencing; skip detection, tracking, and stabilization.
     -ng, --no-geo     : Do not georeference the tracking data.
     -fe, --folders-exclude : Folders to exclude from the batch processing.
+    -ep, --exclude-patterns : File name patterns to exclude (e.g., --exclude-patterns car_test drone_2023).
 
 Shared Processing, Georeferencing, and Visualization Options:
     -c, --cfg         : Path to the main geo-trax configuration file.
@@ -46,6 +47,8 @@ Visualization Options:
     -s, --save        : Save the processing results to a video file.
     -sh, --show       : Visualize results during processing.
     -vm, --viz-mode   : Set visualization mode for the output video: 0 - original, 1 - stabilized, 2 - reference frame.
+    -pt, --plot-trajectories : Plot trajectories on the reference frame at the beginning of the video.
+    -pd, --plot-delay : Delay in frames for plotting trajectories.
     -sc, --show-conf  : Show confidence values.
     -sl, --show-lanes : Show lane numbers.
     -scn, --show-class-names : Show class names.
@@ -72,7 +75,7 @@ Examples:
 
 Notes:
   - Ensure that all paths provided are accessible and that necessary permissions are set.
-  - Check that all required dependencies and modules are properly installed and up-to-date.
+  - Check that all required dependencies and modules are properly installed.
   - Additional configurations can be set in the main configuration file (default: cfg/default.yaml) and linked config files therein.
 """
 
@@ -83,6 +86,7 @@ from pathlib import Path
 from tqdm import tqdm
 
 from detect_track_stabilize import detect_track_stabilize
+from georeference import georeference
 from utils.utils import bcolors, check_if_results_exist, determine_suffix_and_fourcc, setup_logger
 from visualize import visualize_results
 
@@ -104,32 +108,30 @@ def process_input(args: argparse.Namespace, logger: logging.Logger) -> None:
         elif input_path.is_dir():
             logger.notice(f"{bcolors.OKGREEN}Batch processing all videos in: '{input_path}'{bcolors.ENDC}")
             args.cut_frame_right = None
-            files_to_process = [file for file in input_path.rglob('*') if file.is_file() and file.suffix.lower() in VIDEO_FORMATS]
+            potential_files_to_process = [file for file in input_path.rglob('*') if file.is_file() and file.suffix.lower() in VIDEO_FORMATS]
+            files_to_process = filter_files_to_process(potential_files_to_process, args, logger)
             files_to_process = sorted(files_to_process)
+
             pbar = tqdm(files_to_process, unit="video")
             for file in files_to_process:
                 pbar.set_description(f"Processing: '{file}'")
                 process_file(file, args, logger)
                 pbar.update(1)
     except KeyboardInterrupt:
-        logger.warning("Batch processing interrupted by user.")
+        logger.error("Batch processing interrupted by user.")
 
 
 def process_file(file: Path, args: argparse.Namespace, logger: logging.Logger) -> None:
     """
     Process the file if it is a video file and not in the results directory.
     """
-    if file.parent.name in args.folders_exclude:
-        return
-
     try:
         logger.info(f"Processing: '{file}'")
         if not args.viz_only and not args.geo_only:
             process_step(file, args, logger, "Detecting, tracking, and stabilizing", detect_track_stabilize)
 
         if not args.viz_only and not args.no_geo:
-            #process_step(file, args, logger, "Georeferencing", georeference)
-            pass
+            process_step(file, args, logger, "Georeferencing", georeference)
 
         if args.save or args.show:
             process_step(file, args, logger, "Visualizing", visualize_results)
@@ -147,6 +149,25 @@ def process_step(file: Path, args: argparse.Namespace, logger: logging.Logger, a
         if not args.dry_run:
             args.source = file
             func(args, logger)
+
+
+def filter_files_to_process(files: list, args: argparse.Namespace, logger: logging.Logger) -> list:
+    """
+    Filter files based on exclusion criteria (folders and patterns).
+    """
+    filtered_files = []
+    for file in files:
+        if file.parent.name in args.folders_exclude:
+            logger.info(f"Skipping '{file}' as it's in an excluded folder.")
+            continue
+
+        if args.exclude_patterns and any(pattern in file.name for pattern in args.exclude_patterns):
+            logger.info(f"Skipping '{file}' due to matching exclusion pattern.")
+            continue
+
+        filtered_files.append(file)
+
+    return filtered_files
 
 
 def should_process_file(file: Path, args: argparse.Namespace, logger: logging.Logger, action: str) -> bool:
@@ -204,6 +225,7 @@ def parse_cli_args() -> argparse.Namespace:
     parser.add_argument('--geo-only', '-go', action='store_true', help='Only run georeferencing; skip detection, tracking, and stabilization')
     parser.add_argument('--no-geo', '-ng', action='store_true', help='Do not georeference the tracking data')
     parser.add_argument("--folders-exclude", "-fe", type=str, nargs='+', default=['results'], help="Folders to exclude from the batch processing")
+    parser.add_argument("--exclude-patterns", "-ep", type=str, nargs='+', default=None, help="File name patterns to exclude (e.g., --exclude-patterns car_test drone_2023)")
 
     # Shared processing, georeferencing, and visualization options
     parser.add_argument('--cfg', '-c', type=Path, default='cfg/default.yaml', help='Path to the main geo-trax configuration file')
@@ -229,6 +251,8 @@ def parse_cli_args() -> argparse.Namespace:
     group.add_argument('--save', '-s', action='store_true', help='Save the processing results to a video file')
     group.add_argument('--show', '-sh', action='store_true', help='Visualize results during processing')
     parser.add_argument('--viz-mode', '-vm', type=int, default=0, choices=[0, 1, 2], help='Set visualization mode for the output video: 0 - original, 1 - stabilized, 2 - reference frame')
+    parser.add_argument("--plot-trajectories", "-pt", action="store_true", help='Plot trajectories on the reference frame')
+    parser.add_argument("--plot-delay", "-pd", type=int, default=30, help='Delay in frames for plotting trajectories')
     parser.add_argument("--show-conf", "-sc", action="store_true", help='Show confidence values')
     parser.add_argument("--show_lanes", "-sl", action="store_true", help='Show lane numbers')
     parser.add_argument("--show-class-names", "-scn", action="store_true", help='Show class names')
@@ -246,9 +270,6 @@ def main() -> None:
     """
     args = parse_cli_args()
     logger = setup_logger(Path(__file__).name, args.verbose, args.log_file, args.dry_run)
-
-    if not args.no_geo or args.geo_only:
-        logger.warning("Georeferencing is not yet implemented. Skipping georeferencing.")
 
     process_input(args, logger)
 

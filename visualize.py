@@ -24,6 +24,8 @@ Visualization Options:
   --save, -s          : Save the processing results to a video file.
   --show, -sh         : Visualize results during processing.
   --viz-mode, -vm     : Set the visualization mode for the output video: 0 - original, 1 - stabilized, 2 - reference frame (default: 0).
+  --plot-trajectories, -pt : Plot all stabilized trajectories on the reference frame at the beginning.
+  --plot-delay, -pd   : Delay in frames for plotting trajectories (default: 30).
   --show-conf, -sc    : Show confidence values.
   --show-lanes, -sl   : Show lane numbers.
   --show-class-names, -scn : Show class names.
@@ -70,7 +72,7 @@ import pandas as pd
 from tqdm import tqdm
 
 from utils.utils import (
-    Colors,
+    VizColors,
     check_if_results_exist,
     detect_delimiter,
     determine_suffix_and_fourcc,
@@ -87,13 +89,13 @@ def visualize_results(args: argparse.Namespace, logger: logging.Logger) -> None:
     class_names = config['class_names']
     viz_config = config['visualization']
     tracks_txt_filepath, transforms_filepath, tracks_csv_filepath = get_and_verify_filepaths(args, logger)
-    tracks = read_tracks(tracks_txt_filepath, class_names, args, logger)
+    tracks, tracks_plotting = read_tracks(tracks_txt_filepath, class_names, args, logger)
     transforms = read_transforms(transforms_filepath, logger)
     speed_lane_data = read_georeferenced_results(tracks_csv_filepath, logger)
     vid_reader, vid_writer, pbar = initialize_streams(args, logger)
 
     try:
-        for frame_num, annotated_frame in process_frames(tracks, transforms, speed_lane_data, vid_reader, pbar, class_names, viz_config, args, logger):
+        for frame_num, annotated_frame in process_frames(tracks, tracks_plotting, transforms, speed_lane_data, vid_reader, pbar, class_names, viz_config, args, logger):
             if args.show:
                 display_frame(annotated_frame, frame_num, logger)
             if args.save:
@@ -104,15 +106,32 @@ def visualize_results(args: argparse.Namespace, logger: logging.Logger) -> None:
         finalize_video(vid_reader, vid_writer, pbar, frame_num, args.show, logger)
 
 
-def process_frames(tracks: pd.DataFrame, transforms: dict, speed_lane_data: pd.DataFrame, cap: cv2.VideoCapture, pbar: tqdm, class_names: dict, viz_config: dict, args: argparse.Namespace, logger: logging.Logger):
+def process_frames(tracks: pd.DataFrame, tracks_plotting: pd.DataFrame, transforms: dict, speed_lane_data: pd.DataFrame, cap: cv2.VideoCapture, pbar: tqdm, class_names: dict, viz_config: dict, args: argparse.Namespace, logger: logging.Logger):
     """
     Process the video frames and annotate them with tracking results.
     """
     track_history = defaultdict(list)
     frame_num = 0
-    ref_frame = None
+    viz_phase = args.plot_trajectories  # 0: normal processing phase, 1: trajectory plotting phase
+    trajectory_frame = None
 
-    while cap.isOpened():
+    if viz_phase:
+        trajectory_frame = plot_trajectories(cap, tracks_plotting, args.cut_frame_left, args.cut_frame_right, viz_config)
+
+    while True:
+        if viz_phase:
+            # Trajectory plotting phase
+            if frame_num < args.plot_delay:
+                yield 0, trajectory_frame
+                frame_num += 1
+                continue
+            else:
+                cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+                frame_num = 0
+                viz_phase = 0
+                continue
+
+        # Normal video processing phase
         success, frame = cap.read()
         if not success:
             break
@@ -121,6 +140,10 @@ def process_frames(tracks: pd.DataFrame, transforms: dict, speed_lane_data: pd.D
             frame_num += 1
             pbar.update()
             continue
+        elif frame_num == args.cut_frame_left:
+            ref_frame = frame.copy()
+        elif args.cut_frame_right is not None and frame_num >= args.cut_frame_right:
+            break
 
         tracks_frame = tracks[tracks[0] == frame_num]
         speed_lane_frame = speed_lane_data[speed_lane_data['Frame_ID'] == frame_num].drop(columns=['Frame_ID']) if speed_lane_data is not None else None
@@ -129,8 +152,6 @@ def process_frames(tracks: pd.DataFrame, transforms: dict, speed_lane_data: pd.D
             h, w = frame.shape[:2]
             frame = cv2.warpPerspective(frame, transforms[frame_num], (w, h))
         elif args.viz_mode == 2:
-            if ref_frame is None:
-                ref_frame = frame.copy()
             frame = ref_frame.copy()
 
         annotated_frame = annotate_frame(frame, frame_num, tracks_frame, track_history, class_names, speed_lane_frame, viz_config, args, logger)
@@ -174,7 +195,7 @@ def get_and_verify_filepaths(args: argparse.Namespace, logger: logging.Logger) -
     return tracks_txt_filepath, transforms_filepath, tracks_csv_filepath
 
 
-def read_tracks(tracks_txt_filepath: Path, class_names: dict, args: argparse.Namespace, logger: logging.Logger) -> pd.DataFrame:
+def read_tracks(tracks_txt_filepath: Path, class_names: dict, args: argparse.Namespace, logger: logging.Logger) -> tuple:
     """
     Read the tracking results from the text file.
     """
@@ -184,10 +205,15 @@ def read_tracks(tracks_txt_filepath: Path, class_names: dict, args: argparse.Nam
     if tracks.shape[1] == 10 or tracks.shape[1] == 14:
         # drop the last two columns (vehicle length and width)
         tracks = tracks.drop(tracks.columns[-2:], axis=1)
+    if args.plot_trajectories and tracks.shape[1] < 11:
+        logger.error(f"No stabilized bounding boxes found in: '{tracks_txt_filepath}'. Disable the trajectory plotting option or re-run the 'detect_track_stabilize.py' script.")
+        sys.exit(1)
+    else:
+        tracks_plotting = tracks[[0, 6, 7, 10]].copy()
+        tracks_plotting.columns = list(range(tracks_plotting.shape[1]))
     if args.viz_mode > 0:
-        # Check if the txt_file contains stabilized bounding boxes
         if tracks.shape[1] < 11:
-            logger.error(f"No stabilized bounding boxes found in: '{tracks_txt_filepath}'.")
+            logger.error(f"No stabilized bounding boxes found in: '{tracks_txt_filepath}'. Choose a different visualization mode or re-run the 'detect_track_stabilize.py' script.")
             sys.exit(1)
         tracks = tracks.drop(tracks.columns[2:6], axis=1)
     elif tracks.shape[1] > 10:
@@ -201,7 +227,7 @@ def read_tracks(tracks_txt_filepath: Path, class_names: dict, args: argparse.Nam
         logger.error(f"At least {tracks[6].max() + 1} class names must be provided. Current class names defined for the used model are {class_names.values()}.")
         sys.exit(1)
 
-    return tracks
+    return tracks, tracks_plotting
 
 
 def read_transforms(transforms_filepath: Path, logger: logging.Logger) -> dict:
@@ -278,13 +304,39 @@ def initialize_streams(args: argparse.Namespace, logger: logging.Logger) -> tupl
     return vid_reader, vid_writer, pbar
 
 
+def plot_trajectories(cap: cv2.VideoCapture, tracks: pd.DataFrame, cut_frame_left: int, cut_frame_right: int, viz_config: dict) -> np.ndarray:
+    """
+    Plot the trajectories on the reference frame with an alpha channel.
+    """
+    success, ref_frame = cap.read()
+    if not success:
+        logger.error("Failed to read the reference frame.")
+        sys.exit(1)
+    tracks_plot = tracks[tracks[0] >= cut_frame_left]
+    if cut_frame_right is not None:
+        tracks_plot = tracks_plot[tracks_plot[0] <= cut_frame_right]
+
+    colors = VizColors()
+    line_width = viz_config['line_width']
+    overlay = ref_frame.copy()
+
+    for _, row in tracks.iterrows():
+        xc_stab, yc_stab, c = row[1:4]
+        color = colors(c, True)
+        cv2.circle(overlay, (int(xc_stab), int(yc_stab)), 1, color, line_width)
+
+    cv2.addWeighted(overlay, 0.75, ref_frame, 0.25, 0, ref_frame)
+
+    return ref_frame
+
+
 def annotate_frame(frame: np.ndarray, frame_num: int, tracks_frame: pd.DataFrame, track_history: dict, class_names: dict, speed_lane_frame: pd.DataFrame, viz_config: dict, args: argparse.Namespace, logger: logging.Logger) -> np.ndarray:
     """
     Annotate the frame with the tracking results.
     """
     tail_length = viz_config['tail_length']
     line_width = viz_config['line_width']
-    colors = Colors()
+    colors = VizColors()
     annotated_frame = frame.copy()
     if tracks_frame.empty:
         logger.warning(f"No detection results for frame {frame_num:05d}")
@@ -409,6 +461,8 @@ def parse_cli_args() -> argparse.Namespace:
     group.add_argument('--save', '-s', action='store_true', help='Save the processing results to a video file')
     group.add_argument('--show', '-sh', action='store_true', help='Visualize results during processing')
     parser.add_argument('--viz-mode', '-vm', type=int, default=0, choices=[0, 1, 2], help='Set visualization mode for the output video: 0 - original, 1 - stabilized, 2 - reference frame')
+    parser.add_argument("--plot-trajectories", "-pt", action="store_true", help='Plot trajectories on the reference frame')
+    parser.add_argument("--plot-delay", "-pd", type=int, default=30, help='Delay in frames for plotting trajectories')
     parser.add_argument("--show-conf", "-sc", action="store_true", help='Show confidence values')
     parser.add_argument("--show_lanes", "-sl", action="store_true", help='Show lane numbers')
     parser.add_argument("--show-class-names", "-scn", action="store_true", help='Show class names')
