@@ -15,8 +15,8 @@ identifiers:
 repository-code: 'https://github.com/rfonod/geo-trax'
 url: 'https://github.com/rfonod/geo-trax'
 license: MIT
-version: 0.3.0
-date-released: '2025-01-02'
+version: 0.4.0
+date-released: '2025-04-16'
 preferred-citation:
   type: article
   authors:
@@ -29,8 +29,8 @@ preferred-citation:
   - family-names: "Geroliminis"
     given-names: "Nikolas"
   title: "Advanced computer vision for extracting georeferenced vehicle trajectories from drone imagery"
-  year: 2024
-  month: 11
+  year: 2025
+  month: 3
   journal: "arXiv"
   doi: "10.48550/arXiv.2411.02136"
   url: "https://arxiv.org/abs/2411.02136"
