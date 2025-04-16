@@ -44,3 +44,10 @@ dimension_estimation:
 visualization:
   tail_length: 30 # Number of frames (trajectory points) to consider for the tail of the trajectory visualization
   line_width: 2   # Line width of the bounding box in the trajectory visualization
+
+# Plotting settings
+plotting:
+  stationary_speed_cutoff: 1 # Speed threshold in km/h to filter out stationary vehicles
+  savefig_font_size : 14 # Font size for the saved figures
+  colors : ['#76b041', '#3274d9', '#ff61b4', '#ff9d00', '#9954bb', '#ffc000'] # Colors for the trajectory plots (when aggregated enabled)
+  skip_filenames_with : ['bus', 'ids', 'transf'] # Skip filenames containing any of the specified strings

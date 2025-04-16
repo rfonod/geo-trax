@@ -1,8 +1,10 @@
 # Ultralytics YOLO 🚀, AGPL-3.0 license
-# Hyperparameters updated for the geo-trax project.
+# Hyperparameters within the geo-trax project configured for single-image annotations that mimick the default
+# geo-trax configuration file used within the trajectory extraction pipeline. This configuration file is used to
+# compare the performance of our model with the human annotated test set.
 
 task: detect  # (str) YOLO task, i.e. detect, segment, classify, pose
-mode: track  # (str) YOLO mode, i.e. train, val, predict, export, track, benchmark
+mode: predict  # (str) YOLO mode, i.e. train, val, predict, export, track, benchmark
 
 # Train settings -------------------------------------------------------------------------------------------------------
 model: models/yolov8s_merger8_exp1.pt # (str) path to model file in located in the 'models' directory
@@ -21,7 +23,7 @@ name:  # (str, optional) experiment name, results saved to 'project/name' direct
 exist_ok: True  # (bool) whether to overwrite existing experiment
 pretrained: True  # (bool | str) whether to use a pretrained model (bool) or a model to load weights from (str)
 optimizer: auto  # (str) optimizer to use, choices=[SGD, Adam, Adamax, AdamW, NAdam, RAdam, RMSProp, auto]
-verbose: False  # (bool) whether to print verbose output
+verbose: True  # (bool) whether to print verbose output
 seed: 0  # (int) random seed for reproducibility
 deterministic: True  # (bool) whether to enable deterministic mode
 single_cls: False  # (bool) train multi-class data as single-class
@@ -36,7 +38,7 @@ freeze: None  # (int | list, optional) freeze first n layers, or freeze list of 
 # Segmentation
 overlap_mask: True  # (bool) masks should overlap during training (segment train only)
 mask_ratio: 4  # (int) mask downsample ratio (segment train only)
-# Classification  
+# Classification
 dropout: 0.0  # (float) use dropout regularization (classify train only)
 
 # Val/Test settings ----------------------------------------------------------------------------------------------------
@@ -44,8 +46,8 @@ val: True  # (bool) validate/test during training
 split: val  # (str) dataset split to use for validation, i.e. 'val', 'test' or 'train'
 save_json: False  # (bool) save results to JSON file
 save_hybrid: False  # (bool) save hybrid version of labels (labels + additional predictions)
-conf: 0.25 # (float, optional) object confidence threshold for detection (default 0.25 predict, 0.001 val)
-iou: 0.7 # (float) intersection over union (IoU) threshold for NMS
+conf: 0.2 # (float, optional) object confidence threshold for detection (default 0.25 predict, 0.001 val)
+iou: 0.65 # (float) intersection over union (IoU) threshold for NMS
 max_det: 1000  # (int) maximum number of detections per image
 half: False  # (bool) use half precision (FP16)
 dnn: False  # (bool) use OpenCV DNN for ONNX inference

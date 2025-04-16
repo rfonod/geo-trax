@@ -36,7 +36,7 @@ freeze: None  # (int | list, optional) freeze first n layers, or freeze list of 
 # Segmentation
 overlap_mask: True  # (bool) masks should overlap during training (segment train only)
 mask_ratio: 4  # (int) mask downsample ratio (segment train only)
-# Classification  
+# Classification
 dropout: 0.0  # (float) use dropout regularization (classify train only)
 
 # Val/Test settings ----------------------------------------------------------------------------------------------------
@@ -44,8 +44,8 @@ val: True  # (bool) validate/test during training
 split: val  # (str) dataset split to use for validation, i.e. 'val', 'test' or 'train'
 save_json: False  # (bool) save results to JSON file
 save_hybrid: False  # (bool) save hybrid version of labels (labels + additional predictions)
-conf: 0.25 # (float, optional) object confidence threshold for detection (default 0.25 predict, 0.001 val)
-iou: 0.7 # (float) intersection over union (IoU) threshold for NMS
+conf: 0.4 # (float, optional) object confidence threshold for detection (default 0.25 predict, 0.001 val)
+iou: 0.55 # (float) intersection over union (IoU) threshold for NMS
 max_det: 1000  # (int) maximum number of detections per image
 half: False  # (bool) use half precision (FP16)
 dnn: False  # (bool) use OpenCV DNN for ONNX inference
@@ -62,7 +62,7 @@ show_conf: True  # (bool) show object confidence scores in plots
 vid_stride: 1  # (int) video frame-rate stride
 line_width: 2  # (int, optional) line width of the bounding boxes, auto if missing
 visualize: False  # (bool) visualize model features
-augment: False  # (bool) apply image augmentation to prediction sources
+augment: True  # (bool) apply image augmentation to prediction sources
 agnostic_nms: True  # (bool) class-agnostic NMS
 classes: [0,1,2,3] # (int | list[int], optional) filter results by class, i.e. classes=0, or classes=[0,2,3]
 retina_masks: False  # (bool) use high-resolution segmentation masks

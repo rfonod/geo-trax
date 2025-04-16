@@ -1,4 +1,4 @@
-# This is a custom main geo-trax configuration file aimed at aggressive video stabilization (aggressive.yaml).
+# This is the default main geo-trax configuration file (default.yaml).
 #
 # This configuration file sets and links parameters for various stages of the geo-trax pipeline, including:
 #   - Detection
@@ -18,10 +18,10 @@
 
 
 # General settings
-cfg_ultralytics: cfg/ultralytics/default.yaml  # Ultralytics config filepath
-cfg_tracker: cfg/tracker/default_botsort.yaml  # Tracker config filepath, default choices=[*/default_botsort.yaml, */default_bytetrack.yaml]
-cfg_stabilo: cfg/stabilo/aggressive.yaml       # Stabilo config filepath
-cfg_georef: cfg/georef/default.yaml            # Georeferencing config filepath
+cfg_ultralytics: cfg/ultralytics/confident.yaml # Ultralytics config filepath
+cfg_tracker: cfg/tracker/default_botsort.yaml   # Tracker config filepath, default choices=[*/default_botsort.yaml, */default_bytetrack.yaml]
+cfg_stabilo: cfg/stabilo/default.yaml           # Stabilo config filepath
+cfg_georef: cfg/georef/default.yaml             # Georeferencing config filepath
 
 # Stabilization related settings (Stabilo module)
 stabilize: True  # Stabilize the extracted trajectories (bounding boxes). Creates 4 additional columns (6:9) in the results 'results/video.txt' [default: True]
@@ -50,4 +50,4 @@ plotting:
   stationary_speed_cutoff: 1 # Speed threshold in km/h to filter out stationary vehicles
   savefig_font_size : 14 # Font size for the saved figures
   colors : ['#76b041', '#3274d9', '#ff61b4', '#ff9d00', '#9954bb', '#ffc000'] # Colors for the trajectory plots (when aggregated enabled)
-  skip_filenames_with : ['bus', 'ids', 'transf'] # Skip filenames containing any of the specified strings  
+  skip_filenames_with : ['bus', 'ids', 'transf'] # Skip filenames containing any of the specified strings
