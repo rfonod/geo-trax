@@ -19,18 +19,24 @@ venv.bak/
 
 # VSCode
 .vscode/
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+*.code-workspace
 
-# Mac OS
+# Local History for Visual Studio Code
+.history/
+
+# Mac OS-specific storage files
 .DS_Store
+**/.DS_Store
 
-# Google Drive related
+# Google Drive specific files
 .tmp.driveupload
 .tmp.drivedownload
 
-# Data and projects
-data/
+# Data and project
 projects/
-
-# Misc
-TODOs.txt
+data/
 
