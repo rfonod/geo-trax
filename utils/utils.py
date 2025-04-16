@@ -4,9 +4,10 @@
 import argparse
 import logging
 import platform
+import random
 import sys
 from pathlib import Path
-from typing import Tuple
+from typing import Tuple, Union
 
 import cv2
 import yaml
@@ -78,7 +79,6 @@ def setup_logger(name: str, verbose: bool = False, filename: str = '', dry_run: 
     colored_formatter = ColoredFormatter(log_format)
     file_formatter = FileFormatter(log_format)
 
-    #console_level = logging.INFO if verbose else logging.WARNING
     console_level = NOTICE_LEVEL if not verbose else logging.INFO
     console_handler = logging.StreamHandler()
     console_handler.setFormatter(colored_formatter)
@@ -93,6 +93,8 @@ def setup_logger(name: str, verbose: bool = False, filename: str = '', dry_run: 
         file_handler.setLevel(logging.INFO)
         logger.addHandler(file_handler)
         logger.info(f"Logging to file: {log_filepath}")
+
+    logger._original_formatters = {h: h.formatter for h in logger.handlers}
 
     return logger
 
@@ -190,8 +192,10 @@ def convert_to_serializable(obj):
     else:
         return obj
 
-class Colors:
-    """Color palette for plotting."""
+class VizColors:
+    """
+    Color palette for plotting.
+    """
     def __init__(self):
         hexs = ('1F77B4', 'D62728', 'FF7F0E', '006400', '8C564B', '9467BD',
                 '0000FF', 'FF0000', 'A52A2A', '000000', '00FF00', '800080')
@@ -208,17 +212,37 @@ class Colors:
     def hex2rgb(h):  # rgb order (PIL)
         return tuple(int(h[1 + i:1 + i + 2], 16) for i in (0, 2, 4))
 
+class PlotColors:
+    """
+    Color palette for plotting.
+    """
+    def __init__(self, colors=None):
+        self.colors = colors if colors else []
+
+    def set_colors(self, colors):
+        self.colors = colors
+
+    def get_color(self, index: int) -> str:
+        if index < len(self.colors):
+            return self.colors[index]
+        else:
+            return "#{:06x}".format(random.randint(0, 0xFFFFFF)) # Return a random color
+
 
 def determine_location_id(source: Path, logger: logging.Logger = None) -> str:
     """
     Extract the location ID from the source filename. Location ID is the first sequence
-    of alphabetic characters in the filename (e.g. 'location_1.mp4' -> 'location').
+    of alphabetic characters in the filename. Symbols '_' and '-' can act as separators.
+    Examples:
+    'A1.mp4' -> 'A'
+    '2025-01-01_A_PM1.mp4' -> 'A'
+    'A1_AV.csv' -> 'A'
     """
     location_id = []
     for char in source.stem:
         if char.isalpha():
             location_id.append(char)
-        elif char in '_-' or char.isdigit():
+        elif len(location_id) and (char in '_-' or char.isdigit()):
             break
     location_id = ''.join(location_id)
 
@@ -231,9 +255,44 @@ def determine_location_id(source: Path, logger: logging.Logger = None) -> str:
         sys.exit(1)
 
     if logger:
-        logger.info(f"Detected location ID: '{location_id}' from the source filename.")
+        logger.info(f"Detected location ID: '{location_id}' from the source filename {source.name}.")
 
     return location_id
+
+
+def get_ortho_folder(source: Path, ortho_folder: Union[Path, None], logger: logging.Logger, critical = True) -> Path:
+    """
+    Get the orthophoto folder from the provided path or use the default folder structure.
+    """
+    if ortho_folder is None:
+        ortho_folder = source.parent
+
+        while ortho_folder != ortho_folder.parent:
+            if ortho_folder.name in ['PROCESSED', 'DATASET']:
+                break
+            ortho_folder = ortho_folder.parent
+
+        if ortho_folder.name not in ['PROCESSED', 'DATASET']:
+            if critical:
+                logger.critical(f"Failed to find the orthophoto folder for source {source}. Use the --ortho-folder argument to provide a custom path or ensure the default folder structure.")
+                sys.exit(1)
+            else:
+                logger.info(f"Failed to find the orthophoto folder for source {source}. Use the --ortho-folder argument to provide a custom path or ensure the default folder structure.")
+                return None
+
+        ortho_folder = ortho_folder.parent / 'ORTHOPHOTOS'
+
+    if not ortho_folder.exists():
+        if critical:
+            logger.critical(f"Orthophoto folder '{ortho_folder}' not found. Use the '--ortho-folder' argument to provide a custom path or ensure the default folder structure.")
+            sys.exit(1)
+        else:
+            logger.info(f"Orthophoto folder '{ortho_folder}' not found. Use the '--ortho-folder' argument to provide a custom path or ensure the default folder structure.")
+            return None
+    else:
+        logger.info(f"Using orthophoto folder: '{ortho_folder}'.")
+
+    return ortho_folder
 
 
 def determine_suffix_and_fourcc() -> Tuple[str, str]:
