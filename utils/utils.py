@@ -274,10 +274,20 @@ def get_ortho_folder(source: Path, ortho_folder: Union[Path, None], logger: logg
 
         if ortho_folder.name not in ['PROCESSED', 'DATASET']:
             if critical:
-                logger.critical(f"Failed to find the orthophoto folder for source {source}. Use the --ortho-folder argument to provide a custom path or ensure the default folder structure.")
+                logger.critical(
+                    f"Failed to find the orthophoto folder for source '{source}'. "
+                    f"Please either provide a custom path using the --ortho-folder argument, "
+                    f"disable georeferencing with the --no-geo (or -ng) flag, "
+                    f"or ensure that the default folder structure is in place."
+                )
                 sys.exit(1)
             else:
-                logger.info(f"Failed to find the orthophoto folder for source {source}. Use the --ortho-folder argument to provide a custom path or ensure the default folder structure.")
+                logger.info(
+                    f"Failed to find the orthophoto folder for source '{source}'. "
+                    f"Please either provide a custom path using the --ortho-folder argument, "
+                    f"disable georeferencing with the --no-geo (or -ng) flag, "
+                    f"or ensure that the default folder structure is in place."
+                )
                 return None
 
         ortho_folder = ortho_folder.parent / 'ORTHOPHOTOS'
