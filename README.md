@@ -14,8 +14,8 @@
 1. **Vehicle Detection** (✅): Utilizes a pre-trained YOLOv8 model to detect vehicles (cars, buses, trucks, and motorcycles) in the video frames.
 2. **Vehicle Tracking** (✅): Implements a selected tracking algorithm to follow detected vehicles, ensuring robust trajectory data and continuity across frames.
 3. **Trajectory Stabilization** (✅): Corrects for unintentional drone movement by aligning trajectories to a reference frame, using bounding boxes of detected vehicles to enhance stability. Leverages the [stabilo](https://github.com/rfonod/stabilo) 🚀 library, fine-tuned by [stabilo-optimize](https://github.com/rfonod/stabilo-optimize), to achieve reliable, consistent stabilization.
-4. **Georeferencing** (👷🏼): Maps stabilized trajectories to real-world coordinates using an orthophoto and image registration technique.
-5. **Dataset Creation** (👷🏼): Compiles trajectory and related metadata (e.g., velocity, acceleration, dimension estimates) into a structured dataset.
+4. **Georeferencing** (✅): Maps stabilized trajectories to real-world coordinates using an orthophoto and image registration technique.
+5. **Dataset Creation** (✅): Compiles trajectory and related metadata (e.g., velocity, acceleration, dimension estimates) into a structured dataset.
 6. **Visualization Tools** (✅/👷🏼): Provides tools to visualize the extracted trajectories, overlaying paths on video frames and generating various plots for traffic data analysis.
 7. **Customization and Configuration** (✅): Offers flexible configuration options to adjust the pipeline settings, including detection and tracking parameters, stabilization methods, and visualization modes.
 
