@@ -3,23 +3,20 @@
 [![GitHub Release](https://img.shields.io/github/v/release/rfonod/geo-trax?include_prereleases)](https://github.com/rfonod/geo-trax/releases) [![Python](https://img.shields.io/badge/python-3.9%2B-blue)](https://www.python.org/) [![License](https://img.shields.io/github/license/rfonod/geo-trax)](https://github.com/rfonod/geo-trax/blob/main/LICENSE) [![DOI](https://zenodo.org/badge/817002220.svg)](https://zenodo.org/doi/10.5281/zenodo.12119542) [![arXiv](https://img.shields.io/badge/arXiv-2411.02136-b31b1b.svg?style=flat)](https://arxiv.org/abs/2411.02136) [![Development Status](https://img.shields.io/badge/development-active-brightgreen)](https://github.com/rfonod/geo-trax)
 [![PWC](https://img.shields.io/endpoint.svg?url=https://paperswithcode.com/badge/advanced-computer-vision-for-extracting/object-detection-on-songdo-vision)](https://paperswithcode.com/sota/object-detection-on-songdo-vision?p=advanced-computer-vision-for-extracting)
 
-🚧 **Development Notice** 🚧
-
-> ⚠️ **IMPORTANT:** Geo-trax is currently in its preliminary stages and under active development. Not all features are complete, and significant changes may occur. It is recommended for experimental use only. Please report any issues you encounter, and feel free to contribute to the project.
-
-**Geo-trax** (GEO-referenced TRAjectory eXtraction) is an end-to-end pipeline for extracting high-accuracy, georeferenced vehicle trajectories from high-altitude, bird’s-eye view drone footage, addressing critical challenges in urban traffic analysis and real-world georeferencing. Designed for quasi-stationary drone monitoring of intersections or road segments, Geo-trax utilizes advanced computer vision and deep learning methods to deliver high-quality data and support scalable, precise traffic studies. This pipeline transforms raw, top-down video data into georeferenced vehicle trajectories in real-world coordinates, enabling detailed analysis of vehicle dynamics and behavior in dense urban environments.
+**Geo-trax** (GEO-referenced TRAjectory eXtraction) is a comprehensive pipeline for extracting high-accuracy georeferenced vehicle trajectories from high-altitude drone imagery. Designed specifically for quasi-stationary aerial monitoring in urban traffic scenarios, Geo-trax transforms raw, bird’s-eye view video footage into precise, real-world vehicle trajectories. The framework integrates state-of-the-art computer vision and deep learning modules for vehicle detection, tracking, and trajectory stabilization, followed by a georeferencing stage that employs image registration to align the stabilized video frames with an orthophoto. This registration enables the accurate mapping of vehicle trajectories to real-world coordinates. The resulting pipeline supports large-scale traffic studies by delivering spatially and temporally consistent trajectory data suitable for traffic behavior analysis and simulation. Geo-trax is optimized for urban intersections and arterial corridors, where high-fidelity vehicle-level insights are essential for intelligent transportation systems (ITS) and digital twin applications.
 
 ## Features
 
-1. **Vehicle Detection** (✅): Utilizes a pre-trained YOLOv8 model to detect vehicles (cars, buses, trucks, and motorcycles) in the video frames.
-2. **Vehicle Tracking** (✅): Implements a selected tracking algorithm to follow detected vehicles, ensuring robust trajectory data and continuity across frames.
-3. **Trajectory Stabilization** (✅): Corrects for unintentional drone movement by aligning trajectories to a reference frame, using bounding boxes of detected vehicles to enhance stability. Leverages the [stabilo](https://github.com/rfonod/stabilo) 🚀 library, fine-tuned by [stabilo-optimize](https://github.com/rfonod/stabilo-optimize), to achieve reliable, consistent stabilization.
-4. **Georeferencing** (✅): Maps stabilized trajectories to real-world coordinates using an orthophoto and image registration technique.
-5. **Dataset Creation** (✅): Compiles trajectory and related metadata (e.g., velocity, acceleration, dimension estimates) into a structured dataset.
-6. **Visualization Tools** (✅/👷🏼): Provides tools to visualize the extracted trajectories, overlaying paths on video frames and generating various plots for traffic data analysis.
-7. **Customization and Configuration** (✅): Offers flexible configuration options to adjust the pipeline settings, including detection and tracking parameters, stabilization methods, and visualization modes.
+1. **Vehicle Detection**: Utilizes a pre-trained YOLOv8 model to detect vehicles (cars, buses, trucks, and motorcycles) in the video frames.
+2. **Vehicle Tracking**: Implements a selected tracking algorithm to follow detected vehicles, ensuring robust trajectory data and continuity across frames.
+3. **Trajectory Stabilization**: Corrects for unintentional drone movement by aligning trajectories to a reference frame, using bounding boxes of detected vehicles to enhance stability. Leverages the [stabilo](https://github.com/rfonod/stabilo) 🚀 library, fine-tuned by [stabilo-optimize](https://github.com/rfonod/stabilo-optimize), to achieve reliable, consistent stabilization.
+4. **Georeferencing**: Maps stabilized trajectories to real-world coordinates using an orthophoto and image registration technique.
+5. **Dataset Creation**: Compiles trajectory and related metadata (e.g., velocity, acceleration, dimension estimates) into a structured dataset.
+6. **Visualization Tools**: Visualizes extracted trajectories, overlays paths on video frames, and generates plots for traffic data analysis.
+7. **Auxiliary Tools (👷🏼)**: Data wrangling, analysis, and model training scripts/tools will be provided in future releases to support dataset preparation, advanced analytics, and custom model development.
+8. **Customization and Configuration**: Flexible configuration options to adjust pipeline settings, including detection/tracking parameters, stabilization methods, and visualization modes.
 
-This is a preliminary version of the pipeline with some functionalities not being implemented (👷🏼). Future releases will include more detailed documentation, a more user-friendly interface, and additional functionalities.
+> **Note:** This is a preliminary version of the pipeline. Some functionalities, especially auxiliary tools for data wrangling, analysis, and model training, are under development (👷🏼) and will be included in future releases.
 
 <details>
 <summary><b>🚀 Planned Enhancements</b></summary>
@@ -27,14 +24,11 @@ This is a preliminary version of the pipeline with some functionalities not bein
 ### Release Plan
 
 - **Version >1.0.0**
-  - Complete georeferencing functionality (Point 4 above).
-    - Comprehensive dataset creation with all metadata (Point 5 above).
-    - Visualization and plotting tools (Point 6 above).
-    - Tools for comparing extracted trajectories with on-board sensor data.
-    - Basic documentation and examples covering all core functionalities.
+  - Tools for comparing extracted trajectories with on-board sensor data.
+  - Release auxiliary tools for data wrangling, analysis, and (re-)training the detection model.
+  - Basic documentation and examples covering all core functionalities.
 
 - **Version >1.0.0**
-  - Release tools for (re-)training the detection model.
   - Pre-processing tools for raw video input.
   - Expanded documentation, tutorials (docs folder), and sample examples.
   - List of known limitations, e.g., ffmpeg backend version discrepancies in OpenCV.
@@ -50,9 +44,13 @@ This is a preliminary version of the pipeline with some functionalities not bein
 
 </details>
 
+## Field Deployment
+
+Geo-trax was validated in a large-scale urban traffic monitoring experiment conducted in Songdo, South Korea. In this study, Geo-trax was used to process aerial video data captured by a fleet of 10 drones, resulting in the creation of the [**Songdo Traffic** dataset](https://doi.org/10.5281/zenodo.13828383). The underlying vehicle detection model in Geo-trax was trained using the [**Songdo Vision** dataset](https://doi.org/10.5281/zenodo.13828407). Both datasets are described in detail in the associated publication (see [Citation](#citation) below).
+
 ## Installation
 
-1. **Create and activate a Python virtual environment** (Python >= 3.9), e.g., using [Miniconda3](https://www.anaconda.com/docs/getting-started/miniconda/install):
+1. **Create and activate a Python virtual environment** (Python ≥ 3.9), e.g., using [Miniconda3](https://www.anaconda.com/docs/getting-started/miniconda/install):
 
     ```bash
     conda create -n geo-trax python=3.11 -y
@@ -66,19 +64,27 @@ This is a preliminary version of the pipeline with some functionalities not bein
     cd geo-trax
     ```
 
-3. **Install dependencies**:
+3. **Install dependencies** using `pyproject.toml`:
 
     ```bash
-    pip install -r requirements.txt
+    pip install -e .
     ```
 
-4. **[Optional] Install development dependencies** (for development, testing, or model training):
+    > **Note:** Installing in *editable mode* (`-e`) is recommended, as it allows immediate reflection of code changes.
 
-    ```bash
-    pip install -r requirements-dev.txt
-    ```
+4. **[Optional] Install development dependencies** (for development, testing, or other non-core auxiliary scripts):
 
-  > **Tip:** Only install these if you plan to contribute code, run tests, or retrain models.
+    - In `bash`:
+
+      ```bash
+      pip install -e .[dev]
+      ```
+
+    - In `zsh` (quotes required to prevent shell expansion of `[]`):
+
+      ```zsh
+      pip install -e '.[dev]'
+      ```
 
 ## Batch Processing Example
 
@@ -162,11 +168,11 @@ Suppose the input video is named `video.mp4`. The output files will be saved in 
 
 </details>
 
-## Citing This Work
+## Citation
 
-If you use this project in your academic research, commercial products, or any published material, please acknowledge its use by citing it.
+If you use Geo-trax or the associated datasets in your research or applications, please cite the following resources appropriately:
 
-1. **Preferred Citation:** For research-related references, please cite the related paper once it is formally published. A preprint is currently available on [arXiv](https://arxiv.org/abs/2411.02136):
+1. **Preferred Citation:** For academic or research-related use, please cite the associated paper. A preprint is currently available on [arXiv](https://arxiv.org/abs/2411.02136), with formal publication forthcoming:
 
     ```bibtex
     @misc{fonod2025advanced,
@@ -181,17 +187,17 @@ If you use this project in your academic research, commercial products, or any p
     }
     ```
 
-2. **Repository Citation:** For direct use of the geo-trax framework, please cite the software release version on Zenodo. You may refer to the DOI badge above for the correct version or use the BibTeX below:
+2. **Repository Citation:** If you reference or build upon the Geo-trax software framework itself, please cite the corresponding Zenodo release:
 
     ```bibtex
     @software{fonod2025geo-trax,
       author = {Fonod, Robert},
       license = {MIT},
-      month = apr,
+      month = may,
       title = {Geo-trax: A Comprehensive Framework for Georeferenced Vehicle Trajectory Extraction from Drone Imagery},
       url = {https://github.com/rfonod/geo-trax},
       doi = {10.5281/zenodo.12119542},
-      version = {0.4.0},
+      version = {0.5.0},
       year = {2025}
     }
     ```
