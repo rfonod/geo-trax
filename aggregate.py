@@ -27,8 +27,8 @@ Output:
     - Detailed logging information
 
 Usage:
-    python aggregate.py /path/to/PROCESSED/ [--output /path/to/output/] 
-                                           [--log-file filename] 
+    python aggregate.py /path/to/PROCESSED/ [--output /path/to/output/]
+                                           [--log-file filename]
                                            [--verbose]
 """
 
