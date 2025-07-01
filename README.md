@@ -5,6 +5,10 @@
 
 **Geo-trax** (GEO-referenced TRAjectory eXtraction) is a comprehensive pipeline for extracting high-accuracy georeferenced vehicle trajectories from high-altitude drone imagery. Designed specifically for quasi-stationary aerial monitoring in urban traffic scenarios, Geo-trax transforms raw, bird’s-eye view video footage into precise, real-world vehicle trajectories. The framework integrates state-of-the-art computer vision and deep learning modules for vehicle detection, tracking, and trajectory stabilization, followed by a georeferencing stage that employs image registration to align the stabilized video frames with an orthophoto. This registration enables the accurate mapping of vehicle trajectories to real-world coordinates. The resulting pipeline supports large-scale traffic studies by delivering spatially and temporally consistent trajectory data suitable for traffic behavior analysis and simulation. Geo-trax is optimized for urban intersections and arterial corridors, where high-fidelity vehicle-level insights are essential for intelligent transportation systems (ITS) and digital twin applications.
 
+![Geo-trax Visualization GIF](https://raw.githubusercontent.com/rfonod/geo-trax/main/assets/geo-trax_visualization.gif?raw=True)
+
+🎬 This short animation previews the capabilities of Geo-trax, watch the full demonstration (~4 min) on [YouTube](https://youtu.be/gOGivL9FFLk).
+
 ## Features
 
 1. **Vehicle Detection**: Utilizes a pre-trained YOLOv8 model to detect vehicles (cars, buses, trucks, and motorcycles) in the video frames.
@@ -46,7 +50,9 @@
 
 ## Field Deployment
 
-Geo-trax was validated in a large-scale urban traffic monitoring experiment conducted in Songdo, South Korea. In this study, Geo-trax was used to process aerial video data captured by a fleet of 10 drones, resulting in the creation of the [**Songdo Traffic** dataset](https://doi.org/10.5281/zenodo.13828383). The underlying vehicle detection model in Geo-trax was trained using the [**Songdo Vision** dataset](https://doi.org/10.5281/zenodo.13828407). Both datasets are described in detail in the associated publication (see [Citation](#citation) below).
+Geo-trax was validated in a large-scale urban traffic monitoring experiment conducted in Songdo, South Korea. In this study, Geo-trax was used to process aerial video data captured by a fleet of 10 drones, resulting in the creation of the [**Songdo Traffic**](https://doi.org/10.5281/zenodo.13828383) dataset. The underlying vehicle detection model in Geo-trax was trained using the [**Songdo Vision**](https://doi.org/10.5281/zenodo.13828407) dataset. Both datasets are described in detail in the associated publication, see the [citation](#citation) section below.
+
+🎥 *Demo video of Geo-trax applied to the Songdo field experiment:*  https://youtu.be/gOGivL9FFLk
 
 ## Installation
 
@@ -202,9 +208,11 @@ If you use Geo-trax or the associated datasets in your research or applications,
     }
     ```
 
-## Contributing
+## Contributions
 
-Contributions are welcome! If you encounter any issues or have suggestions for improvements, please open a [GitHub Issue](https://github.com/rfonod/geo-trax/issues) or submit a pull request.
+The georeferencing code was developed with contributions from [Haechan Cho](https://github.com/cho-96).
+
+Contributions from the community are welcome! If you encounter any issues or have suggestions for improvements, please open a [GitHub Issue](https://github.com/rfonod/geo-trax/issues) or submit a pull request.
 
 ## License
 
