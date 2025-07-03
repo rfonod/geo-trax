@@ -27,7 +27,7 @@
 
 ### Release Plan
 
-- **Version >1.0.0**
+- **Version =1.0.0**
   - Tools for comparing extracted trajectories with on-board sensor data.
   - Release auxiliary tools for data wrangling, analysis, and (re-)training the detection model.
   - Basic documentation and examples covering all core functionalities.
@@ -96,10 +96,10 @@ Geo-trax was validated in a large-scale urban traffic monitoring experiment cond
 
 The `batch_process.py` script can process multiple videos in a directory, including subdirectories, or a single video file.
 
-#### Example 1: Process all files in a directory
+#### Example 1: Process all files in a directory without georeferencing
 
 ```bash
-python batch_process.py path/to/videos/
+python batch_process.py path/to/videos/ --no-geo
 ```
 
 #### Example 2: Customize arguments for a specific video
@@ -138,14 +138,14 @@ Suppose the input video is named `video.mp4`. The output files will be saved in 
 
     where:
   - `frame_id`: Frame number (0, 1, ...).
-    - `vehicle_id`: Unique vehicle identifier (1, 2, ...).
-    - `x_c(unstab)`, `y_c(unstab)`: Unstabilized vehicle centroid coordinates.
-    - `w(unstab)`, `h(unstab)`: Unstabilized vehicle bounding box width and height.
-    - `x_c(stab)`, `y_c(stab)`: Stabilized vehicle centroid coordinates.
-    - `w(stab)`, `h(stab)`: Stabilized vehicle bounding box width and height.
-    - `class_id`: Vehicle class identifier (0: car (incl. vans), 1: bus, 2: truck, 3: motorcycle)
-    - `confidence`: Detection confidence score (0-1).
-    - `vehicle_length`, `vehicle_width`: Estimated vehicle dimensions in pixels.
+  - `vehicle_id`: Unique vehicle identifier (1, 2, ...).
+  - `x_c(unstab)`, `y_c(unstab)`: Unstabilized vehicle centroid coordinates.
+  - `w(unstab)`, `h(unstab)`: Unstabilized vehicle bounding box width and height.
+  - `x_c(stab)`, `y_c(stab)`: Stabilized vehicle centroid coordinates.
+  - `w(stab)`, `h(stab)`: Stabilized vehicle bounding box width and height.
+  - `class_id`: Vehicle class identifier (0: car (incl. vans), 1: bus, 2: truck, 3: motorcycle)
+  - `confidence`: Detection confidence score (0-1).
+  - `vehicle_length`, `vehicle_width`: Estimated vehicle dimensions in pixels.
 
 - **video_vid_transf.txt**: Contains the transformation matrix for each frame in the format:
 
@@ -164,11 +164,33 @@ Suppose the input video is named `video.mp4`. The output files will be saved in 
   - **Mode 1**: Results overlaid on the stabilized video.
   - **Mode 2**: Results plotted on top of the static reference frame.
 
-  Each version can display vehicle bounding boxes, IDs, class labels, confidence scores, and short trajectory trails that fade and vary in thickness to indicate the recency of the movement. If `video.csv` is available, vehicle speed and lane information can be also displayed.
+  Each version can display vehicle bounding boxes, IDs, class labels, confidence scores, and short trajectory trails that fade and vary in thickness to indicate the recency of the movement. If an input `video.csv` file is available in the same directory as the input video, i.e., the converted flight logs, vehicle speed and lane information can be also displayed.
 
-- **video.csv**: Contains the georeferenced vehicle trajectories in a tabular format with additional metadata (TBD).
+- **video.csv**: Contains the georeferenced vehicle trajectories in a tabular format. This file includes both geographic and local coordinates, estimated real-world dimensions, kinematic data, road section, and lane information. The columns are:
 
-- **video_geo_transf.txt**: Georeferencing transformation matrix between the reference frame and the orthomap (TBD).
+  ```text
+  Vehicle_ID, Timestamp, Ortho_X, Ortho_Y, Local_X, Local_Y, Latitude, Longitude, Vehicle_Length, Vehicle_Width, Vehicle_Class, Vehicle_Speed, Vehicle_Acceleration, Road_Section, Lane_Number, Visibility
+  ```
+
+    where:
+  - `Vehicle_ID`: Unique vehicle identifier.
+  - `Timestamp`: Timestamp of the frame (YYYY-MM-DD HH:MM:SS.ms).
+  - `Ortho_X`, `Ortho_Y`: X and Y coordinates of the vehicle centroid in the orthophoto's pixel coordinate system.
+  - `Local_X`, `Local_Y`: X and Y coordinates of the vehicle centroid in a local projected coordinate system (e.g., EPSG:32633 for UTM zone 33N).
+  - `Latitude`, `Longitude`: Geographic coordinates of the vehicle centroid (WGS84).
+  - `Vehicle_Length`, `Vehicle_Width`: Estimated vehicle dimensions in meters.
+  - `Vehicle_Class`: Vehicle class identifier (0: car (incl. vans), 1: bus, 2: truck, 3: motorcycle).
+  - `Vehicle_Speed`: Estimated vehicle speed in km/h.
+  - `Vehicle_Acceleration`: Estimated vehicle acceleration in m/s$^2$.
+  - `Road_Section`: Identifier for the road segment the vehicle is on.
+  - `Lane_Number`: Identifier for the lane the vehicle is in.
+  - `Visibility`: Boolean indicating if the vehicle's bounding box is fully visible within the frame.
+
+- **video_geo_transf.txt**: Contains the 3x3 georeferencing transformation matrix (homography) that maps points from the video's reference frame to the orthomap. The format is a comma-separated list of the 9 matrix elements:
+
+  ```text
+  h11, h12, h13, h21, h22, h23, h31, h32, h33
+  ```
 
 **Note:** *All output files (except `video.yaml`) are saved in the `results` folder relative to the input video.*
 
@@ -176,24 +198,25 @@ Suppose the input video is named `video.mp4`. The output files will be saved in 
 
 ## Citation
 
-If you use Geo-trax or the associated datasets in your research or applications, please cite the following resources appropriately:
+If you use **Geo-trax** in your research, software, or to generate datasets, please cite the following resources appropriately:
 
-1. **Preferred Citation:** For academic or research-related use, please cite the associated paper. A preprint is currently available on [arXiv](https://arxiv.org/abs/2411.02136), with formal publication forthcoming:
+1. **Preferred Citation:** Please cite the associated article for any use of the Geo-trax framework, including research, applications, and derivative work:
 
     ```bibtex
-    @misc{fonod2025advanced,
-      title={Advanced computer vision for extracting georeferenced vehicle trajectories from drone imagery}, 
-      author={Robert Fonod and Haechan Cho and Hwasoo Yeo and Nikolas Geroliminis},
-      year={2025},
-      eprint={2411.02136},
-      archivePrefix={arXiv},
-      primaryClass={cs.CV},
-      url={https://arxiv.org/abs/2411.02136},
-      doi={https://doi.org/10.48550/arXiv.2411.02136}
+    @article{fonod2025advanced,
+      title = {Advanced computer vision for extracting georeferenced vehicle trajectories from drone imagery},
+      author = {Fonod, Robert and Cho, Haechan and Yeo, Hwasoo and Geroliminis, Nikolas},
+      journal = {Transportation Research Part C: Emerging Technologies},
+      volume = {178},
+      pages = {105205},
+      year = {2025},
+      publisher = {Elsevier},
+      doi = {10.1016/j.trc.2025.105205},
+      url = {https://doi.org/10.1016/j.trc.2025.105205}
     }
     ```
 
-2. **Repository Citation:** If you reference or build upon the Geo-trax software framework itself, please cite the corresponding Zenodo release:
+1. **Repository Citation:** If you reference, modify, or build upon the Geo-trax software itself, please also cite the corresponding Zenodo release:
 
     ```bibtex
     @software{fonod2025geo-trax,
