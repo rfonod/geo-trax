@@ -3,47 +3,103 @@
 # Author: Robert Fonod (robert.fonod@ieee.org)
 
 """
-find_cut_video_issues.py - Find issues with the cut videos.
+find_cut_video_issues.py - Flight Log Analysis and Anomaly Detection Tool
 
-Find issues with the cut videos by extracting the flight log data and detecting anomalies.
-The script extracts the flight log data from the CSV files and calculates the positional
-and altitude deviations from the hover location of the selected reference frame. The script
-also checks the frame numbers, timestamps, and camera settings for anomalies. The script
-visualizes the extracted flight log data and some anomalies. The script saves the extracted
-flight log data stats and the anomalies to CSV files. Visualizations can be saved to PDF files.
+This script analyzes flight log data from drone videos to detect anomalies and quality issues.
+It extracts flight log data from CSV files, calculates positional and altitude deviations from
+reference frame hover locations, and checks frame numbers, timestamps, and camera settings for inconsistencies.
+
+The script performs comprehensive anomaly detection including spatial deviations, temporal irregularities,
+and camera parameter variations. It provides visualization capabilities and generates detailed reports
+for quality assessment of drone flight data.
 
 Usage:
-    python tools/find_cut_video_issues.py <input_folder> [options]
+  python tools/find_cut_video_issues.py <input_folder> [options]
 
 Arguments:
-    input_folder        Path to the folder containing the videos and flight logs, i.e., the PROCESSED folder.
+  input_folder : str
+                 Path to the folder containing videos and flight logs (i.e., the PROCESSED folder).
 
 Options:
-Main options:
-    -o, --output-folder <output_folder> Path to the folder where the extracted flight log data will be saved. (default: same as input folder)
-    -s, --save          Save the extracted flight log data stats to a CSV file.
-    -f, --force         Force the extraction of flight log data even if the output files already exist.
-    -rf, --ref-frame <ref_frame> Reference frame used for stabilization/georeferencing. (default: 0)
-    -viz, --visualize   Visualize the flight logs and anomalies.
-    -sv, --save-viz     Save the visualization to a PDF file.
-    -m, --match-pattern <match_pattern> Pattern to match the flight logs. (default: ??.CSV)
-    -fe, --folders-exclude <folders_exclude> Folders to exclude from the search (e.g, 'results' as these may contain non-flight log .CSV files).
-    -tcrs, --target-crs <target_crs> Target CRS for local coordinates. (default: epsg:5186)
-    -v, --verbose       Print the extracted flight log data.
+  -h, --help            : Show this help message and exit.
+  -o, --output-folder <path> : str, optional
+                        Path to the folder where extracted flight log data will be saved
+                        (default: same as input folder).
+  -s, --save            : bool, optional
+                        Save extracted flight log data stats to a CSV file (default: False).
+  -f, --force           : bool, optional
+                        Force extraction even if output files already exist (default: False).
+  -rf, --ref-frame <int> : int, optional
+                        Reference frame used for stabilization/georeferencing (default: 0).
+  -viz, --visualize     : bool, optional
+                        Visualize flight logs and anomalies (default: False).
+  -sv, --save-viz       : bool, optional
+                        Save visualization to PDF file (default: False).
+  -m, --match-pattern <str> : str, optional
+                        Pattern to match flight logs (default: '??.CSV').
+  -fe, --folders-exclude <str> [<str> ...] : list of str, optional
+                        Folders to exclude from search
+                        (e.g., 'results' for non-flight log CSV files) (default: ['results']).
+  -tcrs, --target-crs <str> : str, optional
+                        Target CRS for local coordinates (default: 'epsg:5186').
+  -tc, --track-check    : bool, optional
+                        Check if all frames are present in tracking results and vice versa (default: False).
+  -v, --verbose         : bool, optional
+                        Print extracted flight log data (default: False).
 
-Anomalies detection related options:
-    -rdt, --radius-diff-threshold <radius_diff_threshold> Threshold for the maximal positional deviation (in meters) from the initial hover. (default: 15)
-    -adt, --altitude-diff-threshold <altitude_diff_threshold> Threshold for the maximal altitude deviation (in meters) from the initial hover. (default: 5)
-    -fdt, --frame-diff-threshold <frame_diff_threshold> Threshold for the maximal frame difference. (default: 2)
-    -tdt, --timestamp-diff-threshold <timestamp_diff_threshold> Threshold for the maximal timestamp difference (in seconds). (default: 0.5)
-    -idt, --iso-diff-threshold <iso_diff_threshold> Threshold for the maximal ISO deviation. (default: 300)
-    -sdt, --shutter-diff-threshold <shutter_diff_threshold> Threshold for the maximal shutter speed deviation. (default: 0.02)
-    -fndt, --fnum-diff-threshold <fnum_diff_threshold> Threshold for the maximal f-number deviation. (default: 0.1)
-    -cdt, --ct-diff-threshold <ct_diff_threshold> Threshold for the maximal color temperature deviation. (default: 2000)
-    -fldt, --focal-len-diff-threshold <focal_len_diff_threshold> Threshold for the maximal focal length deviation. (default: 0.5)
+Anomaly Detection Thresholds:
+  -rdt, --radius-diff-threshold <float> : float, optional
+                        Max positional deviation from initial hover in meters (default: 15.0).
+  -adt, --altitude-diff-threshold <float> : float, optional
+                        Max altitude deviation from initial hover in meters (default: 5.0).
+  -fdt, --frame-diff-threshold <int> : int, optional
+                        Max frame difference threshold (default: 2).
+  -tdt, --timestamp-diff-threshold <float> : float, optional
+                        Max timestamp difference in seconds (default: 0.5).
+  -idt, --iso-diff-threshold <int> : int, optional
+                        Max ISO deviation threshold (default: 300).
+  -sdt, --shutter-diff-threshold <float> : float, optional
+                        Max shutter speed deviation threshold (default: 0.02).
+  -fndt, --fnum-diff-threshold <float> : float, optional
+                        Max f-number deviation threshold (default: 0.1).
+  -cdt, --ct-diff-threshold <int> : int, optional
+                        Max color temperature deviation threshold (default: 2000).
+  -fldt, --focal-len-diff-threshold <float> : float, optional
+                        Max focal length deviation threshold (default: 0.5).
 
-Example:
-    python tools/find_cut_video_issues.py ../datasets/PROJECT/PROCESSED -s -sv -f
+Examples:
+1. Basic analysis with saved results and visualization:
+   python tools/find_cut_video_issues.py ../datasets/PROJECT/PROCESSED -s -sv -f
+
+2. Analysis with custom thresholds and tracking check:
+   python tools/find_cut_video_issues.py /path/to/PROCESSED --radius-diff-threshold 10 --track-check
+
+3. Visualization only with custom output folder:
+   python tools/find_cut_video_issues.py /path/to/PROCESSED -viz -o /path/to/output/
+
+4. Comprehensive analysis with all options:
+   python tools/find_cut_video_issues.py /path/to/PROCESSED -s -f -viz -sv -tc -v
+
+Input:
+- PROCESSED folder containing drone flight logs in CSV format
+- Flight logs should follow the pattern specified by --match-pattern
+- Video files and associated flight log CSV files in structured directories
+
+Output:
+- flight_log_stats.csv: Comprehensive statistics for all flight logs
+- flight_log_anomalies.csv: Detected anomalies based on thresholds
+- PDF visualizations: Spatial deviations and camera parameter plots (if --save-viz)
+- Console output: Anomaly detection results and statistics
+
+Notes:
+- Uses reference frame hover location as baseline for deviation calculations
+- Converts geographic coordinates to local coordinate system for spatial analysis
+- Validates timestamp consistency and expected time windows for flight sessions
+- Checks frame sequence integrity between flight logs and tracking results
+- Supports visualization of positional deviations and camera parameter variations
+- Color-coded visualizations show altitude deviations and parameter distributions
+- Anomaly detection covers spatial, temporal, and camera parameter deviations
+- Session time windows are predefined (AM1-AM5, PM1-PM5) with configurable tolerance
 """
 
 import argparse
@@ -405,7 +461,7 @@ def get_cli_arguments() -> argparse.Namespace:
     """
     Parse command-line arguments.
     """
-    parser = argparse.ArgumentParser(description='Find issues with the cut videos.')
+    parser = argparse.ArgumentParser(description='Flight Log Analysis and Anomaly Detection Tool')
 
     # Main arguments
     parser.add_argument('input_folder', type=Path, help="Path to the folder containing the videos and flight logs, i.e., the PROCESSED folder.")

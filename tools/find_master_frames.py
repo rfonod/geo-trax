@@ -3,32 +3,84 @@
 # Author: Robert Fonod (robert.fonod@ieee.org)
 
 """
-find_master_frames.py - Find the best reference frame to serve as the master frame for georeferencing a given location.
+find_master_frames.py - Master Frame Selection Tool for Georeferencing
+
+This script identifies the optimal reference frames to serve as master frames for georeferencing
+drone video footage. It analyzes flight log data, spatial coordinates, and object detection results
+to select frames with minimal positional deviation and optimal object coverage characteristics.
+
+The tool processes flight logs to extract reference frame coordinates, calculates distances to
+mean hover locations, and applies selection criteria based on spatial proximity and object
+detection coverage to identify the best master frames for each intersection location.
 
 Usage:
-    python tools/find_master_frames.py <input_folder> <output_folder> [options]
+  python tools/find_master_frames.py <input_folder> <output_folder> [options]
 
 Arguments:
-    input_folder        Path to the folder containing the videos and flight logs and optional detection/tracking results.
-    output_folder       Path to the output folder to save the results (e.g., ../ORTHOPHOTOS/master_frames).
+  input_folder : str
+                 Path to the folder containing videos, flight logs, and optional detection/tracking results.
+  output_folder : str
+                 Path to the output folder to save results (e.g., ../ORTHOPHOTOS/master_frames).
 
 Options:
-    -s, --save          Save the extracted reference frame data and the best master frames.
-    -smf, --save-master-frames Save the best master frames extracted from the videos (existing files will be overwritten).
-    -f, --force         Force the extraction of the flight log data (do not use the existing saved data).
-    -rf, --ref-frame    Custom reference frame in the flight logs (default: 0).
-    -viz, --visualize   Visualize the best master frames.
-    -sv, --save-viz     Save the visualization of the best master frames selection.
-    -n, --best_n        Number of closest master frames to the mean location to consider for the best master frame (default: 20).
-    -m, --match-pattern Pattern to match (case-sensitive) the files in the folder (default: '??.CSV').
-    -fe, --folders-exclude Folders to exclude from the search (e.g, 'results' as these may already contain georeferenced data).
-    -b, --bounding-box-cols Columns of the bounding box in the detection/tracking results (default: 2, 3, 4, 5).
-    -tcrs, --target-crs Target CRS for local coordinates (default: epsg:5186).
-    -fw, --frame-width  Width of the video frames (default: 3840).
-    -fh, --frame-height Height of the video frames (default: 2160).
+  -h, --help            : Show this help message and exit.
+  -s, --save            : bool, optional
+                        Save extracted reference frame stats and best master frames list (default: False).
+  -smf, --save-master-frames : bool, optional
+                        Save best master frames extracted from videos (existing files overwritten) (default: False).
+  -f, --force           : bool, optional
+                        Force extraction of flight log data (do not use existing data) (default: False).
+  -rf, --ref-frame <int> : int, optional
+                        Custom reference frame used for stabilization/georeferencing (default: 0).
+  -viz, --visualize     : bool, optional
+                        Visualize best master frame selection (default: False).
+  -sv, --save-viz       : bool, optional
+                        Save best master frames visualization to PDF (default: False).
+  -n, --best_n <int>    : int, optional
+                        Number of reference frames to consider for best master frame selection (default: 20).
+  -m, --match-pattern <str> : str, optional
+                        Pattern to match files in folder (case-sensitive) (default: '??.CSV').
+  -fe, --folders-exclude <str> [<str> ...] : list of str, optional
+                        Folders to exclude from search
+                        (e.g., 'results' for already georeferenced data) (default: ['results']).
+  -b, --bounding-box-cols <int> [<int> ...] : list of int, optional
+                        Columns of bounding box in detection/tracking results (default: [2, 3, 4, 5]).
+  -tcrs, --target-crs <str> : str, optional
+                        Target CRS for local coordinates (default: 'epsg:5186').
+  -fw, --frame-width <int> : int, optional
+                        Video frame width in pixels (default: 3840).
+  -fh, --frame-height <int> : int, optional
+                        Video frame height in pixels (default: 2160).
 
-Example:
-    python tools/find_master_frames.py /path/to/PROCESSED /path/to/ORTHOPHOTOS/master_frames -s -smf -sv -f
+Examples:
+1. Basic master frame selection with saved results and visualization:
+   python tools/find_master_frames.py /path/to/PROCESSED /path/to/ORTHOPHOTOS/master_frames -s -smf -sv -f
+
+2. Selection with custom parameters and tracking data:
+   python tools/find_master_frames.py /path/to/PROCESSED /path/to/output --best_n 10 --ref-frame 5
+
+3. Analysis with custom frame dimensions and CRS:
+   python tools/find_master_frames.py /path/to/PROCESSED /path/to/output -fw 1920 -fh 1080 -tcrs epsg:32633
+
+Input:
+- PROCESSED folder containing drone flight logs in CSV format
+- Video files (.MP4) corresponding to flight logs
+- Optional detection/tracking results in 'results' subdirectories
+- Flight logs should follow the pattern specified by --match-pattern
+
+Output:
+- reference_frame_stats.csv: Comprehensive statistics for all reference frames
+- best_master_frames.csv: Selected optimal master frames for each location
+- Master frame images: PNG files extracted from videos (if --save-master-frames)
+- PDF visualization: Spatial distribution plots (if --save-viz)
+
+Notes:
+- Selection algorithm prioritizes frames closest to mean hover location
+- Secondary criterion considers minimal object detection coverage area
+- Converts geographic coordinates to local coordinate system for spatial analysis
+- Supports visualization of spatial distribution and selection results
+- Master frames are identified per intersection location ID
+- Handles missing detection data gracefully with fallback criteria
 """
 
 import argparse
@@ -350,5 +402,5 @@ def get_cli_arguments() -> argparse.Namespace:
 
 
 if __name__ == "__main__":
-    cli_args = get_cli_arguments()
-    find_master_frames(cli_args)
+    args = get_cli_arguments()
+    find_master_frames(args)

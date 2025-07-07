@@ -3,42 +3,82 @@
 # Author: Robert Fonod (robert.fonod@ieee.org)
 
 """
-ortho_matching_benchmark.py - Evaluate the accuracy of orthophoto matching and visualize the ground truths.
+ortho_matching_benchmark.py - Orthophoto Matching Accuracy Benchmark Tool
 
-This script benchmarks the orthophoto matching process by comparing the reprojection errors of ground truth labels.
-Different orthophoto resolutions are considered to evaluate the impact on the accuracy of the matching process.
-The script uses RSIFT for feature detection and homography computation, but it can be easily extended to use other methods.
+This script evaluates orthophoto matching accuracy by computing reprojection errors between ground truth
+labels and homography-transformed coordinates. It benchmarks the impact of orthophoto resolution on
+matching performance using RSIFT feature detection and RANSAC-based homography estimation.
+
+The tool processes multiple resolution levels, measures computation times, analyzes reprojection errors,
+and generates comprehensive statistics for performance evaluation. It also provides visualization
+capabilities for ground truth label verification.
 
 Usage:
-  python ortho_matching_benchmark.py <data> [options]
+  python tools/ortho_matching_benchmark.py <data> [options]
 
 Arguments:
-  data : Path to the benchmark data folder containing images, orthos, and ground truth labels.
+  data : str
+         Path to benchmark data folder containing images, orthos, and ground truth labels.
 
 Options:
-  --skip-benchmark, -sb       : Skip the benchmark and only visualize the ground truths.
-  --overwrite, -o             : Overwrite the existing results.txt file and visualizations.
-  --visualize, -v             : Visualize the ground truths for the input data.
-  --min-resolution, -mr       : Minimum orthophoto resolution to consider [default: 2000].
-  --max-resolution, -xr       : Maximum orthophoto resolution to consider [default: 15000].
-  --resolution-step, -rs      : Step size for the orthophoto resolution [default: 1000].
+  -h, --help            : Show this help message and exit.
+  -sb, --skip-benchmark : bool, optional
+                        Skip benchmark execution and only visualize ground truths (default: False).
+  -o, --overwrite       : bool, optional
+                        Overwrite existing results.txt file and visualizations (default: False).
+  -v, --visualize       : bool, optional
+                        Visualize ground truths for input data (default: False).
+  -mr, --min-resolution <int> : int, optional
+                        Minimum orthophoto resolution to consider (default: 2000).
+  -xr, --max-resolution <int> : int, optional
+                        Maximum orthophoto resolution to consider (default: 15000).
+  -rs, --resolution-step <int> : int, optional
+                        Step size for orthophoto resolution (default: 1000).
 
 Examples:
+1. Run benchmark and visualize ground truths:
+   python tools/ortho_matching_benchmark.py path/to/data -v
 
-  1. Run the benchmark and visualize the ground truths:
-     python ortho_matching_benchmark.py path/to/data -v
+2. Skip benchmark and only visualize ground truths:
+   python tools/ortho_matching_benchmark.py path/to/data -sb -v
 
-  2. Skip the benchmark and only visualize the ground truths:
-     python ortho_matching_benchmark.py path/to/data -sb -v
+3. Custom resolution range with overwrite:
+   python tools/ortho_matching_benchmark.py path/to/data -mr 1000 -xr 10000 -rs 500 -o
 
-  3. Overwrite existing results and visualizations:
-     python ortho_matching_benchmark.py path/to/data -o
+Input:
+- Data folder structure:
+  ├── images/          (drone images in PNG format)
+  ├── orthos/          (orthophoto references in PNG format)
+  └── labels/          (ground truth labels in CSV format)
+- Label CSV format: columns 'pnum', 'px', 'py' (point number, x-coordinate, y-coordinate)
+- Matching filenames between images, orthos, and corresponding labels
+
+Output:
+- Console output: Per-image reprojection errors, computation times, inlier counts
+- results.txt: LaTeX-formatted table with aggregated statistics
+- visualizations/ directory: Ground truth overlays on images and orthophotos
+- visualizations/paper/ directory: Publication-ready visualizations
+
+Methodology:
+- RSIFT feature detection with adaptive feature count
+- Brute-force matching with ratio test filtering
+- RANSAC homography estimation with USAC_MAGSAC
+- Perspective transformation for coordinate mapping
+- Euclidean distance calculation for reprojection errors
+- Statistical analysis across multiple resolution levels
+
+Performance Metrics:
+- Mean and standard deviation of reprojection errors
+- Computation time per homography estimation
+- Inlier count and ratio for RANSAC consensus
+- Aggregated statistics across locations and resolutions
 
 Notes:
-  - Ensure that the data folder contains subfolders named 'images', 'orthos', and 'labels' with the respective files.
-  - Images and orthophotos should be in PNG format, and the labels should be in CSV format.
-  - The labels should contain the columns 'pnum', 'px', and 'py' for point number, x-coordinate, and y-coordinate, respectively.
-  - The filenames of the images and orthophotos should match with those of the labels.
+- Resolution testing performed by downsampling orthophotos
+- Skips resolutions larger than original orthophoto dimensions
+- Adaptive feature detection with fallback for failed matches
+- Supports both individual and aggregated performance analysis
+- Visualizations include point number annotations and styling
 """
 
 import argparse

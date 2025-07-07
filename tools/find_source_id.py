@@ -3,35 +3,60 @@
 # Author: Robert Fonod (robert.fonod@ieee.org)
 
 """
-find_source_id.py - Find the original vehicle ID and source video from aggregated dataset ID.
+find_source_id.py - Vehicle ID Traceability Tool
 
-This script traces back a vehicle ID from the aggregated dataset to its original ID and source
-video file. It's useful for debugging, validation, or detailed analysis of specific vehicles
-by locating their original detection data.
+This script traces back a vehicle ID from an aggregated dataset to its original ID and source
+video file. It reverse-engineers the aggregation process to identify the original detection
+data for specific vehicles, supporting debugging, validation, and detailed analysis workflows.
+
+The tool parses aggregated dataset files, extracts metadata (date, location, session), searches
+corresponding PROCESSED directories, and applies the same ID offset logic used during aggregation
+to locate the original vehicle ID and source video file.
 
 Usage:
-    python tools/find_source_id.py <dataset_filepath> <vehicle_id> [options]
+  python tools/find_source_id.py <dataset_filepath> <vehicle_id> [options]
 
 Arguments:
-    dataset_filepath              : Path to the aggregated dataset CSV file (e.g., 2022-10-04_A/2022-10-04_A_AM1.csv).
-    vehicle_id                    : Vehicle ID from the aggregated dataset to trace back.
+  dataset_filepath : str
+                     Path to aggregated dataset CSV file (e.g., 2022-10-04_A/2022-10-04_A_AM1.csv).
+  vehicle_id : int
+                     Vehicle ID from aggregated dataset to trace back.
 
 Options:
-    -h, --help                    : Show this help message and exit.
-    -p, --processed-folder <path> : Custom path to the PROCESSED directory. If not provided,
-                                    automatically detected from dataset file location.
+  -h, --help            : Show this help message and exit.
+  -p, --processed-folder <path> : str, optional
+                        Custom path to PROCESSED directory. If not provided,
+                        automatically detected from dataset file location.
 
 Examples:
-  1. Find source information for vehicle ID 5 from an aggregated dataset:
-     python tools/find_source_id.py 2022-10-04_A/2022-10-04_A_AM1.csv 5
+1. Find source information for vehicle ID 5 from aggregated dataset:
+   python tools/find_source_id.py 2022-10-04_A/2022-10-04_A_AM1.csv 5
 
-  2. Use custom PROCESSED folder location:
-     python tools/find_source_id.py dataset.csv 12 --processed-folder /path/to/PROCESSED/
+2. Use custom PROCESSED folder location:
+   python tools/find_source_id.py dataset.csv 12 --processed-folder /path/to/PROCESSED/
+
+3. Trace vehicle from different aggregated dataset:
+   python tools/find_source_id.py 2022-10-05_B/2022-10-05_B_PM3.csv 27
+
+Input:
+- Aggregated dataset CSV file with Vehicle_ID and Drone_ID columns
+- PROCESSED directory structure: DATE/DRONE_ID/SESSION/results/LOCATION_ID*.csv
+- Source video files (.MP4) and georeferenced results (.csv)
 
 Output:
-  - Original vehicle ID in the source video
-  - Source video file path
-  - Source CSV results file path
+- Console output with detailed traceability information:
+  * Date, Drone ID, Session, Video ID
+  * Vehicle ID mapping (dataset → original)
+  * Source video file path (.MP4)
+  * Source CSV results file path
+
+Notes:
+- Automatically detects PROCESSED folder from dataset location or uses custom path
+- Applies same ID offset logic as aggregation process to reverse-map vehicle IDs
+- Searches within specific date/location/session scope for efficiency
+- Handles multiple drone data with proper sorting and offset calculation
+- Useful for validation, debugging, and detailed vehicle trajectory analysis
+- Requires consistent folder structure: DATASET and PROCESSED at same level
 """
 
 import argparse
@@ -137,21 +162,18 @@ def get_processed_folder(source: Path, processed_folder: Union[Path, None]) -> P
     return processed_folder
 
 
-def parse_cli_args() -> argparse.Namespace:
+def get_cli_args() -> argparse.Namespace:
     """
     Parse command-line arguments.
     """
-    parser = argparse.ArgumentParser(
-        description='Find the original vehicle ID extracted from the source video from the dataset ID.')
-    parser.add_argument('dataset_filepath', type=Path,
-                        help='Filepath to the source dataset (.csv) file (e.g. 2022-10-04_A/2022-10-04_A_AM1.csv)')
+    parser = argparse.ArgumentParser(description='Find the original vehicle ID extracted from the source video from the dataset ID.')
+    parser.add_argument('dataset_filepath', type=Path, help='Filepath to the source dataset (.csv) file (e.g. 2022-10-04_A/2022-10-04_A_AM1.csv)')
     parser.add_argument('vehicle_id', type=int, help='Vehicle ID of interest from the dataset (e.g. 1)')
-    parser.add_argument('--processed-folder', '-p', type=Path,
-                        help='Custom path to the PROCESSED directory containing the georeferenced results')
+    parser.add_argument('--processed-folder', '-p', type=Path, help='Custom path to the PROCESSED directory containing the georeferenced results')
 
     return parser.parse_args()
 
 
 if __name__ == '__main__':
-    args = parse_cli_args()
+    args = get_cli_args()
     find_source_id(args.dataset_filepath, args.vehicle_id, processed_folder = args.processed_folder, verbose=True)

@@ -3,34 +3,86 @@
 # Author: Robert Fonod (robert.fonod@ieee.org)
 
 """
-Compute the BB center error statistics.
+compute_bb_center_error.py - Bounding Box Center Error Analysis Tool
+
+This script computes statistical metrics for bounding box center prediction accuracy by comparing
+human annotations (ground truth) with predicted annotations from object detection models.
+It calculates pixel-wise center coordinate errors and provides comprehensive statistical analysis
+with visualization capabilities.
+
+The tool matches predicted detections to ground truth annotations by checking if predicted
+centers fall within ground truth bounding boxes, then computes Euclidean distances between
+centers. Analysis can be performed class-agnostic or with per-class breakdown.
 
 Usage:
-    python tools/compute_bb_center_error.py <path-to-images> [--human-annotations <path-to-human-annotations>] [--predicted-annotations <path-to-predicted-annotations>] [--save] [--class-agnostic]
+  python tools/compute_bb_center_error.py <source> [options]
 
-Make sure the human and predicted annotations are in the following folder structure or provide custom paths:
-├── images
-│   ├── 000001.jpg
-│   ├── 000002.jpg
-│   ├── ...
-├── labels (human-annotations)
-│   ├── 000001.txt
-│   ├── 000002.txt
-│   ├── ...
-└── pre-labels (predicted-annotations)
-    ├── 000001.txt
-    ├── 000002.txt
-    ├── ...
+Arguments:
+  source : str
+           Path to directory containing images to be analyzed.
 
-The predicted annotations can be generated with the `annotate_frames.py` script.
+Options:
+  -h, --help            : Show this help message and exit.
+  -ha, --human-annotations <path> : str, optional
+                        Relative path to human annotations directory (default: '../labels').
+  -pa, --predicted-annotations <path> : str, optional
+                        Relative path to predicted annotations directory (default: '../pre-labels').
+  -s, --save            : bool, optional
+                        Save error distribution plots as figures (default: False).
+  -ca, --class-agnostic : bool, optional
+                        Compute class-agnostic statistics instead of per-class breakdown (default: False).
 
-Note:
-    The human and predicted annotations should be in the format:
-    <class_id> <x> <y> <width> <height>
-    where (x, y) is the center of the bounding box.
+Examples:
+1. Basic analysis with default annotation paths:
+   python tools/compute_bb_center_error.py /path/to/images/
 
-    When using --class-agnostic, the statistics are computed for all classes together.
-    Without --class-agnostic, the statistics are broken down per class ID.
+2. Class-agnostic analysis with saved plots:
+   python tools/compute_bb_center_error.py /path/to/images/ --class-agnostic --save
+
+3. Custom annotation paths with per-class analysis:
+   python tools/compute_bb_center_error.py /path/to/images/ -ha labels -pa predictions
+
+Input:
+- Image directory containing .jpg files
+- Human annotations directory with .txt files (YOLO format)
+- Predicted annotations directory with .txt files (YOLO format)
+- Expected directory structure:
+  ├── images/          (source argument)
+  │   ├── 000001.jpg
+  │   └── 000002.jpg
+  ├── labels/          (human annotations)
+  │   ├── 000001.txt
+  │   └── 000002.txt
+  └── pre-labels/      (predicted annotations)
+      ├── 000001.txt
+      └── 000002.txt
+
+Output:
+- Console output: Statistical metrics (mean, median, std dev, valid/NaN counts)
+- Class-agnostic mode: Single set of statistics for all classes combined
+- Per-class mode: Statistics breakdown by class ID plus overall summary
+- Visualization: Error distribution plots with statistical overlays
+- Optional: Saved plots (PDF/PNG) in parent directory of source
+
+Annotation Format:
+- YOLO format: <class_id> <x_center> <y_center> <width> <height>
+- Coordinates normalized to [0,1] relative to image dimensions
+- Center coordinates (x, y) represent bounding box center
+- Predicted annotations can be generated using annotate_frames.py
+
+Error Computation:
+- Matches predictions to ground truth by spatial overlap (center-in-box)
+- Calculates Euclidean distance between matched centers in pixels
+- Reports minimum error for each ground truth annotation
+- Handles unmatched annotations as NaN values
+- Provides robust statistical analysis with outlier-aware visualizations
+
+Notes:
+- Requires corresponding .jpg and .txt files with matching names
+- Supports both class-specific and class-agnostic analysis modes
+- Generates professional publication-quality plots with statistical overlays
+- Handles missing annotations gracefully with warning messages
+- Uses spatial containment for prediction-to-ground-truth matching
 """
 
 import argparse
@@ -413,7 +465,7 @@ def plot_single_distribution(ax, errors, title_prefix):
     ax.legend(loc='upper right', frameon=True, fancybox=True, framealpha=0.9, fontsize=10)
 
 
-def parse_cli_arguments():
+def get_cli_arguments():
     parser = argparse.ArgumentParser(description='Compute bounding box center error statistics.')
     parser.add_argument('source', type=Path, help='Path to the images to be analyzed')
     parser.add_argument('--human-annotations', '-ha', type=Path, default="../labels", help='Relative path to the human annotations with respect to the source')
@@ -424,5 +476,5 @@ def parse_cli_arguments():
 
 
 if __name__ == '__main__':
-    args = parse_cli_arguments()
+    args = get_cli_arguments()
     compute_bb_center_error(args)

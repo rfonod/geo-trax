@@ -3,21 +3,48 @@
 # Authors: Haechan Cho (gkqkemwh@kaist.ac.kr)
 
 """
-subset_orthophoto.py - Subset orthophoto near the drone hovering locations.
+subset_orthophoto.py - Orthophoto Subset Extraction Tool
 
-This script subsets the orthophoto with crop-size pixels and down-scale by scale-factor before saving it.
+This script extracts subsets from large orthophotos around specified geographic locations.
+It crops square regions from the orthophoto centered on each location, downscales them,
+and saves the results as PNG files with corresponding metadata.
+
+The tool reads geographic coordinates from a location dictionary, converts them to pixel
+coordinates using the orthophoto's geospatial metadata, and performs efficient tiled
+cropping from GeoTIFF files.
 
 Usage:
-  python subset_orthophoto.py --orthophoto-filepath <orthophoto_filepath> --ortho-cutout-folder <ortho_cutout_folder> --location-dict-filepath <location_dict_filepath> [options]
+  python tools/subset_orthophoto.py --orthophoto-filepath <path> \\
+         --ortho-cutout-folder <path> --location-dict-filepath <path> [options]
 
 Arguments:
-  --orthophoto-filepath : Path to the large orthophoto file to be subsetted.
-  --ortho-cutout-folder : Path to the folder to save the cut orthophotos and meta files.
-  --location-dict-filepath : Path to the location dictionary that maps location name to its geographic coordinates.
+  --orthophoto-filepath <path>    : Path to the large orthophoto GeoTIFF file to be subsetted.
+  --ortho-cutout-folder <path>    : Path to the output folder for cropped orthophotos and metadata.
+  --location-dict-filepath <path> : Path to JSON file mapping location names to geographic coordinates.
 
 Options:
-  --crop-size : Square crop size of the orthophoto (in pixels) [Dafaults: 15000].
-  --scale-factor : Factor by which to downscale the cropped orthophoto before saving. [Defaults: 8/15].
+  -h, --help                      : Show this help message and exit.
+  --crop-size <int>               : Square crop size in pixels (default: 15000).
+  --scale-factor <float>          : Downscaling factor for output images (default: 0.533).
+
+Examples:
+1. Basic orthophoto subsetting:
+   python tools/subset_orthophoto.py --orthophoto-filepath ortho.tif \\
+          --ortho-cutout-folder output/ --location-dict-filepath locations.json
+
+2. Custom crop size and scale factor:
+   python tools/subset_orthophoto.py --orthophoto-filepath ortho.tif \\
+          --ortho-cutout-folder output/ --location-dict-filepath locations.json \\
+          --crop-size 10000 --scale-factor 0.5
+
+Input:
+- GeoTIFF orthophoto file with geospatial metadata (ModelTiepointTag, ModelPixelScaleTag)
+- JSON location dictionary: {"location_name": [latitude, longitude], ...}
+
+Output:
+- PNG files for each location: {location_name}.png
+- Text files with pixel coordinates: {location_name}_center.txt
+- Orthophoto parameters file: ortho_parameters.txt (lng_0, lat_0, lng_scale, lat_scale)
 """
 
 import argparse
@@ -117,7 +144,7 @@ def get_tiled_crop(page, i0, j0, h, w):
 
 
 def parse_opt():
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(description="Subset large orthophotos around specified geographic locations.")
     parser.add_argument('--orthophoto-filepath', type=Path, help='Filepath to the orthophoto file to be subsetted.')
     parser.add_argument('--ortho-cutout-folder', type=Path, help='Path to the folder to save the cut orthophotos and meta files.')
     parser.add_argument('--location-dict-filepath', type=Path, help='Filepath to the location dictionary that maps location name to its geographic coordinates.')

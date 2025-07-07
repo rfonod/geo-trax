@@ -112,19 +112,16 @@ def load_detector(config: Dict, logger: logging.Logger) -> YOLO:
     return model
 
 
-def parse_cli_arguments():
+def get_cli_arguments():
     parser = argparse.ArgumentParser(description='Annotate images with vehicle bounding boxes.')
     parser.add_argument('source', type=Path, help='Path to the images to be annotated')
-    parser.add_argument('--annotations', '-a', type=Path,
-                        help='Path to save the annotations (default: <source>/../pre-labels)')
-    parser.add_argument('--cfg', '-c', type=Path, default='cfg/ultralytics/annotator/default.yaml',
-                        help='Path to the ultralytics configuration file')
+    parser.add_argument('--annotations', '-a', type=Path, help='Path to save the annotations (default: <source>/../pre-labels)')
+    parser.add_argument('--cfg', '-c', type=Path, default='cfg/ultralytics/annotator/default.yaml', help='Path to the ultralytics configuration file')
     parser.add_argument('--save', '-s', action='store_true', help='Save the annotated images')
-    parser.add_argument('--margin', '-m', type=float, default=0.0,
-                        help='Margin factor to enlarge the bounding boxes (for plotting only)')
+    parser.add_argument('--margin', '-m', type=float, default=0.0, help='Margin factor to enlarge the bounding boxes (for plotting only)')
     return parser.parse_args()
 
 
 if __name__ == '__main__':
-    args = parse_cli_arguments()
+    args = get_cli_arguments()
     run_annotator(args)
