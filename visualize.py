@@ -15,28 +15,32 @@ Usage:
   python visualize.py <source> [options]
 
 Arguments:
-  source : Path to the video file.
+  source : Path to video source.
 
 Options:
-  --cfg, -c           : Path to the main configuration file (default: cfg/default.yaml).
-  --log-file, -lf     : Filename to save detailed logs. If not set, logs are printed to console.
-  --verbose, -v       : Set verbosity level.
+  --help, -h          : Show this help message and exit.
+  --cfg, -c <path>    : Path to the main geo-trax configuration file (default: cfg/default.yaml).
+  --log-file, -lf <str> : Filename to save detailed logs. Saved in the 'logs' folder (default: None).
+  --verbose, -v       : Set print verbosity level to INFO (default: WARNING).
 
-Visualization Options:
+Visualization Options (one required):
   --save, -s          : Save the processing results to a video file.
   --show, -sh         : Visualize results during processing.
-  --viz-mode, -vm     : Set the visualization mode for the output video: 0 - original, 1 - stabilized, 2 - reference frame (default: 0).
-  --plot-trajectories, -pt : Plot all stabilized trajectories on the reference frame at the beginning.
-  --plot-delay, -pd   : Delay in frames for plotting trajectories (default: 30).
-  --show-conf, -sc    : Show confidence values.
-  --show-lanes, -sl   : Show lane numbers.
-  --show-class-names, -scn : Show class names.
-  --hide-labels, -hl  : Hide labels entirely.
-  --hide-tracks, -ht  : Hide tracking lines.
-  --hide-speed, -hs   : Hide speed values.
-  --class-filter, -cf : Exclude specified classes (e.g., -cf 1 2).
-  --cut-frame-left, -cfl : Skip the first N frames (default: 0).
-  --cut-frame-right, -cfr : Stop processing after this frame (default: None).
+
+Additional Visualization Options:
+  --viz-mode, -vm <int> : Set visualization mode for the output video: 0 - original, 
+                        1 - stabilized, 2 - reference frame (default: 0).
+  --plot-trajectories, -pt : Plot trajectories on the reference frame (default: False).
+  --plot-delay, -pd <int> : Delay in frames for plotting trajectories (default: 30).
+  --show-conf, -sc    : Show confidence values (default: False).
+  --show-lanes, -sl   : Show lane numbers (default: False).
+  --show-class-names, -scn : Show class names (default: False).
+  --hide-labels, -hl  : Hide labels entirely (default: False).
+  --hide-tracks, -ht  : Hide trailing tracking lines (default: False).
+  --hide-speed, -hs   : Hide speed values (if available) (default: False).
+  --class-filter, -cf <int> [<int> ...] : Exclude specified classes (e.g., -cf 1 2) (default: None).
+  --cut-frame-left, -cfl <int> : Skip the first N frames (default: 0).
+  --cut-frame-right, -cfr <int> : Stop processing after this frame (default: None).
 
 Examples:
 1. Visualize the tracking results on a video using the default settings:
@@ -466,7 +470,7 @@ def parse_cli_args() -> argparse.Namespace:
     parser.add_argument('--plot-trajectories', '-pt', action='store_true', help='Plot trajectories on the reference frame')
     parser.add_argument('--plot-delay', '-pd', type=int, default=30, help='Delay in frames for plotting trajectories')
     parser.add_argument('--show-conf', '-sc', action='store_true', help='Show confidence values')
-    parser.add_argument('--show_lanes', '-sl', action='store_true', help='Show lane numbers')
+    parser.add_argument('--show-lanes', '-sl', action='store_true', help='Show lane numbers')
     parser.add_argument('--show-class-names', '-scn', action='store_true', help='Show class names')
     parser.add_argument('--hide-labels', '-hl', action='store_true', help='Hide labels entirely')
     parser.add_argument('--hide-tracks', '-ht', action='store_true', help='Hide trailing tracking lines')

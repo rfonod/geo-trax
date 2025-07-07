@@ -22,18 +22,23 @@ Arguments:
     source                         : Path to the video file (e.g., path/to/video/video.mp4).
 
 Options:
-    -h, --help                     : Show this help message and exit.
-    -c, --cfg <path>               : Path to the main geo-trax configuration file (default: cfg/default.yaml).
-    -lf, --log-file <str>          : Custom filename to save detailed logs. Saved in the 'logs' folder.
-    -v, --verbose                  : Set print verbosity level to INFO (default: WARNING).
+    --help, -h                     : Show this help message and exit.
+    --cfg, -c <path>               : Path to the main geo-trax configuration file (default: cfg/default.yaml).
+    --log-file, -lf <str>          : Filename to save detailed logs. Saved in the 'logs' folder.
+    --verbose, -v                  : Set print verbosity level to INFO (default: WARNING).
 
-    -of, --ortho-folder <path>     : Custom path to the orthophoto folder. Defaults to 'ORTHOPHOTOS' at the same level as 'PROCESSED' in 'input'.
-    -gs, --geo-source <str>        : Source of georeferencing parameters (metadata-tif, text-file, center-text-file). Auto-detect if not provided.
-    -rf, --ref-frame <int>         : Use custom reference frame number (default: 0). Should be the same as the one used for stabilization.
-    -nm, --no-master               : Disable the master frame approach.
-    -mf, --master-folder <path>    : Custom path to the master frames folder. If not provided, '--ortho-folder / master_frames' will be used.
-    -r, --recompute                : Recompute the master->ortho homography even if it exists.
-    -osf, --segmentation-folder <path> : Custom path to the segmentation folder. If not provided, '--ortho-folder / segmentations' will be used.
+    --ortho-folder, -of <path>     : Custom path to the folder with orthophotos (.png, .tif, .txt).
+                                     Defaults to 'ORTHOPHOTOS' at the same level as 'PROCESSED' in 'input'.
+    --geo-source, -gs <str>        : Source of georeferencing parameters (metadata-tif, text-file, center-text-file).
+                                     If not provided, the system will auto-detect.
+    --ref-frame, -rf <int>         : Use custom reference frame number (default: 0).
+                                     Should be the same as the one used for stabilization.
+    --no-master, -nm               : Disable the master frame approach.
+    --master-folder, -mf <path>    : Custom path to the folder containing master frame files (.png).
+                                     If not provided, '--ortho-folder / master_frames' will be used.
+    --recompute, -r                : Force recompute master-> ortho homography even if it exists.
+    --segmentation-folder, -osf <path> : Custom path to the folder containing orthophoto segmentation files (.csv).
+                                         If not provided, '--ortho-folder / segmentations' will be used.
 
 Examples:
 

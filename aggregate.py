@@ -3,7 +3,7 @@
 # Author: Robert Fonod (robert.fonod@ieee.org)
 
 """
-Aggregate georeferenced vehicle tracking results into a consolidated dataset.
+aggregate.py - Aggregate Georeferenced Vehicle Tracking Results
 
 This script aggregates the vehicle tracking results from multiple drone flights
 into a unified dataset, organized by date, location, and flight session.
@@ -17,19 +17,45 @@ The script:
 6. Creates aggregated CSV files for each group
 7. Generates zip archives for convenient distribution
 
+Usage:
+  python aggregate.py <input> [options]
+
+Arguments:
+  input : Path to the PROCESSED folder containing georeferenced tracking results.
+
+Options:
+  -h, --help          : Show this help message and exit.
+  -o, --output <path> : Path to the output folder. If not provided, the output folder will be
+                        created in the same directory as the PROCESSED folder and will be
+                        named 'DATASET' (default: None).
+  -lf, --log-file <str> : Filename to save detailed logs. Saved in the 'logs' folder (default: None).
+  -v, --verbose       : Set print verbosity level to INFO (default: WARNING).
+
+Examples:
+1. Basic aggregation with default output location:
+   python aggregate.py /path/to/PROCESSED/
+
+2. Aggregate with custom output folder:
+   python aggregate.py /path/to/PROCESSED/ --output /path/to/custom/output/
+
+3. Enable verbose logging and save to custom log file:
+   python aggregate.py /path/to/PROCESSED/ --verbose --log-file custom_aggregate.log
+
 Input:
-    - Path to PROCESSED folder containing georeferenced tracking results
-    - Optional output folder path (defaults to DATASET in parent directory)
+- Path to PROCESSED folder containing georeferenced tracking results in CSV format
+- CSV files should be organized in subdirectories: date/drone_id/flight_session/results/
 
 Output:
-    - CSV files with aggregated tracking data, named by date_location_session
-    - ZIP archives containing all CSV files for each date_location combination
-    - Detailed logging information
+- CSV files with aggregated tracking data, named by date_location_session
+- ZIP archives containing all CSV files for each date_location combination
+- Detailed logging information
 
-Usage:
-    python aggregate.py /path/to/PROCESSED/ [--output /path/to/output/]
-                                           [--log-file filename]
-                                           [--verbose]
+Notes:
+- The script expects CSV files to be located in a specific directory structure: date/drone_id/flight_session/results/
+- Vehicle IDs are automatically offset to ensure uniqueness across different drone data
+- Timestamps are converted to local time format (HH:MM:SS.fff)
+- Lane numbers are standardized as strings
+- Output files are organized by date and location for easy access
 """
 
 import argparse
@@ -157,7 +183,7 @@ def parse_cli_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description='Aggregate georeferenced tracking results')
     parser.add_argument('input', type=Path, help='Path to the PROCESSED folder')
     parser.add_argument('--output', '-o', type=Path, default=None, help="Path to the output folder. If not provided, the output folder will be created in the same directory as the PROCESSED folder and will be named 'DATASET'")
-    parser.add_argument('--log-file', '-lf', type=str, default=None, help="Filename to save detailed logs. Saved in the 'logs' folder. (default: aggregate.log)")
+    parser.add_argument('--log-file', '-lf', type=str, default=None, help="Filename to save detailed logs. Saved in the 'logs' folder.")
     parser.add_argument('--verbose', '-v', action='store_true', help="Set print verbosity level to INFO (default: WARNING)")
 
     return parser.parse_args()

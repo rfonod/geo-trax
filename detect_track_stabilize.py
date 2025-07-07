@@ -21,14 +21,15 @@ Arguments:
     source                    : Path to the video file (e.g., path/to/video/video.mp4).
 
 Options:
-    -h, --help                : Show this help message and exit.
-    -c, --cfg <path>          : Path to the main geo-trax configuration file (default: cfg/default.yaml).
-    -lf, --log-file <str>     : Custom filename to save detailed logs. Saved in the 'logs' folder.
-    -v, --verbose             : Set print verbosity level to INFO (default: WARNING).
+    --help, -h                : Show this help message and exit.
+    --cfg, -c <path>          : Path to the main geo-trax configuration file (default: cfg/default.yaml).
+    --log-file, -lf <str>     : Filename to save detailed logs. Saved in the 'logs' folder (default: None).
+    --verbose, -v             : Set print verbosity level to INFO (default: WARNING).
 
-    --classes <int>           : Class IDs to extract (e.g., --classes 0 1 2). Defaults to cfg -> cfg_ultralytics -> classes.
-    --cut-frame-left <int>    : Skip the first N frames. Default: 0.
-    --cut-frame-right <int>   : Stop processing after this frame. Default: None.
+    --classes, -cls <int> [<int> ...] : Class IDs to extract (e.g., --classes 0 1 2).
+                              Defaults to cfg -> cfg_ultralytics -> classes (default: None).
+    --cut-frame-left, -cfl <int> : Skip the first N frames (default: 0).
+    --cut-frame-right, -cfr <int> : Stop processing after this frame (default: None).
 
 Examples:
   1. Process a video with default settings:

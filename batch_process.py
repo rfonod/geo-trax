@@ -15,47 +15,59 @@ Arguments:
   input_path : Path to the input directory or specific video file.
 
 Batch Processing Options:
-    -y, --yes         : Automatically confirm prompts without waiting for user input.
-    -o, --overwrite   : Overwrite existing files that have already been processed.
-    -dr, --dry-run    : Simulate the command execution without actually running any processes.
-    -vo, --viz-only   : Only visualize the results; skip any processing operations.
-    -go, --geo-only   : Only run georeferencing; skip detection, tracking, and stabilization.
-    -ng, --no-geo     : Do not georeference the tracking data.
-    -fe, --folders-exclude : Folders to exclude from the batch processing.
-    -ep, --exclude-patterns : File name patterns to exclude (e.g., --exclude-patterns car_test drone_2023).
+    -h, --help        : Show this help message and exit.
+    -y, --yes         : Automatically confirm prompts without waiting for user input (default: False).
+    -o, --overwrite   : Overwrite existing files that have already been processed (default: False).
+    -dr, --dry-run    : Simulate the command execution without actually running any processes (default: False).
+    -vo, --viz-only   : Only visualize the results; skip any processing operations (default: False).
+    -go, --geo-only   : Only run georeferencing; skip detection, tracking, and stabilization (default: False).
+    -ng, --no-geo     : Do not georeference the tracking data (default: False).
+    -fe, --folders-exclude <str> [<str> ...] : Folders to exclude from the batch processing (default: ['results']).
+    -ep, --exclude-patterns <str> [<str> ...] : File name patterns to exclude
+                        (e.g., --exclude-patterns car_test drone_2023) (default: None).
 
 Shared Processing, Georeferencing, and Visualization Options:
-    -c, --cfg         : Path to the main geo-trax configuration file.
-    -lf, --log-file   : Filename to save detailed logs. Saved in the 'logs' folder.
-    -v, --verbose     : Set print verbosity level to INFO (default: WARNING).
+    -c, --cfg <path>    : Path to the main geo-trax configuration file (default: cfg/default.yaml).
+    -lf, --log-file <str> : Filename to save detailed logs. Saved in the 'logs' folder (default: None).
+    -v, --verbose       : Set print verbosity level to INFO (default: WARNING).
 
 Detection and Tracking Options:
-    -cls, --classes   : Class IDs to extract (e.g., --classes 0 1 2). Defaults to cfg -> cfg_ultralytics -> classes.
-    -cfl, --cut-frame-left  : Skip the first N frames. Default: 0.
-    -cfr, --cut-frame-right : Stop processing after this frame. Only considered if input is a single video file.
+    -cls, --classes <int> [<int> ...] : Class IDs to extract (e.g., --classes 0 1 2).
+                        Defaults to cfg -> cfg_ultralytics -> classes (default: None).
+    -cfl, --cut-frame-left <int> : Skip the first N frames (default: 0).
+    -cfr, --cut-frame-right <int> : Stop processing after this frame. Only considered if input
+                        is a single video file (default: None).
 
 Georeferencing Options:
-    -of, --ortho-folder : Custom path to the folder with orthophotos (.png, .tif, .txt). Defaults to 'ORTHOPHOTOS' at the same level as 'PROCESSED' in 'input'.
-    -gs, --geo-source   : Source of georeferencing parameters. If not provided, the system will auto-detect.
-    -rf, --ref-frame    : Use custom reference frame number (should be the same as the one used for stabilization).
-    -nm, --no-master    : Disable the master frame approach.
-    -mf, --master-folder : Custom path to the folder containing master frame files (.png). If not provided, '--ortho-folder / master_frames' will be used.
-    -r, --recompute     : Force recompute master-> ortho homography even if it exists.
-    -osf, --segmentation-folder : Custom path to the folder containing orthophoto segmentation files (.csv). If not provided, '--ortho-folder / segmentations' will be used.
+    -of, --ortho-folder <path> : Custom path to the folder with orthophotos (.png, .tif, .txt).
+                        Defaults to 'ORTHOPHOTOS' at the same level as 'PROCESSED' in 'input' (default: None).
+    -gs, --geo-source <choice> : Source of georeferencing parameters. Choices: metadata-tif,
+                        text-file, center-text-file. If not provided, the system will auto-detect (default: None).
+    -rf, --ref-frame <int> : Use custom reference frame number (should be the same as the one
+                        used for stabilization) (default: 0).
+    -nm, --no-master    : Disable the master frame approach (default: False).
+    -mf, --master-folder <path> : Custom path to the folder containing master frame files (.png).
+                        If not provided, '--ortho-folder / master_frames' will be used (default: None).
+    -r, --recompute     : Force recompute master-> ortho homography even if it exists (default: False).
+    -osf, --segmentation-folder <path> : Custom path to the folder containing orthophoto
+                        segmentation files (.csv). If not provided, '--ortho-folder / segmentations'
+                        will be used (default: None).
 
 Visualization Options:
-    -s, --save        : Save the processing results to a video file.
-    -sh, --show       : Visualize results during processing.
-    -vm, --viz-mode   : Set visualization mode for the output video: 0 - original, 1 - stabilized, 2 - reference frame.
-    -pt, --plot-trajectories : Plot trajectories on the reference frame at the beginning of the video.
-    -pd, --plot-delay : Delay in frames for plotting trajectories.
-    -sc, --show-conf  : Show confidence values.
-    -sl, --show-lanes : Show lane numbers.
-    -scn, --show-class-names : Show class names.
-    -hl, --hide-labels : Hide labels entirely.
-    -ht, --hide-tracks : Hide trailing tracking lines.
-    -hs, --hide-speed : Hide speed values.
-    -cf, --class-filter : Exclude specified classes (e.g., -cf 1 2).
+    -s, --save          : Save the processing results to a video file (default: False).
+    -sh, --show         : Visualize results during processing (default: False).
+    -vm, --viz-mode <int> : Set visualization mode for the output video: 0 - original,
+                        1 - stabilized, 2 - reference frame (default: 0).
+    -pt, --plot-trajectories : Plot trajectories on the reference frame at the beginning
+                        of the video (default: False).
+    -pd, --plot-delay <int> : Delay in frames for plotting trajectories (default: 30).
+    -sc, --show-conf    : Show confidence values (default: False).
+    -sl, --show-lanes   : Show lane numbers (default: False).
+    -scn, --show-class-names : Show class names (default: False).
+    -hl, --hide-labels  : Hide labels entirely (default: False).
+    -ht, --hide-tracks  : Hide trailing tracking lines (default: False).
+    -hs, --hide-speed   : Hide speed values (default: False).
+    -cf, --class-filter <int> [<int> ...] : Exclude specified classes (e.g., -cf 1 2) (default: None).
 
 Examples:
   1. Process a directory without saving/showing video visualization:
@@ -76,7 +88,8 @@ Examples:
 Notes:
   - Ensure that all paths provided are accessible and that necessary permissions are set.
   - Check that all required dependencies and modules are properly installed.
-  - Additional configurations can be set in the main configuration file (default: cfg/default.yaml) and linked config files therein.
+  - Additional configurations can be set in the main configuration file (default: cfg/default.yaml)
+    and linked config files therein.
 """
 
 import argparse
@@ -254,7 +267,7 @@ def parse_cli_args() -> argparse.Namespace:
     parser.add_argument("--plot-trajectories", "-pt", action="store_true", help='Plot trajectories on the reference frame')
     parser.add_argument("--plot-delay", "-pd", type=int, default=30, help='Delay in frames for plotting trajectories')
     parser.add_argument("--show-conf", "-sc", action="store_true", help='Show confidence values')
-    parser.add_argument("--show_lanes", "-sl", action="store_true", help='Show lane numbers')
+    parser.add_argument("--show-lanes", "-sl", action="store_true", help='Show lane numbers')
     parser.add_argument("--show-class-names", "-scn", action="store_true", help='Show class names')
     parser.add_argument("--hide-labels", "-hl", action="store_true", help='Hide labels entirely')
     parser.add_argument("--hide-tracks", "-ht", action="store_true", help='Hide trailing tracking lines')
