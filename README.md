@@ -243,7 +243,7 @@ If you use **Geo-trax** in your research, software, or to generate datasets, ple
       title = {Geo-trax: A Comprehensive Framework for Georeferenced Vehicle Trajectory Extraction from Drone Imagery},
       url = {https://github.com/rfonod/geo-trax},
       doi = {10.5281/zenodo.12119542},
-      version = {0.5.0},
+      version = {0.6.0},
       year = {2025}
     }
     ```

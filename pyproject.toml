@@ -1,6 +1,6 @@
 [project]
 name = "geo-trax"
-version = "0.5.0"
+version = "0.6.0"
 description = "A Comprehensive Framework for Georeferenced Vehicle Trajectory Extraction from Drone Imagery"
 authors = [
     { name = "Robert Fonod", email = "robert.fonod@ieee.org" },
