@@ -56,7 +56,13 @@ venv.bak/
 .tmp.driveupload
 .tmp.drivedownload
 
+# Downloaded datasets
+data/sample_videos/
+data/orthophotos/
+data/segmentations/
+data/master_frames/
+
 # Data and project
 projects/
-data/
+data-private/
 
