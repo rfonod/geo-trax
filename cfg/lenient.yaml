@@ -1,4 +1,4 @@
-# This is the default main geo-trax configuration file (default.yaml).
+# This is a custom main geo-trax configuration file (lenient.yaml) aimed at providing lenient detection results.
 #
 # This configuration file sets and links parameters for various stages of the geo-trax pipeline, including:
 #   - Detection

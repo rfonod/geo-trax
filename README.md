@@ -2,9 +2,9 @@
 
 [![GitHub Release](https://img.shields.io/github/v/release/rfonod/geo-trax?include_prereleases)](https://github.com/rfonod/geo-trax/releases) [![Python](https://img.shields.io/badge/python-3.9%2B-blue)](https://www.python.org/) [![License](https://img.shields.io/github/license/rfonod/geo-trax)](https://github.com/rfonod/geo-trax/blob/main/LICENSE) [![Development Status](https://img.shields.io/badge/development-active-brightgreen)](https://github.com/rfonod/geo-trax)
 [![Open Access](https://img.shields.io/badge/Journal-10.1016%2Fj.trc.2025.105205-blue)](https://doi.org/10.1016/j.trc.2025.105205)
-[![arXiv](https://img.shields.io/badge/arXiv-2411.02136-b31b1b.svg)](https://arxiv.org/abs/2411.02136) [![Archived Code](https://img.shields.io/badge/Zenodo-Software%20Archive-blue)](https://zenodo.org/doi/10.5281/zenodo.12119542) [![YouTube](https://img.shields.io/badge/YouTube-Video-red?logo=youtube&logoColor=red)](https://youtu.be/gOGivL9FFLk)
+[![arXiv](https://img.shields.io/badge/arXiv-2411.02136-b31b1b.svg)](https://doi.org/10.1016/j.trc.2025.105205) [![Archived Code](https://img.shields.io/badge/Zenodo-Software%20Archive-blue)](https://zenodo.org/doi/10.5281/zenodo.12119542) [![Project Website](https://img.shields.io/badge/REAL%20Lab-Geo--trax-informational)](https://www.real-lab.ch/geo-trax) [![YouTube](https://img.shields.io/badge/YouTube-Video-red?logo=youtube&logoColor=red)](https://youtu.be/gOGivL9FFLk)
 
-**Geo-trax** (GEO-referenced TRAjectory eXtraction) is a comprehensive pipeline for extracting high-accuracy georeferenced vehicle trajectories from high-altitude drone imagery. Designed specifically for quasi-stationary aerial monitoring in urban traffic scenarios, Geo-trax transforms raw, bird's-eye view video footage into precise, real-world vehicle trajectories. The framework integrates state-of-the-art computer vision and deep learning modules for vehicle detection, tracking, and trajectory stabilization, followed by a georeferencing stage that employs image registration to align the stabilized video frames with an orthophoto. This registration enables the accurate mapping of vehicle trajectories to real-world coordinates. The resulting pipeline supports large-scale traffic studies by delivering spatially and temporally consistent trajectory data suitable for traffic behavior analysis and simulation. Geo-trax is optimized for urban intersections and arterial corridors, where high-fidelity vehicle-level insights are essential for intelligent transportation systems (ITS) and digital twin applications.
+**Geo-trax** (GEO-referenced TRAjectory eXtraction) is a comprehensive pipeline for extracting high-accuracy georeferenced vehicle trajectories from high-altitude drone imagery. Designed specifically for quasi-stationary aerial monitoring in urban traffic scenarios, Geo-trax transforms raw, bird's-eye view (BEV) video footage into precise, real-world vehicle trajectories. The framework integrates state-of-the-art computer vision and deep learning modules for vehicle detection, tracking, and trajectory stabilization, followed by a georeferencing stage that employs image registration to align the stabilized video frames with an orthophoto. This registration enables the accurate mapping of vehicle trajectories to real-world coordinates. The resulting pipeline supports large-scale traffic studies by delivering spatially and temporally consistent trajectory data suitable for traffic behavior analysis and simulation. Geo-trax is optimized for urban intersections and arterial corridors, where high-fidelity vehicle-level insights are essential for intelligent transportation systems and digital twin applications.
 
 ![Geo-trax Visualization GIF](https://raw.githubusercontent.com/rfonod/geo-trax/main/assets/geo-trax_visualization.gif?raw=True)
 
@@ -18,9 +18,9 @@
 
 ## Features
 
-1. **Vehicle Detection**: Utilizes a pre-trained YOLOv8 model to detect vehicles (cars, buses, trucks, and motorcycles) in the video frames.
+1. **Vehicle Detection**: Utilizes a pre-trained YOLO model to detect vehicles (cars, buses, trucks, and motorcycles) in the video frames.
 2. **Vehicle Tracking**: Implements a selected tracking algorithm to follow detected vehicles, ensuring robust trajectory data and continuity across frames.
-3. **Trajectory Stabilization**: Corrects for unintentional drone movement by aligning trajectories to a reference frame, using bounding boxes of detected vehicles to enhance stability. Leverages the [stabilo](https://github.com/rfonod/stabilo) 🌀 library, fine-tuned by [stabilo-optimize](https://github.com/rfonod/stabilo-optimize) 🎯, to achieve reliable, consistent stabilization.
+3. **Trajectory Stabilization**: Corrects for unintentional drone movement by aligning trajectories to a reference frame, using bounding boxes of detected vehicles to enhance stability. Leverages the [Stabilo](https://github.com/rfonod/stabilo) 🌀 library, fine-tuned by [Stabilo-Optimize](https://github.com/rfonod/stabilo-optimize) 🎯, to achieve reliable, consistent stabilization.
 4. **Georeferencing**: Maps stabilized trajectories to real-world coordinates using an orthophoto and image registration technique.
 5. **Dataset Creation**: Compiles trajectory and related metadata (e.g., velocity, acceleration, dimension estimates) into a structured dataset.
 6. **Visualization Tools**: Visualizes extracted trajectories, overlays paths on video frames, and generates plots for traffic data analysis.
@@ -56,6 +56,19 @@
 
 </details>
 
+<details>
+<summary><b>🔗 Related Projects</b></summary>
+
+Geo-trax integrates with and complements several specialized tools:
+
+- **[Stabilo](https://github.com/rfonod/stabilo) 🌀** — Python library for video and trajectory stabilization using robust homography transformations. Supports various feature detectors, RANSAC algorithms, and user-defined masks. Used as Geo-trax's core stabilization engine.
+
+- **[Stabilo-Optimize](https://github.com/rfonod/stabilo-optimize) 🎯** — Benchmarking and hyperparameter optimization framework for Stabilo. Evaluates stabilization performance through ground truth-free assessment using random perturbations. Used to fine-tune Geo-trax stabilization parameters.
+
+- **[HBB2OBB](https://github.com/rfonod/hbb2obb) 📦** — Converts horizontal bounding boxes to oriented bounding boxes using SAM segmentation models. Can enhance Geo-trax outputs when object orientation is needed for downstream analysis.
+
+</details>
+
 ## Field Deployment
 
 Geo-trax was validated in a large-scale urban traffic monitoring experiment conducted in Songdo, South Korea. In this study, Geo-trax was used to process aerial video data captured by a fleet of 10 drones, resulting in the creation of the [**Songdo Traffic**](https://doi.org/10.5281/zenodo.13828383) dataset. The underlying vehicle detection model in Geo-trax was trained using the [**Songdo Vision**](https://doi.org/10.5281/zenodo.13828407) dataset. Both datasets are described in detail in the associated publication, see the [citation](#citation) section below.
@@ -64,7 +77,14 @@ Geo-trax was validated in a large-scale urban traffic monitoring experiment cond
 
 ## Installation
 
-1. **Create and activate a Python virtual environment** (Python >= 3.9 and <= 3.12), e.g., using [Miniconda3](https://www.anaconda.com/docs/getting-started/miniconda/install):
+1. **Clone or fork the repository**:
+
+    ```bash
+    git clone https://github.com/rfonod/geo-trax.git
+    cd geo-trax
+    ```
+
+2. **Create and activate a Python virtual environment** (Python >= 3.9 and <= 3.12), e.g., using [Miniconda3](https://www.anaconda.com/docs/getting-started/miniconda/install):
 
     ```bash
     conda create -n geo-trax python=3.11 -y
@@ -78,13 +98,6 @@ Geo-trax was validated in a large-scale urban traffic monitoring experiment cond
     source .venv/bin/activate  # On Windows, use `.venv\Scripts\activate`
     ```
 
-2. **Clone or fork the repository**:
-
-    ```bash
-    git clone https://github.com/rfonod/geo-trax.git
-    cd geo-trax
-    ```
-
 3. **Install dependencies** from `pyproject.toml`:
 
     ```bash
@@ -95,21 +108,23 @@ Geo-trax was validated in a large-scale urban traffic monitoring experiment cond
 
 4. **[Optional] Install development dependencies** (for development, testing, or other non-core auxiliary scripts):
 
-    - In `bash`:
+    ```bash
+    pip install -e .[dev]
+    ```
 
-      ```bash
-      pip install -e .[dev]
-      ```
-
-    - In `zsh` (quotes required to prevent shell expansion of `[]`):
-
-      ```zsh
-      pip install -e '.[dev]'
-      ```
+    > **Note:** In `zsh`, use quotes to prevent shell expansion: `pip install -e '.[dev]'`
 
 ## Batch Processing Example
 
 The `batch_process.py` script can process multiple videos in a directory, including subdirectories, or a single video file.
+
+To view the help message and available options, run:
+
+```bash
+python batch_process.py -h
+```
+
+Below are some example commands to demonstrate its usage.
 
 #### Example 1: Process all files in a directory without georeferencing
 
@@ -135,19 +150,14 @@ python batch_process.py video.mp4 --save
 python batch_process.py video.mp4 --viz-only --save
 ```
 
-#### Example 5: Overwrite existing files with no confirmation prompt
+#### Example 5: Generate plots only for all videos in a directory
 
 ```bash
-python batch_process.py path/to/videos/ -o -y
+python batch_process.py path/to/videos/ --plot-only --plot
 ```
 
 > [!TIP]
-> For more details and usage instructions, run:
->
-> ```bash
-> python batch_process.py -h
-> ```
-
+> See [data/README.md](data/README.md) for sample data and testing examples.
 
 <details>
 <summary><b>📁 Output File Formats</b></summary>
@@ -249,7 +259,7 @@ If you use **Geo-trax** in your research, software, or to generate datasets, ple
       title = {Geo-trax: A Comprehensive Framework for Georeferenced Vehicle Trajectory Extraction from Drone Imagery},
       url = {https://github.com/rfonod/geo-trax},
       doi = {10.5281/zenodo.12119542},
-      version = {0.6.0},
+      version = {0.7.0},
       year = {2025}
     }
     ```

@@ -1,4 +1,4 @@
-# This is the default main geo-trax configuration file (default.yaml).
+# This is a custom main geo-trax configuration file with the default tracker changed to ByteTrack (default_with_bytetrack.yaml).
 #
 # This configuration file sets and links parameters for various stages of the geo-trax pipeline, including:
 #   - Detection

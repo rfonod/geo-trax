@@ -113,7 +113,7 @@ def load_config_all(args: argparse.Namespace, logger: logging.Logger) -> dict:
     kwargs_main['class_names'] = load_class_names(class_names_filepath, logger)
     kwargs_main['args'] = args
 
-    keys_to_update = ['classes']
+    keys_to_update = ['classes', 'show']
     for arg, value in vars(args).items():
         if value is not None and arg in keys_to_update:
             kwargs_ultralytics[arg] = value

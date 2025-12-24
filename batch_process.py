@@ -22,6 +22,8 @@ Batch Processing Options:
     -vo, --viz-only   : Only visualize the results; skip any processing operations (default: False).
     -go, --geo-only   : Only run georeferencing; skip detection, tracking, and stabilization (default: False).
     -ng, --no-geo     : Do not georeference the tracking data (default: False).
+    -pl, --plot       : Generate and save trajectory plots and distribution charts (default: False).
+    -po, --plot-only  : Only generate plots; skip processing, georeferencing, and visualization (default: False).
     -fe, --folders-exclude <str> [<str> ...] : Folders to exclude from the batch processing (default: ['results']).
     -ep, --exclude-patterns <str> [<str> ...] : File name patterns to exclude
                         (e.g., --exclude-patterns car_test drone_2023) (default: None).
@@ -66,7 +68,12 @@ Visualization Options:
     -hl, --hide-labels  : Hide labels entirely (default: False).
     -ht, --hide-tracks  : Hide trailing tracking lines (default: False).
     -hs, --hide-speed   : Hide speed values (if available) (default: False).
+    -su, --speed-unit <choice> : Speed unit for visualization: km/h or mi/h (default: km/h).
     -cf, --class-filter <int> [<int> ...] : Exclude specified classes (e.g., -cf 1 2) (default: None).
+
+Plotting Options:
+    -pa, --plot-aggregate : Aggregate data per location ID (intersection) when plotting (default: False).
+    -pp, --plot-points  : Plot trajectory points instead of lines (default: False).
 
 Examples:
   1. Process a directory without saving/showing video visualization:
@@ -84,6 +91,9 @@ Examples:
   5. Overwrite existing files with no confirmation needed:
      python batch_process.py path/to/videos/ -o -y
 
+  6. Generate and save trajectory plots after processing:
+     python batch_process.py path/to/videos/ --plot
+
 Notes:
   - Ensure that all paths provided are accessible and that necessary permissions are set.
   - Check that all required dependencies and modules are properly installed.
@@ -99,6 +109,7 @@ from tqdm import tqdm
 
 from detect_track_stabilize import detect_track_stabilize
 from georeference import georeference
+from plot import generate_plots
 from utils.utils import bcolors, check_if_results_exist, determine_suffix_and_fourcc, setup_logger
 from visualize import visualize_results
 
@@ -131,6 +142,33 @@ def process_input(args: argparse.Namespace, logger: logging.Logger) -> None:
                 pbar.update(1)
     except KeyboardInterrupt:
         logger.error("Batch processing interrupted by user.")
+        return
+
+    if (args.plot or args.plot_only) and input_path.is_dir():
+        run_plotting(input_path, args, logger)
+
+
+def run_plotting(path: Path, args: argparse.Namespace, logger: logging.Logger) -> None:
+    """
+    Run the plotting function for the given path.
+    """
+    logger.info(f"Generating plots for: '{path}'")
+    if not args.dry_run:
+        plot_args = argparse.Namespace(
+            input=path,
+            save=True,
+            no_show=True,
+            cfg=args.cfg,
+            log_file=args.log_file,
+            verbose=args.verbose,
+            aggregate=args.plot_aggregate,
+            ortho_folder=args.ortho_folder,
+            segmentations=False,
+            id=0,
+            points=args.plot_points,
+            class_filter=args.class_filter if args.class_filter else [],
+        )
+        generate_plots(plot_args, logger)
 
 
 def process_file(file: Path, args: argparse.Namespace, logger: logging.Logger) -> None:
@@ -139,14 +177,17 @@ def process_file(file: Path, args: argparse.Namespace, logger: logging.Logger) -
     """
     try:
         logger.info(f"Processing: '{file}'")
-        if not args.viz_only and not args.geo_only:
+        if not args.viz_only and not args.geo_only and not args.plot_only:
             process_step(file, args, logger, "Detecting, tracking, and stabilizing", detect_track_stabilize)
 
-        if not args.viz_only and not args.no_geo:
+        if not args.viz_only and not args.no_geo and not args.plot_only:
             process_step(file, args, logger, "Georeferencing", georeference)
 
-        if args.save or args.show:
+        if (args.save or args.show) and not args.plot_only:
             process_step(file, args, logger, "Visualizing", visualize_results)
+
+        if (args.plot or args.plot_only) and not args.input.is_dir():
+            run_plotting(file, args, logger)
 
     except Exception as e:
         logger.error(f"Error with {file}: {e}")
@@ -236,6 +277,8 @@ def parse_cli_args() -> argparse.Namespace:
     parser.add_argument('--viz-only', '-vo', action='store_true', help='Only visualize the results; skip any processing operations')
     parser.add_argument('--geo-only', '-go', action='store_true', help='Only run georeferencing; skip detection, tracking, and stabilization')
     parser.add_argument('--no-geo', '-ng', action='store_true', help='Do not georeference the tracking data')
+    parser.add_argument('--plot', '-pl', action='store_true', help='Generate and save trajectory plots and distribution charts')
+    parser.add_argument('--plot-only', '-po', action='store_true', help='Only generate plots; skip processing, georeferencing, and visualization')
     parser.add_argument("--folders-exclude", "-fe", type=str, nargs='+', default=['results'], help="Folders to exclude from the batch processing")
     parser.add_argument("--exclude-patterns", "-ep", type=str, nargs='+', default=None, help="File name patterns to exclude (e.g., --exclude-patterns car_test drone_2023)")
 
@@ -271,7 +314,12 @@ def parse_cli_args() -> argparse.Namespace:
     parser.add_argument("--hide-labels", "-hl", action="store_true", help='Hide labels entirely')
     parser.add_argument("--hide-tracks", "-ht", action="store_true", help='Hide trailing tracking lines')
     parser.add_argument("--hide-speed", "-hs", action="store_true", help='Hide speed values (if available)')
+    parser.add_argument('--speed-unit', '-su', type=str, default='km/h', choices=['km/h', 'mi/h'], help='Speed unit for visualization: km/h or mi/h (default: km/h)')
     parser.add_argument('--class-filter', '-cf', type=int, nargs='+', help='Exclude specified classes (e.g., -cf 1 2)')
+
+    # Plotting options
+    parser.add_argument('--plot-aggregate', '-pa', action='store_true', help='Aggregate data per location ID (intersection) when plotting')
+    parser.add_argument('--plot-points', '-pp', action='store_true', help='Plot trajectory points instead of lines')
 
     return parser.parse_args()
 

@@ -38,6 +38,7 @@ Additional Visualization Options:
   --hide-labels, -hl  : Hide labels entirely (default: False).
   --hide-tracks, -ht  : Hide trailing tracking lines (default: False).
   --hide-speed, -hs   : Hide speed values (if available) (default: False).
+  --speed-unit, -su <choice> : Speed unit for visualization: km/h or mi/h (default: km/h).
   --class-filter, -cf <int> [<int> ...] : Exclude specified classes (e.g., -cf 1 2) (default: None).
   --cut-frame-left, -cfl <int> : Skip the first N frames (default: 0).
   --cut-frame-right, -cfr <int> : Stop processing after this frame (default: None).
@@ -363,7 +364,14 @@ def annotate_frame(frame: np.ndarray, frame_num: int, tracks_frame: pd.DataFrame
             if not vehicle_data.empty:
                 speed = vehicle_data['Vehicle_Speed'].values[0]
                 lane = vehicle_data['Lane_Number'].values[0]
-                speed = int(speed) if not np.isnan(speed) else None
+                # Convert speed for visualization if mi/h is selected (data is stored in km/h)
+                if not np.isnan(speed):
+                    if args.speed_unit == 'mi/h':
+                        speed = int(speed * 0.621371)  # Convert km/h to mi/h
+                    else:
+                        speed = int(speed)
+                else:
+                    speed = None
                 lane = int(lane) if not np.isnan(lane) else None
 
         color = colors(c, True)
@@ -378,7 +386,7 @@ def annotate_frame(frame: np.ndarray, frame_num: int, tracks_frame: pd.DataFrame
             if args.show_class_names:
                 label_parts.append(class_names[c])
             if not args.hide_speed and speed is not None:
-                label_parts.append(f'{speed} km/h')
+                label_parts.append(f'{speed} {args.speed_unit}')
             if args.show_lanes and lane is not None:
                 label_parts.append(f'L{lane}')
             if args.show_conf and s != '':
@@ -475,6 +483,7 @@ def parse_cli_args() -> argparse.Namespace:
     parser.add_argument('--hide-labels', '-hl', action='store_true', help='Hide labels entirely')
     parser.add_argument('--hide-tracks', '-ht', action='store_true', help='Hide trailing tracking lines')
     parser.add_argument('--hide-speed', '-hs', action='store_true', help='Hide speed values (if available)')
+    parser.add_argument('--speed-unit', '-su', type=str, default='km/h', choices=['km/h', 'mi/h'], help='Speed unit for visualization: km/h or mi/h (default: km/h)')
     parser.add_argument('--class-filter', '-cf', type=int, nargs='+', help='Exclude specified classes (e.g., -cf 1 2)')
     parser.add_argument('--cut-frame-left', '-cfl', type=int, default=0, help='Skip the first N frames. Default: 0.')
     parser.add_argument('--cut-frame-right', '-cfr', type=int, default=None, help='Stop processing after this frame. Default: None.')
