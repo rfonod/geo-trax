@@ -21,20 +21,31 @@ Options:
                                     '<source>/../pre-labels'.
     -c, --cfg <path>              : Path to the ultralytics configuration file
                                     (default: cfg/ultralytics/annotator/default.yaml).
-    -s, --save                    : Save images with blacked-out vehicle regions for visualization.
-    -m, --margin <float>          : Margin factor to enlarge bounding boxes for visualization only
+    -v, --save-viz                : Save images with colored bounding boxes overlaid.
+    -m, --save-masked             : Save images with blacked-out vehicle regions.
+    --margin <float>              : Margin factor to enlarge bounding boxes for masked images only
                                     (default: 0.0).
+    --hide-conf                   : Hide confidence scores on visualizations.
+    --hide-labels                 : Hide class labels on visualizations.
+    --line-width <int>            : Line thickness for bounding boxes in visualizations (default: None, auto-scaled).
 
 Examples:
   1. Generate annotations for images in a directory:
      python tools/annotate_frames.py path/to/images/
 
-  2. Generate annotations and save visualization images with enlarged bounding boxes:
-     python tools/annotate_frames.py path/to/images/ --save --margin 0.2
+  2. Generate annotations and save visualization images with colored bounding boxes:
+     python tools/annotate_frames.py path/to/images/ --save-viz
+
+  3. Generate annotations with visualizations without confidence scores and thicker lines:
+     python tools/annotate_frames.py path/to/images/ --save-viz --hide-conf --line-width 3
+
+  4. Generate annotations and save masked images with enlarged regions:
+     python tools/annotate_frames.py path/to/images/ --save-masked --margin 0.2
 
 Notes:
   - Generates YOLO-format .txt files with: class_id x_center y_center width height (normalized to [0,1])
-  - The margin parameter only affects visualization, not the annotation coordinates
+  - The margin parameter only affects masked images, not the annotation coordinates or visualizations
+  - Visualizations use ultralytics color scheme with different colors for different object classes
 """
 
 import argparse
@@ -69,7 +80,14 @@ def run_annotator(args, logger=None) -> None:
     output_dir = args.annotations if args.annotations else args.source.parent / "pre-labels"
     Path(output_dir).mkdir(exist_ok=True, parents=True)
 
-    # det_results = det_model(data, stream=True, device=device)
+    # Create subdirectories for visualizations and masked images if needed
+    if args.save_viz:
+        viz_dir = Path(output_dir) / "visualizations"
+        viz_dir.mkdir(exist_ok=True, parents=True)
+    if args.save_masked:
+        masked_dir = Path(output_dir) / "masked"
+        masked_dir.mkdir(exist_ok=True, parents=True)
+
     det_results = model(args.source, **config, stream=True)
 
     logger.info(f"{LOGGER_PREFIX} Annotating images in '{args.source}'...")
@@ -78,11 +96,24 @@ def run_annotator(args, logger=None) -> None:
         if len(class_ids):
             boxes = result.boxes.xywhn
 
+            # Save YOLO-format annotations
             with open(f"{Path(output_dir) / Path(result.path).stem}.txt", "w") as f:
                 for box, class_id in zip(boxes, class_ids):
                     f.write(f"{class_id} {box[0]} {box[1]} {box[2]} {box[3]}\n")
 
-            if args.save:
+            # Save visualization with colored bounding boxes
+            if args.save_viz:
+                plot_args = {
+                    'conf': args.show_conf,
+                    'labels': args.show_labels,
+                }
+                if args.line_width is not None:
+                    plot_args['line_width'] = args.line_width
+                annotated_img = result.plot(**plot_args)
+                cv2.imwrite(str(viz_dir / Path(result.path).name), annotated_img)
+
+            # Save masked images with blacked-out regions
+            if args.save_masked:
                 boxes = result.boxes.xywh
                 img = cv2.imread(result.path)
                 for box in boxes:
@@ -92,9 +123,13 @@ def run_annotator(args, logger=None) -> None:
                     x = int(xc - w / 2)
                     y = int(yc - h / 2)
                     cv2.rectangle(img, (x, y), (x + w, y + h), (0, 0, 0), -1)
-                cv2.imwrite(f"{Path(output_dir) / Path(result.path).name}", img)
+                cv2.imwrite(str(masked_dir / Path(result.path).name), img)
 
-    print(f"Annotations saved to '{output_dir}'.")
+    logger.info(f"{LOGGER_PREFIX} Annotations saved to '{output_dir}'.")
+    if args.save_viz:
+        logger.info(f"{LOGGER_PREFIX} Visualizations saved to '{viz_dir}'.")
+    if args.save_masked:
+        logger.info(f"{LOGGER_PREFIX} Masked images saved to '{masked_dir}'.")
 
 
 def load_detector(config: Dict, logger: logging.Logger) -> YOLO:
@@ -117,8 +152,15 @@ def get_cli_arguments():
     parser.add_argument('source', type=Path, help='Path to the images to be annotated')
     parser.add_argument('--annotations', '-a', type=Path, help='Path to save the annotations (default: <source>/../pre-labels)')
     parser.add_argument('--cfg', '-c', type=Path, default='cfg/ultralytics/annotator/default.yaml', help='Path to the ultralytics configuration file')
-    parser.add_argument('--save', '-s', action='store_true', help='Save the annotated images')
-    parser.add_argument('--margin', '-m', type=float, default=0.0, help='Margin factor to enlarge the bounding boxes (for plotting only)')
+    parser.add_argument('--save-viz', '-v', action='store_true', help='Save visualizations with colored bounding boxes')
+    parser.add_argument('--save-masked', '-m', action='store_true', help='Save images with blacked-out vehicle regions')
+    parser.add_argument('--margin', type=float, default=0.0, help='Margin factor to enlarge the bounding boxes (for masked images only)')
+
+    # Visualization options
+    parser.add_argument('--hide-conf', '-hc', dest='show_conf', action='store_false', default=True, help='Hide confidence scores on visualizations')
+    parser.add_argument('--hide-labels', '-hl', dest='show_labels', action='store_false', default=True, help='Hide class labels on visualizations')
+    parser.add_argument('--line-width', '-lw', type=int, default=None, help='Line thickness for bounding boxes in visualizations (default: auto-scaled)')
+
     return parser.parse_args()
 
 
