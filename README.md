@@ -114,6 +114,10 @@ Geo-trax was validated in a large-scale urban traffic monitoring experiment cond
 
     > **Note:** In `zsh`, use quotes to prevent shell expansion: `pip install -e '.[dev]'`
 
+## Model Training
+
+The `train/` directory contains scripts for training and exporting custom YOLOv8 detection models using the [Ultralytics](https://github.com/ultralytics/ultralytics) framework, along with a SLURM wrapper for HPC clusters. See [train/README.md](train/README.md) for full usage instructions.
+
 ## Batch Processing Example
 
 The `batch_process.py` script can process multiple videos in a directory, including subdirectories, or a single video file.
