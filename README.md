@@ -1,8 +1,8 @@
 # Geo-trax
 
-[![GitHub Release](https://img.shields.io/github/v/release/rfonod/geo-trax?include_prereleases)](https://github.com/rfonod/geo-trax/releases) [![Python](https://img.shields.io/badge/python-3.9%2B-blue)](https://www.python.org/) [![License](https://img.shields.io/github/license/rfonod/geo-trax)](https://github.com/rfonod/geo-trax/blob/main/LICENSE) [![Development Status](https://img.shields.io/badge/development-active-brightgreen)](https://github.com/rfonod/geo-trax)
+[![GitHub Release](https://img.shields.io/github/v/release/rfonod/geo-trax?include_prereleases)](https://github.com/rfonod/geo-trax/releases) [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/) [![License](https://img.shields.io/github/license/rfonod/geo-trax)](https://github.com/rfonod/geo-trax/blob/main/LICENSE) [![Development Status](https://img.shields.io/badge/development-active-brightgreen)](https://github.com/rfonod/geo-trax)
 [![Open Access](https://img.shields.io/badge/Journal-10.1016%2Fj.trc.2025.105205-blue)](https://doi.org/10.1016/j.trc.2025.105205)
-[![arXiv](https://img.shields.io/badge/arXiv-2411.02136-b31b1b.svg)](https://doi.org/10.1016/j.trc.2025.105205) [![Archived Code](https://img.shields.io/badge/Zenodo-Software%20Archive-blue)](https://zenodo.org/doi/10.5281/zenodo.12119542) [![Project Website](https://img.shields.io/badge/REAL%20Lab-Geo--trax-informational)](https://www.real-lab.ch/geo-trax) [![YouTube](https://img.shields.io/badge/YouTube-Video-red?logo=youtube&logoColor=red)](https://youtu.be/gOGivL9FFLk)
+[![arXiv](https://img.shields.io/badge/arXiv-2411.02136-b31b1b.svg)](https://arxiv.org/abs/2411.02136) [![Archived Code](https://img.shields.io/badge/Zenodo-Software%20Archive-blue)](https://zenodo.org/doi/10.5281/zenodo.12119542) [![Project Website](https://img.shields.io/badge/REAL%20Lab-Geo--trax-informational)](https://www.real-lab.ch/geo-trax) [![YouTube](https://img.shields.io/badge/YouTube-Video-red?logo=youtube&logoColor=red)](https://youtu.be/gOGivL9FFLk)
 
 **Geo-trax** (GEO-referenced TRAjectory eXtraction) is a comprehensive pipeline for extracting high-accuracy georeferenced vehicle trajectories from high-altitude drone imagery. Designed specifically for quasi-stationary aerial monitoring in urban traffic scenarios, Geo-trax transforms raw, bird's-eye view (BEV) video footage into precise, real-world vehicle trajectories. The framework integrates state-of-the-art computer vision and deep learning modules for vehicle detection, tracking, and trajectory stabilization, followed by a georeferencing stage that employs image registration to align the stabilized video frames with an orthophoto. This registration enables the accurate mapping of vehicle trajectories to real-world coordinates. The resulting pipeline supports large-scale traffic studies by delivering spatially and temporally consistent trajectory data suitable for traffic behavior analysis and simulation. Geo-trax is optimized for urban intersections and arterial corridors, where high-fidelity vehicle-level insights are essential for intelligent transportation systems and digital twin applications.
 
@@ -27,32 +27,29 @@
 7. **Auxiliary Tools**: Data wrangling, analysis, and model training scripts/tools provided to support dataset preparation, advanced analytics, and custom model development.
 8. **Customization and Configuration**: Flexible configuration options to adjust pipeline settings, including detection/tracking parameters, stabilization methods, and visualization modes.
 
-> **Note:** This is a preliminary version of the pipeline. Some functionalities, especially auxiliary tools for data wrangling, analysis, and model training, are under development (👷🏼) and will be included in future releases.
-
 <details>
 <summary><b>🚀 Planned Enhancements</b></summary>
 
 ### Release Plan
 
 - **Version =1.0.0**
-  - Tools for comparing extracted trajectories with on-board sensor data.
-  - Release all auxiliary tools for data wrangling, analysis, and (re-)training the detection model.
-  - Basic documentation and examples covering all core functionalities.
-  - Sample data for testing and demonstration purposes.
+  - Release all data wrangling and analysis tools.
+  - Add documentation and examples covering all core functionalities.
+  - Host the object detection model file on Hugging Face.
 
-- **Version >1.0.0**
-  - Pre-processing tools for raw video input.
-  - Expanded documentation, tutorials (docs folder), and sample examples.
-  - List of known limitations, e.g., ffmpeg backend version discrepancies in OpenCV.
-  - Comprehensive unit tests for critical functions and end-to-end tests for the entire pipeline.
-  - Publishing on PyPI for simplified installation and distribution.
-
-- **Version 2.0.0**
-  - Upgrades to the latest ultralytics (>8.2) and numpy (>2.0) versions.
-  - Support for additional tracking algorithms and broader vehicle type recognition.
-  - Transition to a modular package layout for enhanced maintainability.
-  - Implementation of batch inference and multi-thread processing to improve scalability.
-  - Automated testing workflows with GitHub Actions.
+- **Future Versions**
+  - Support for custom, user-provided models for detection.
+  - Modularization of the pipeline: detection, tracking, and stabilization as separate steps with support for custom reference frames.
+  - Rationalized configuration using a single `.yaml` file with nested dictionaries.
+  - Support for per-class confidence thresholds and oriented bounding box visualization (with azimuth and dimension estimates).
+  - Refactored utilities into focused modules (e.g., `file_utils`, `config_utils`, `data_utils`).
+  - Unit tests for all main functions and automated testing via GitHub Actions.
+  - Expanded documentation and separate README for analysis tools.
+  - Installable package via PyPI (`pip install geo-trax`) with a modular package layout.
+  - Upgrade to latest `ultralytics` (>8.2) and `numpy` (>2.0) releases.
+  - Batch inference and multi-thread processing for improved scalability.
+  - GPU-accelerated image registration and track interpolation in image coordinates.
+  - Integration with real-world map visualization tools (e.g., MovingPandas, contextily).
 
 </details>
 
@@ -73,7 +70,7 @@ Geo-trax integrates with and complements several specialized tools:
 
 Geo-trax was validated in a large-scale urban traffic monitoring experiment conducted in Songdo, South Korea. In this study, Geo-trax was used to process aerial video data captured by a fleet of 10 drones, resulting in the creation of the [**Songdo Traffic**](https://doi.org/10.5281/zenodo.13828383) dataset. The underlying vehicle detection model in Geo-trax was trained using the [**Songdo Vision**](https://doi.org/10.5281/zenodo.13828407) dataset. Both datasets are described in detail in the associated publication, see the [citation](#citation) section below.
 
-🎥 *Demo video of Geo-trax applied to the Songdo field experiment:*  https://youtu.be/gOGivL9FFLk
+🎥 *Demo video of Geo-trax applied to the Songdo field experiment:* [https://youtu.be/gOGivL9FFLk](https://youtu.be/gOGivL9FFLk)
 
 ## Installation
 
@@ -84,7 +81,7 @@ Geo-trax was validated in a large-scale urban traffic monitoring experiment cond
     cd geo-trax
     ```
 
-2. **Create and activate a Python virtual environment** (Python >= 3.9 and <= 3.12), e.g., using [Miniconda3](https://www.anaconda.com/docs/getting-started/miniconda/install):
+2. **Create and activate a Python virtual environment** (Python >= 3.10 and <= 3.12), e.g., using [Miniconda3](https://www.anaconda.com/docs/getting-started/miniconda/install):
 
     ```bash
     conda create -n geo-trax python=3.11 -y
@@ -109,10 +106,8 @@ Geo-trax was validated in a large-scale urban traffic monitoring experiment cond
 4. **[Optional] Install development dependencies** (for development, testing, or other non-core auxiliary scripts):
 
     ```bash
-    pip install -e .[dev]
+    pip install -e '.[dev]'
     ```
-
-    > **Note:** In `zsh`, use quotes to prevent shell expansion: `pip install -e '.[dev]'`
 
 ## Model Training
 
@@ -213,7 +208,7 @@ Suppose the input video is named `video.mp4`. The output files will be saved in 
   - `Vehicle_ID`: Unique vehicle identifier.
   - `Timestamp`: Timestamp of the frame (YYYY-MM-DD HH:MM:SS.ms).
   - `Ortho_X`, `Ortho_Y`: X and Y coordinates of the vehicle centroid in the orthophoto's pixel coordinate system.
-  - `Local_X`, `Local_Y`: X and Y coordinates of the vehicle centroid in a local projected coordinate system (e.g., EPSG:32633 for UTM zone 33N).
+  - `Local_X`, `Local_Y`: X and Y coordinates of the vehicle centroid in a local projected coordinate system (e.g., EPSG:5186 for KGD2002 / Central Belt 2010 used in the Songdo experiment).
   - `Latitude`, `Longitude`: Geographic coordinates of the vehicle centroid (WGS84).
   - `Vehicle_Length`, `Vehicle_Width`: Estimated vehicle dimensions in meters.
   - `Vehicle_Class`: Vehicle class identifier (0: car (incl. vans), 1: bus, 2: truck, 3: motorcycle).
@@ -256,15 +251,15 @@ If you use **Geo-trax** in your research, software, or to generate datasets, ple
 2. **Repository Citation:** If you reference, modify, or build upon the Geo-trax software itself, please also cite the corresponding Zenodo release:
 
     ```bibtex
-    @software{fonod2025geo-trax,
+    @software{fonod2026geo-trax,
       author = {Fonod, Robert},
       license = {MIT},
       month = may,
       title = {Geo-trax: A Comprehensive Framework for Georeferenced Vehicle Trajectory Extraction from Drone Imagery},
       url = {https://github.com/rfonod/geo-trax},
       doi = {10.5281/zenodo.12119542},
-      version = {0.7.0},
-      year = {2025}
+      version = {0.8.0},
+      year = {2026}
     }
     ```
 

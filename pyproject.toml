@@ -1,25 +1,28 @@
+[build-system]
+requires = ["setuptools>=77.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "geo-trax"
-version = "0.7.0"
+version = "0.8.0"
 description = "A Comprehensive Framework for Georeferenced Vehicle Trajectory Extraction from Drone Imagery"
 authors = [
     { name = "Robert Fonod", email = "robert.fonod@ieee.org" },
 ]
 readme = "README.md"
-license = { file = "LICENSE" }
-requires-python = ">=3.9"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.10"
 keywords = ["trajectory-extraction", "trajectory-analysis", "object-detection", "object-tracking", "object-stabilization", "georeferencing", "computer-vision", "deep-learning"]
 classifiers = [
     "Development Status :: 3 - Alpha",
-    "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
-    "Programming Language :: Python :: 3",        
-    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Intended Audience :: Developers",
-    "Intended Audience :: Science/Research",    
+    "Intended Audience :: Science/Research",
     "Topic :: Scientific/Engineering",
     "Topic :: Software Development",
     "Topic :: Multimedia :: Video",
@@ -27,10 +30,10 @@ classifiers = [
 dependencies = [
     "ultralytics==8.0.209",
     "lapx>=0.5.2",
-    "stabilo>=1.0.1",
+    "stabilo>=1.2.0",
     "geopandas>=1.0.0",
     "numpy>=1.26.4,<2.0",
-    "torch>=1.10.0,<2.6"
+    "torch>=1.10.0,<2.6",
 ]
 
 [project.optional-dependencies]
@@ -44,7 +47,7 @@ dev = [
     "thop>=0.1.1",
     "pycocotools>=2.0.6",
     "pyproj>=3.6.1",
-    "pysrt>=1.1.2"
+    "pysrt>=1.1.2",
 ]
 
 [project.urls]
@@ -52,6 +55,9 @@ Homepage = "https://github.com/rfonod/geo-trax/"
 Repository = "https://github.com/rfonod/geo-trax/"
 Changelog = "https://github.com/rfonod/geo-trax/releases"
 Issues = "https://github.com/rfonod/geo-trax/issues/"
+
+[tool.setuptools]
+packages = { find = { where = ["."], include = ["utils", "utils.*"] } }
 
 [tool.ruff]
 line-length = 120
@@ -69,6 +75,3 @@ addopts = "-ra"
 testpaths = [
     "tests",
 ]
-
-[tool.setuptools]
-packages = ["utils"]
