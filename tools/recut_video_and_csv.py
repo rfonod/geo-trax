@@ -76,6 +76,8 @@ Notes:
 import argparse
 import os
 import platform
+import shlex
+import subprocess
 from pathlib import Path
 from typing import Dict, Tuple
 
@@ -102,40 +104,46 @@ def cut_and_save_video(filepaths: Dict[str, Path], cuts: Tuple[int, int, int], d
     fps = cap.get(cv2.CAP_PROP_FPS)
     cap.release()
 
+    # Quote paths for safe shell execution
+    input_video_q = shlex.quote(input_video)
+    output_video_q = shlex.quote(output_video)
+
     # Choose cutting mode
     if exact_cut:
         # Exact frame cutting with re-encoding
-        cmd = f'ffmpeg -y -i {input_video} -ss {cut_start/fps} -to {cut_end/fps}'
+        cmd = f'ffmpeg -y -i {input_video_q} -ss {cut_start/fps} -to {cut_end/fps}'
         if bitrate:
             cmd += f' -b:v {bitrate}'
-        cmd += f' -async 1 -strict -2 {output_video}'
+        cmd += f' -async 1 -strict -2 {output_video_q}'
     else:
         # Fast keyframe-aligned cutting without re-encoding
-        cmd = f'ffmpeg -y -i {input_video}'
+        cmd = f'ffmpeg -y -i {input_video_q}'
         if cut_start > 0:
             cmd += f' -ss {cut_start / fps}'
         if cut_end != -1:
             cmd += f' -to {cut_end / fps}'
-        cmd += f' -c copy {output_video}'
+        cmd += f' -c copy {output_video_q}'
 
     if not debug:
         cmd += ' -v quiet'
-    try:
-        print(f"Running the following command: {cmd}")
-        os.system(cmd)
-    except:
-        print('\033[91m' + f"Problem with cutting the video '{input_video}'" + '\033[0m')
-    else:
+    print(f"Running the following command: {cmd}")
+    result = subprocess.run(cmd, shell=True)
+    if result.returncode == 0:
         print(f"Cut video saved to '{output_video}'")
+    else:
+        print('\033[91m' + f"ffmpeg exited with code {result.returncode} for '{input_video}'" + '\033[0m')
     if debug:
         verify_cut(filepaths, cut_start, cut_end, debug)
 
     # if needed, perform counter-clockwise rotation (metadata level rotation, no re-encoding needed)
-    if int(rotation) != 0 and debug == False:
-        temp_filepath = output_video.replace(".MP4", "_temp.MP4")
+    if int(rotation) != 0 and not debug:
+        output_path = Path(output_video)
+        temp_filepath = str(output_path.with_name(output_path.stem + "_temp" + output_path.suffix))
+        temp_filepath_q = shlex.quote(temp_filepath)
         os.rename(output_video, temp_filepath)
-        os.system(
-            f'ffmpeg -i {temp_filepath} -c copy -map_metadata 0 -metadata:s:v rotate="{rotation}" {output_video} -v quiet'
+        subprocess.run(
+            f'ffmpeg -i {temp_filepath_q} -c copy -map_metadata 0 -metadata:s:v rotate="{rotation}" {output_video_q} -v quiet',
+            shell=True
         )
         os.remove(temp_filepath)
 
@@ -186,8 +194,8 @@ def verify_cut(
 
     try:
         cap = cv2.VideoCapture(input_video)
-    except:
-        print('\033[91m' + f"Problem with reading '{input_video}'" + '\033[0m')
+    except Exception as e:
+        print('\033[91m' + f"Problem with reading '{input_video}': {e}" + '\033[0m')
     else:
         print("Total number of frames in the input video:", int(cap.get(cv2.CAP_PROP_FRAME_COUNT)))
         print("FPS of the input video:", cap.get(cv2.CAP_PROP_FPS))
@@ -204,8 +212,8 @@ def verify_cut(
 
     try:
         cap = cv2.VideoCapture(output_video)
-    except:
-        print('\033[91m' + f"Problem with reading '{output_video}'" + '\033[0m')
+    except Exception as e:
+        print('\033[91m' + f"Problem with reading '{output_video}': {e}" + '\033[0m')
     else:
         print("Total number of frames in the cut video:", int(cap.get(cv2.CAP_PROP_FRAME_COUNT)))
         print("FPS of the cut video:", cap.get(cv2.CAP_PROP_FPS))
@@ -252,6 +260,7 @@ def get_adjusted_cuts(
         return cuts
 
     input_video = str(filepaths['input_video'])
+    input_video_q = shlex.quote(input_video)
     cap = cv2.VideoCapture(input_video)
     fps = cap.get(cv2.CAP_PROP_FPS)
     frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
@@ -266,19 +275,19 @@ def get_adjusted_cuts(
         key_frames_retrieval_cmd = (
             "ffprobe -loglevel error -select_streams v:0 "
             "-show_entries packet=pts_time,flags -of "
-            f"csv=print_section=0 {input_video}"
+            f"csv=print_section=0 {input_video_q}"
             " | awk -F',' '/K/ {print $1}'"
         )
     elif platform.system() == "Linux":
         key_frames_retrieval_cmd = (
-            f"ffmpeg -i {input_video} -vf select='eq(pict_type\\,PICT_TYPE_I)',showinfo "
+            f"ffmpeg -i {input_video_q} -vf select='eq(pict_type\\,PICT_TYPE_I)',showinfo "
             "-vsync vfr -f null - -loglevel debug 2>&1 | "
             "awk '/pts_time/ {gsub(/.*pts_time:/, \"\"); gsub(/ .*/, \"\"); print;}'"
         )
     else:
         raise RuntimeError("Unsupported operating system for key-frame retrieval.")
 
-    key_frames = os.popen(key_frames_retrieval_cmd).read().split()
+    key_frames = subprocess.check_output(key_frames_retrieval_cmd, shell=True, text=True).split()
     key_frames_arr = np.array([float(key_frame) for key_frame in key_frames])
 
     # Find the closest key-frame (from right) for the provided cut_start
@@ -349,7 +358,7 @@ def get_cuts(filepaths: Dict[str, Path]) -> Tuple[int, int, int]:
         cut_end = int(cuts[1].strip())
         try:
             cut_video_rotate = int(cuts[2].strip())
-        except:
+        except (IndexError, ValueError):
             cut_video_rotate = 0
 
     print(f"Requested to cut the input video from frame {cut_start} to frame {cut_end} with rotation {cut_video_rotate}.")
