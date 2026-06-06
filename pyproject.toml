@@ -1,3 +1,22 @@
+# Overview:
+# This pyproject.toml manages the build, packaging, and distribution of the geo-trax library.
+# It defines project metadata, dependencies, and tool settings.
+#
+# Key Sections:
+# - [build-system]: Build requirements and backend (setuptools).
+# - [project]: Metadata, required and optional dependencies.
+# - [project.optional-dependencies]: Optional packages for development.
+# - [tool.poetry]: Poetry settings (package-mode = false; deps-only, not installable yet).
+# - [tool.*]: Tool configurations (setuptools, ruff, pytest).
+#
+# Installation:
+#   pip install -e .                    # core; -e (editable) reflects code changes without reinstalling
+#   pip install -e '.[dev]'             # core + dev (pip)
+#   poetry install                      # core (Poetry; auto-manages virtualenv)
+#   poetry install --extras dev         # core + dev (Poetry)
+#   uv venv --python 3.11 && uv pip install -e .          # core (uv; faster)
+#   uv venv --python 3.11 && uv pip install -e '.[dev]'   # core + dev (uv)
+
 [build-system]
 requires = ["setuptools>=77.0", "wheel"]
 build-backend = "setuptools.build_meta"
@@ -12,15 +31,17 @@ authors = [
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
-requires-python = ">=3.10"
+requires-python = ">=3.9"
 keywords = ["trajectory-extraction", "trajectory-analysis", "object-detection", "object-tracking", "object-stabilization", "georeferencing", "computer-vision", "deep-learning"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Intended Audience :: Developers",
     "Intended Audience :: Science/Research",
     "Topic :: Scientific/Engineering",
@@ -28,7 +49,7 @@ classifiers = [
     "Topic :: Multimedia :: Video",
 ]
 dependencies = [
-    "ultralytics[extra]>=8.0,<9.0",
+    "ultralytics[extra]>=8.4.40,<9.0",
     "lapx>=0.5.2",
     "stabilo>=1.2.0",
     "geopandas>=1.0.0",
@@ -49,6 +70,9 @@ Homepage = "https://github.com/rfonod/geo-trax/"
 Repository = "https://github.com/rfonod/geo-trax/"
 Changelog = "https://github.com/rfonod/geo-trax/releases"
 Issues = "https://github.com/rfonod/geo-trax/issues/"
+
+[tool.poetry]
+package-mode = false  # geo-trax is not yet an installable package; manage deps only
 
 [tool.setuptools]
 packages = { find = { where = ["."], include = ["utils", "utils.*"] } }

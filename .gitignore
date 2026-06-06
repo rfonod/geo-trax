@@ -32,6 +32,10 @@ ENV/
 env.bak/
 venv.bak/
 
+# Package manager lock files (not committed; generated locally)
+uv.lock
+poetry.lock
+
 # IDE/editor folders
 .vscode/
 .idea/

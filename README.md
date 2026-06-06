@@ -81,32 +81,43 @@ Geo-trax was validated in a large-scale urban traffic monitoring experiment cond
     cd geo-trax
     ```
 
-2. **Create and activate a Python virtual environment** (Python >= 3.10 and <= 3.12), e.g., using [Miniconda3](https://www.anaconda.com/docs/getting-started/miniconda/install):
+2. **Create and activate a Python virtual environment** (Python >= 3.9 and <= 3.13):
 
+    ```bash
+    python3.11 -m venv .venv
+    source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+    ```
+
+    <details>
+    <summary>Alternatives: conda or uv</summary>
+
+    **[Miniconda](https://www.anaconda.com/docs/getting-started/miniconda/install):**
     ```bash
     conda create -n geo-trax python=3.11 -y
     conda activate geo-trax
     ```
 
-    or using [venv](https://docs.python.org/3/library/venv.html):
-
+    **[uv](https://docs.astral.sh/uv/getting-started/installation/) (fastest; use `uv pip install` in step 3):**
     ```bash
-    python3.11 -m venv .venv
-    source .venv/bin/activate  # On Windows, use `.venv\Scripts\activate`
+    uv venv --python 3.11
+    source .venv/bin/activate  # On Windows: .venv\Scripts\activate
     ```
+    </details>
 
 3. **Install dependencies** from `pyproject.toml`:
 
     ```bash
-    pip install -e .
+    pip install -e .              # pip  (-e: editable mode, reflects code changes without reinstalling)
+    # uv pip install -e .         # uv   (faster; requires uv venv from step 2)
+    # poetry install              # Poetry (auto-manages virtualenv; skip step 2)
     ```
-
-    > **Note:** Installing in *editable mode* (`-e`) is recommended, as it allows immediate reflection of code changes.
 
 4. **[Optional] Install development dependencies** (for development, testing, or other non-core auxiliary scripts):
 
     ```bash
-    pip install -e '.[dev]'
+    pip install -e '.[dev]'           # pip
+    # uv pip install -e '.[dev]'      # uv
+    # poetry install --extras dev     # Poetry
     ```
 
 ## Model Training
