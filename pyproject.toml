@@ -5,17 +5,20 @@
 # Key Sections:
 # - [build-system]: Build requirements and backend (setuptools).
 # - [project]: Metadata, required and optional dependencies.
-# - [project.optional-dependencies]: Optional packages for development.
+# - [project.optional-dependencies]: Optional packages for development (dev) and model export (export).
 # - [tool.poetry]: Poetry settings (package-mode = false; deps-only, not installable yet).
 # - [tool.*]: Tool configurations (setuptools, ruff, pytest).
 #
 # Installation:
 #   pip install -e .                    # core; -e (editable) reflects code changes without reinstalling
 #   pip install -e '.[dev]'             # core + dev (pip)
+#   pip install -e '.[export]'          # core + export (pip)
 #   poetry install                      # core (Poetry; auto-manages virtualenv)
 #   poetry install --extras dev         # core + dev (Poetry)
-#   uv venv --python 3.11 && uv pip install -e .          # core (uv; faster)
-#   uv venv --python 3.11 && uv pip install -e '.[dev]'   # core + dev (uv)
+#   poetry install --extras export      # core + export (Poetry)
+#   uv venv --python 3.11 && uv pip install -e .           # core (uv; faster)
+#   uv venv --python 3.11 && uv pip install -e '.[dev]'    # core + dev (uv)
+#   uv venv --python 3.11 && uv pip install -e '.[export]' # core + export (uv)
 
 [build-system]
 requires = ["setuptools>=77.0", "wheel"]
@@ -63,6 +66,14 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "ultralytics[dev]",
+]
+export = [
+    "onnx>=1.12.0; platform_system != 'Darwin'",                                                          # ONNX export
+    "onnx>=1.12.0,<1.18.0; platform_system == 'Darwin' and python_version < '3.13'",                     # ONNX export (macOS, TF compat)
+    "onnx>=1.20.0; platform_system == 'Darwin' and python_version >= '3.13'",                             # ONNX export (macOS, Python 3.13+)
+    "onnxslim>=0.1.82",                                                                                    # ONNX graph optimization
+    "onnxruntime<1.20.0; python_version < '3.11' and (platform_machine != 'aarch64' or platform_system != 'Linux')",  # ONNX inference/validation
+    "onnxruntime>=1.20.0; python_version >= '3.11'",                                                      # ONNX inference/validation
 ]
 
 [project.urls]
