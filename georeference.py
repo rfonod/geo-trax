@@ -85,6 +85,7 @@ from PIL import Image, TiffImagePlugin
 from scipy.ndimage import gaussian_filter1d
 from scipy.signal import savgol_filter
 from shapely.geometry import Polygon
+from tqdm import tqdm
 
 from utils.utils import (
     check_if_results_exist,
@@ -111,24 +112,48 @@ def georeference(args: argparse.Namespace, logger: logging.Logger) -> None:
         args.geo_source = gproc['geo_source']
     if args.no_master is None:
         args.no_master = not gproc['use_master']
+
+    n_steps = 8 if args.no_master else 10
+    pbar = tqdm(total=n_steps, unit='step', colour='cyan', leave=True,
+                desc=f'{args.source.name} - georeferencing      ')
+
+    pbar.set_postfix_str('loading tracking data')
     location_id = determine_location_id(args.source, logger)
     track_id, frame_num, bbox_unstab, x_stab_frame, y_stab_frame, class_id, veh_dim_px = get_tracking_data(args.source, logger)
     timestamps = get_timestamps(args.source, frame_num, logger)
+    pbar.update()
+
+    pbar.set_postfix_str('reading reference frame')
     reference_frame, frame_size, fps = get_video_data(args.source, args.ref_frame, logger)
+    pbar.update()
+
+    pbar.set_postfix_str('loading orthophoto data')
     ortho_folder = get_ortho_folder(args.source, args.ortho_folder, logger)
     geo_source = get_geo_params_source(args.geo_source, ortho_folder, location_id, logger)
     ortho = get_orthophoto(ortho_folder, location_id, logger)
     ortho_params = get_ortho_parameters(ortho_folder, location_id, geo_source, ortho, config['transformation']['cutout_width_px'], logger)
     ortho_segmentation = get_road_section_lane_geometry(ortho_folder, args.segmentation_folder, location_id, logger)
+    pbar.update()
 
     if args.no_master:
+        pbar.set_postfix_str('computing reference → orthophoto homography')
         homography_reference_to_ortho = get_reference_to_ortho_homography(reference_frame, ortho, config['matching'], logger)
+        pbar.update()
     else:
+        pbar.set_postfix_str('loading master frame')
         master_frame = get_master_frame(ortho_folder, args.master_folder, location_id, logger)
+        pbar.update()
+
+        pbar.set_postfix_str('computing reference → master homography')
         homography_reference_to_master = get_reference_to_master_homography(reference_frame, master_frame, config['matching'], logger)
+        pbar.update()
+
+        pbar.set_postfix_str('computing master → orthophoto homography')
         homography_master_to_ortho = get_master_to_ortho_homography(master_frame, ortho, ortho_folder, args.master_folder, location_id, args.recompute, config['matching'], logger)
         homography_reference_to_ortho = np.dot(homography_master_to_ortho, homography_reference_to_master)
+        pbar.update()
 
+    pbar.set_postfix_str('transforming coordinates')
     x_stab_ortho, y_stab_ortho = apply_homography(x_stab_frame, y_stab_frame, homography_reference_to_ortho)
     latitude, longitude = ortho2geo(x_stab_ortho, y_stab_ortho, ortho_params)
     source_crs = config['transformation']['source_crs']
@@ -136,16 +161,26 @@ def georeference(args: argparse.Namespace, logger: logging.Logger) -> None:
     x_local, y_local = geo2local(latitude, longitude, source_crs, target_crs)
     veh_dim_real = convert_dimensions(track_id, veh_dim_px, frame_size, homography_reference_to_ortho, ortho_params, source_crs, target_crs)
     visibility = calculate_visibility(track_id, bbox_unstab, frame_size, config['filtering']['visibility_margin'])
+    pbar.update()
+
+    pbar.set_postfix_str('computing kinematics')
     veh_speed, veh_acceleration = compute_kinematics(track_id, frame_num, x_local, y_local, visibility, fps,
                                                      config['filtering']['filter_type'], config['filtering']['kernel_size'])
-    road_section, lane_number = assign_road_section_lane(x_stab_ortho, y_stab_ortho, ortho_segmentation)
+    pbar.update()
 
+    pbar.set_postfix_str('assigning road sections')
+    road_section, lane_number = assign_road_section_lane(x_stab_ortho, y_stab_ortho, ortho_segmentation)
+    pbar.update()
+
+    pbar.set_postfix_str('saving results')
     georeferenced_df = create_and_format_georeferenced_df(track_id, timestamps, frame_num, x_stab_ortho, y_stab_ortho, x_local, y_local,
                                                       latitude, longitude, veh_dim_real, class_id, veh_speed, veh_acceleration,
                                                       road_section, lane_number, visibility, config['filtering']['min_traj_length'], logger)
-
     save_georeferenced_data(args.source, georeferenced_df, logger)
     save_homography(args.source, homography_reference_to_ortho, logger)
+    pbar.update()
+
+    pbar.close()
 
 
 def get_tracking_data(source: Path, logger: logging.Logger) -> tuple:
