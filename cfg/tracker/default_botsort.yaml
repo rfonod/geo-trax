@@ -3,19 +3,19 @@
 # BoT-SORT tracker defaults for mode="track"
 # Docs: https://docs.ultralytics.com/modes/track/
 
-tracker_type: botsort # (str) Tracker backend: botsort|bytetrack; choose botsort to enable BoT-SORT features
-track_high_thresh: 0.5 # (float) First-stage match threshold; raise for cleaner tracks, lower to keep more
-track_low_thresh: 0.1 # (float) Second-stage threshold for low-score matches; balances recovery vs drift
-new_track_thresh: 0.6 # (float) Start a new track if no match ≥ this; higher reduces false tracks
-track_buffer: 30 # (int) Frames to keep lost tracks alive; higher handles occlusion, increases ID switches risk
-match_thresh: 0.8 # (float) Association similarity threshold (IoU/cost); tune with detector quality
-fuse_score: True # (bool) Fuse detection score with motion/IoU for matching; stabilizes weak detections
+tracker_type: botsort    # Tracker backend; choices: [botsort, bytetrack] — botsort enables GMC and optional ReID
+track_high_thresh: 0.5   # Detection confidence threshold for first-stage (high-confidence) association; [0.0, 1.0]
+track_low_thresh: 0.1    # Detection confidence threshold for second-stage (low-confidence) recovery; [0.0, 1.0]
+new_track_thresh: 0.6    # Minimum confidence to initialise a new track; higher reduces false track initiations; [0.0, 1.0]
+track_buffer: 30         # Frames to keep a lost track alive before deletion; higher tolerates longer occlusions; [1, inf)
+match_thresh: 0.8        # IoU/cost threshold for track-detection assignment; higher = stricter matching; [0.0, 1.0]
+fuse_score: true         # Fuse detection confidence with the IoU cost matrix; improves weak-detection robustness; [true, false]
 
-# BoT-SORT specifics
-gmc_method: sparseOptFlow # (str) Global motion compensation: sparseOptFlow|orb|sift|ecc|none; helps moving camera scenes
+# BoT-SORT specific
+gmc_method: sparseOptFlow  # Global motion compensation method; choices: [sparseOptFlow, orb, sift, ecc, none]
 
-# ReID model related thresh
-proximity_thresh: 0.5 # (float) Min IoU to consider tracks proximate for ReID; higher is stricter
-appearance_thresh: 0.25 # (float) Min appearance similarity for ReID; raise to avoid identity swaps
-with_reid: False # (bool) Enable ReID model use; needs extra model and compute
-model: auto # (str) ReID model name/path; "auto" uses detector features if available
+# ReID (appearance-based re-identification)
+proximity_thresh: 0.5    # Minimum IoU for tracks to be considered proximate enough for ReID comparison; [0.0, 1.0]
+appearance_thresh: 0.25  # Minimum cosine similarity for ReID match acceptance; higher reduces identity swaps; [0.0, 1.0]
+with_reid: false         # Enable ReID model; requires additional model weights and increases compute; [true, false]
+model: auto              # ReID model name or path; "auto" uses detector-derived features if available; string

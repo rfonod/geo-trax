@@ -26,10 +26,14 @@ Options:
     --log-file, -lf <str>     : Filename to save detailed logs. Saved in the 'logs' folder (default: None).
     --verbose, -v             : Set print verbosity level to INFO (default: WARNING).
 
+Processing Options:
+    --conf, -co <float>       : Detection confidence threshold. Defaults to cfg -> cfg_ultralytics -> conf.
     --classes, -cls <int> [<int> ...] : Class IDs to extract (e.g., --classes 0 1 2).
-                              Defaults to cfg -> cfg_ultralytics -> classes (default: None).
-    --cut-frame-left, -cfl <int> : Skip the first N frames (default: 0).
-    --cut-frame-right, -cfr <int> : Stop processing after this frame (default: None).
+                              Defaults to cfg -> cfg_ultralytics -> classes.
+    --cut-frame-left, -cfl <int> : Skip the first N frames. Defaults to cfg -> processing -> cut_frame_left.
+    --cut-frame-right, -cfr <int> : Stop processing after this frame. Defaults to cfg -> processing -> cut_frame_right.
+    For full detection and tracking control (model, IoU, image size, tracker settings, etc.),
+    edit cfg/ultralytics/default.yaml and the linked tracker config.
 
 Examples:
   1. Process a video with default settings:
@@ -42,7 +46,11 @@ Examples:
         python detect_track_stabilize.py path/to/video.mp4 --cut-frame-left 100 --cut-frame-right 500
 
 Notes:
-  - Additional configurations can be set in the main configuration file (default: cfg/default.yaml) and linked config files therein.
+  - Detection parameters (model, confidence, IoU, image size, etc.) are controlled via cfg/ultralytics/default.yaml.
+  - Tracking parameters (algorithm, track buffer, matching thresholds, etc.) are controlled via the tracker config
+    linked under cfg_tracker in the main config (default: cfg/tracker/default_botsort.yaml).
+  - Stabilization parameters are controlled via the stabilo config linked under cfg_stabilo in the main config
+    (default: cfg/stabilo/default.yaml).
 """
 
 import argparse
@@ -75,6 +83,11 @@ def detect_track_stabilize(args: argparse.Namespace, logger: logging.Logger) -> 
     Process video based on provided arguments.
     """
     config = load_config_all(args, logger)
+    proc = config['main']['processing']
+    if args.cut_frame_left is None:
+        args.cut_frame_left = proc['cut_frame_left']
+    if args.cut_frame_right is None:
+        args.cut_frame_right = proc['cut_frame_right']
     model = load_detector(config['ultralytics'], logger)
     tracks, transforms = track_with_model(model, config, logger)
     tracks = postprocess_tracks(tracks, config, logger)
@@ -415,15 +428,18 @@ def parse_cli_args() -> argparse.Namespace:
     # Required arguments
     parser.add_argument('source', type=Path, help='Path to the video file (e.g., path/to/video/video.mp4)')
 
-    # Optional arguments
-    parser.add_argument('--cfg', '-c', type=Path, default='cfg/default.yaml', help='Path to the main geo-trax configuration file')
-    parser.add_argument('--log-file', '-lf', type=str, default=None, help="Filename to save detailed logs. Saved in the 'logs' folder.")
-    parser.add_argument('--verbose', '-v', action='store_true', help='Set print verbosity level to INFO (default: WARNING)')
+    optional = parser.add_argument_group('Optional arguments')
+    optional.add_argument('--cfg', '-c', type=Path, default='cfg/default.yaml', help='Path to the main geo-trax configuration file')
+    optional.add_argument('--log-file', '-lf', type=str, default=None, help="Filename to save detailed logs. Saved in the 'logs' folder.")
+    optional.add_argument('--verbose', '-v', action='store_true', help='Set print verbosity level to INFO (default: WARNING)')
 
-    # Additional arguments
-    parser.add_argument('--classes', '-cls', nargs='+', type=int, help='Class IDs to extract (e.g., --classes 0 1 2). Defaults to cfg -> cfg_ultralytics -> classes.')
-    parser.add_argument('--cut-frame-left', '-cfl', type=int, default=0, help='Skip the first N frames. Default: 0.')
-    parser.add_argument('--cut-frame-right', '-cfr', type=int, default=None, help='Stop processing after this frame. Default: None.')
+    processing = parser.add_argument_group('Processing arguments',
+        'For full detection and tracking control (model, IoU, image size, tracker settings, etc.), '
+        'edit cfg/ultralytics/default.yaml and the linked tracker config.')
+    processing.add_argument('--conf', '-co', type=float, default=None, help='Detection confidence threshold. Defaults to cfg -> cfg_ultralytics -> conf.')
+    processing.add_argument('--classes', '-cls', nargs='+', type=int, default=None, help='Class IDs to extract (e.g., --classes 0 1 2). Defaults to cfg -> cfg_ultralytics -> classes.')
+    processing.add_argument('--cut-frame-left', '-cfl', type=int, default=None, help='Skip the first N frames. Defaults to cfg -> processing -> cut_frame_left.')
+    processing.add_argument('--cut-frame-right', '-cfr', type=int, default=None, help='Stop processing after this frame. Defaults to cfg -> processing -> cut_frame_right.')
 
     return parser.parse_args()
 

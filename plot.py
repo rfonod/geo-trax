@@ -16,17 +16,23 @@ Arguments:
   input: Path to an individual video file, .txt/.csv file, or folder with video or .txt/.csv files.
 
 Options:
-  --save, -s: Save the plots as .pdf files [default: False]
-  --no-show, -ns: Do not show the plots [default: False]
-  --cfg, -c: Path to the main geo-trax configuration file [default: cfg/default.yaml]
-  --log-file, -lf: Filename to save detailed logs. Saved in the 'logs' folder. [default: plot.log]
-  --verbose, -v: Set print verbosity level to INFO (default: WARNING)
-  --aggregate, -a: Aggregate the input data (folder input) per location ID (intersection) [default: False]
-  --ortho-folder, -of: Custom path to the folder with orthophotos (.png). Defaults to 'ORTHOPHOTOS' at the same level as 'PROCESSED' in 'input'.
-  --segmentations, -seg: Use the segmented orthophotos [default: False]
-  --id, -i: Vehicle ID to print/plot in detail (only for non-folder input) [default: None]
-  --points, -p: Plot the trajectory points [default: False]
-  --class-filter, -cf: Exclude specified vehicle classes [default: None]
+  --help, -h    : Show this help message and exit.
+  --cfg, -c     : Path to the main geo-trax configuration file (default: cfg/default.yaml).
+  --log-file, -lf : Filename to save detailed logs. Saved in the 'logs' folder (default: None).
+  --verbose, -v : Set print verbosity level to INFO (default: WARNING).
+
+Georeferencing Options:
+  --ortho-folder, -of <path> : Custom path to the folder with orthophotos (.png).
+                    Defaults to 'ORTHOPHOTOS' at the same level as 'PROCESSED' in 'input'.
+
+Plotting Options:
+  --save / --no-save, -s    : Save the plots as .pdf files. Defaults to cfg -> plotting -> save.
+  --show / --no-show, -sh   : Show plots interactively. Defaults to cfg -> plotting -> show.
+  --aggregate, -a           : Aggregate data per location ID (intersection). Defaults to cfg -> plotting -> aggregate.
+  --points, -p              : Plot discrete trajectory points instead of lines. Defaults to cfg -> plotting -> plot_points.
+  --segmentations, -seg     : Use segmented orthophotos for trajectory backgrounds. Defaults to cfg -> plotting -> use_segmentations.
+  --id, -i                  : Vehicle ID to print/plot in detail (only for non-folder input) [default: 0].
+  --class-filter, -cf <int> [<int> ...] : Vehicle class IDs to exclude from plots. Defaults to cfg -> plotting -> class_filter.
 
 Examples:
 1. Plot the trajectory data for a video file:
@@ -75,7 +81,14 @@ def generate_plots(args: argparse.Namespace, logger: logging.Logger) -> None:
     Generate plots for the input file or directory.
     """
     config = load_config_all(args, logger)['main']
-    colors.set_colors(config['plotting']['colors'])
+    plot_cfg = config['plotting']
+    if args.save is None:          args.save          = plot_cfg['save']
+    if args.show is None:          args.show          = plot_cfg['show']
+    if args.aggregate is None:     args.aggregate     = plot_cfg['aggregate']
+    if args.points is None:        args.points        = plot_cfg['plot_points']
+    if args.segmentations is None: args.segmentations = plot_cfg['use_segmentations']
+    if args.class_filter is None:  args.class_filter  = plot_cfg['class_filter']
+    colors.set_colors(plot_cfg['colors'])
     files = determine_files_to_process(args.input, config['plotting']['skip_filenames_with'], logger)
     ortho_folder = get_ortho_folder(args.input, args.ortho_folder, logger, critical=False)
 
@@ -626,7 +639,7 @@ def save_or_show_plot(name: str, filepath: Path, args: argparse.Namespace, logge
     """
     Save or show the plot.
     """
-    if not args.no_show:
+    if args.show:
         plt.show()
     if args.save:
         img_dir = filepath.parent / 'plots'
@@ -646,23 +659,31 @@ def parse_cli_args() -> argparse.Namespace:
     """
     parser = argparse.ArgumentParser(description="Trajectory visualization tool.")
 
-    # Required argument
+    # Required arguments
     parser.add_argument("input", type=Path, help="Path to the video source or .txt/.csv file or folder with video or .csv/.txt files")
 
-    # Main arguments
-    parser.add_argument("--save", "-s", action="store_true", help="Save the plots as .pdf files [default: False]")
-    parser.add_argument("--no-show", "-ns", action="store_true", help="Do not show the plots [default: False]")
+    optional = parser.add_argument_group('Optional arguments')
+    optional.add_argument('--cfg', '-c', type=Path, default='cfg/default.yaml', help='Path to the main geo-trax configuration file')
+    optional.add_argument("--log-file", "-lf", type=str, default=None, help="Filename to save detailed logs. Saved in the 'logs' folder.")
+    optional.add_argument("--verbose", "-v", action='store_true', help='Set print verbosity level to INFO (default: WARNING)')
 
-    # Optional arguments
-    parser.add_argument('--cfg', '-c', type=Path, default='cfg/default.yaml', help='Path to the main geo-trax configuration file')
-    parser.add_argument("--log-file", "-lf", type=str, default=None, help="Filename to save detailed logs. Saved in the 'logs' folder.")
-    parser.add_argument("--verbose", "-v", action='store_true', help='Set print verbosity level to INFO (default: WARNING)')
-    parser.add_argument("--aggregate", "-a", action="store_true", help="aggregate the data for the same intersection [default: False]")
-    parser.add_argument("--ortho-folder", "-of", type=Path, default=None, help="Custom path to the folder with orthophotos (.png). Defaults to 'ORTHOPHOTOS' at the same level as 'PROCESSED' in 'input'.")
-    parser.add_argument("--segmentations", "-seg", action="store_true", help="Use the segmented orthophotos [default: False]")
-    parser.add_argument("--id", "-i", type=int, default=0, help="vehicle ID to print/plot in detail (only for non-folder input) [default: 0]")
-    parser.add_argument("--points", "-p", action="store_true", help="plot the trajectory points [default: False]")
-    parser.add_argument("--class-filter", "-cf", nargs="+", default=[], help="exclude specified vehicle classes [default: None]")
+    georef = parser.add_argument_group('Georeferencing arguments')
+    georef.add_argument("--ortho-folder", "-of", type=Path, default=None, help="Custom path to the folder with orthophotos (.png). Defaults to 'ORTHOPHOTOS' at the same level as 'PROCESSED' in 'input'.")
+
+    plotting = parser.add_argument_group('Plotting arguments')
+    plotting.add_argument("--save", "-s", action=argparse.BooleanOptionalAction, default=None,
+                          help="Save the plots as .pdf files. Defaults to cfg -> plotting -> save.")
+    plotting.add_argument("--show", "-sh", action=argparse.BooleanOptionalAction, default=None,
+                          help="Show plots interactively. Defaults to cfg -> plotting -> show.")
+    plotting.add_argument("--aggregate", "-a", action=argparse.BooleanOptionalAction, default=None,
+                          help="Aggregate data per location ID (intersection). Defaults to cfg -> plotting -> aggregate.")
+    plotting.add_argument("--points", "-p", action=argparse.BooleanOptionalAction, default=None,
+                          help="Plot discrete trajectory points instead of lines. Defaults to cfg -> plotting -> plot_points.")
+    plotting.add_argument("--segmentations", "-seg", action=argparse.BooleanOptionalAction, default=None,
+                          help="Use segmented orthophotos for trajectory backgrounds. Defaults to cfg -> plotting -> use_segmentations.")
+    plotting.add_argument("--id", "-i", type=int, default=0, help="Vehicle ID to print/plot in detail (only for non-folder input) [default: 0]")
+    plotting.add_argument("--class-filter", "-cf", nargs="+", default=None,
+                          help="Vehicle class IDs to exclude from plots. Defaults to cfg -> plotting -> class_filter.")
 
     return parser.parse_args()
 

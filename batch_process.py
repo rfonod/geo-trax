@@ -15,65 +15,80 @@ Arguments:
   input_path : Path to the input directory or specific video file.
 
 Batch Processing Options:
-    -h, --help        : Show this help message and exit.
-    -y, --yes         : Automatically confirm prompts without waiting for user input (default: False).
-    -o, --overwrite   : Overwrite existing files that have already been processed (default: False).
-    -dr, --dry-run    : Simulate the command execution without actually running any processes (default: False).
-    -vo, --viz-only   : Only visualize the results; skip any processing operations (default: False).
-    -go, --geo-only   : Only run georeferencing; skip detection, tracking, and stabilization (default: False).
-    -ng, --no-geo     : Do not georeference the tracking data (default: False).
-    -pl, --plot       : Generate and save trajectory plots and distribution charts (default: False).
-    -po, --plot-only  : Only generate plots; skip processing, georeferencing, and visualization (default: False).
-    -fe, --folders-exclude <str> [<str> ...] : Folders to exclude from the batch processing (default: ['results']).
-    -ep, --exclude-patterns <str> [<str> ...] : File name patterns to exclude
+    --help, -h        : Show this help message and exit.
+    --yes, -y         : Automatically confirm prompts without waiting for user input (default: False).
+    --overwrite, -o   : Overwrite existing files that have already been processed (default: False).
+    --dry-run, -dr    : Simulate the command execution without actually running any processes (default: False).
+    --viz-only, -vo   : Only visualize the results; skip any processing operations (default: False).
+    --geo-only, -go   : Only run georeferencing; skip detection, tracking, and stabilization (default: False).
+    --no-geo, -ng     : Do not georeference the tracking data (default: False).
+    --plot, -pl       : Generate and save trajectory plots and distribution charts (default: False).
+    --plot-only, -po  : Only generate plots; skip processing, georeferencing, and visualization (default: False).
+    --folders-exclude, -fe <str> [<str> ...] : Folders to exclude from the batch processing (default: ['results']).
+    --exclude-patterns, -ep <str> [<str> ...] : File name patterns to exclude
                         (e.g., --exclude-patterns car_test drone_2023) (default: None).
 
-Shared Processing, Georeferencing, and Visualization Options:
-    -c, --cfg <path>    : Path to the main geo-trax configuration file (default: cfg/default.yaml).
-    -lf, --log-file <str> : Filename to save detailed logs. Saved in the 'logs' folder (default: None).
-    -v, --verbose       : Set print verbosity level to INFO (default: WARNING).
+Shared Options:
+    --cfg, -c <path>    : Path to the main geo-trax configuration file (default: cfg/default.yaml).
+    --log-file, -lf <str> : Filename to save detailed logs. Saved in the 'logs' folder (default: None).
+    --verbose, -v       : Set print verbosity level to INFO (default: WARNING).
 
-Detection and Tracking Options:
-    -cls, --classes <int> [<int> ...] : Class IDs to extract (e.g., --classes 0 1 2).
-                        Defaults to cfg -> cfg_ultralytics -> classes (default: None).
-    -cfl, --cut-frame-left <int> : Skip the first N frames (default: 0).
-    -cfr, --cut-frame-right <int> : Stop processing after this frame. Only considered if input
-                        is a single video file (default: None).
+Processing Options:
+    --conf, -co <float>   : Detection confidence threshold. Defaults to cfg -> cfg_ultralytics -> conf.
+    --classes, -cls <int> [<int> ...] : Class IDs to extract (e.g., --classes 0 1 2).
+                        Defaults to cfg -> cfg_ultralytics -> classes.
+    --cut-frame-left, -cfl <int> : Skip the first N frames. Defaults to cfg -> processing -> cut_frame_left.
+    --cut-frame-right, -cfr <int> : Stop processing after this frame. Only considered if input
+                        is a single video file. Defaults to cfg -> processing -> cut_frame_right.
+    For full detection and tracking control (model, IoU, image size, tracker settings, etc.),
+    edit cfg/ultralytics/default.yaml and the linked tracker config.
 
 Georeferencing Options:
-    -of, --ortho-folder <path> : Custom path to the folder with orthophotos (.png, .tif, .txt).
+    --ortho-folder, -of <path> : Custom path to the folder with orthophotos (.png, .tif, .txt).
                         Defaults to 'ORTHOPHOTOS' at the same level as 'PROCESSED' in 'input' (default: None).
-    -gs, --geo-source <choice> : Source of georeferencing parameters. Choices: metadata-tif,
-                        text-file, center-text-file. If not provided, the system will auto-detect (default: None).
-    -rf, --ref-frame <int> : Use custom reference frame number (should be the same as the one
-                        used for stabilization) (default: 0).
-    -nm, --no-master    : Disable the master frame approach (default: False).
-    -mf, --master-folder <path> : Custom path to the folder containing master frame files (.png).
+    --geo-source, -gs <choice> : Source of georeferencing parameters. Choices: metadata-tif,
+                        text-file, center-text-file. Defaults to cfg -> georef -> processing -> geo_source.
+    --ref-frame, -rf <int> : Reference frame number (must match stabilization setting).
+                        Defaults to cfg -> georef -> processing -> ref_frame.
+    --no-master, -nm    : Disable the master frame approach regardless of config.
+                        When not set, cfg -> georef -> processing -> use_master applies.
+    --master-folder, -mf <path> : Custom path to the folder containing master frame files (.png).
                         If not provided, '--ortho-folder / master_frames' will be used (default: None).
-    -r, --recompute     : Force recompute master-> ortho homography even if it exists (default: False).
-    -osf, --segmentation-folder <path> : Custom path to the folder containing orthophoto
+    --recompute, -r     : Force recompute master->ortho homography even if cached.
+                        Defaults to cfg -> georef -> processing -> recompute.
+    --segmentation-folder, -osf <path> : Custom path to the folder containing orthophoto
                         segmentation files (.csv). If not provided, '--ortho-folder / segmentations'
                         will be used (default: None).
 
 Visualization Options:
-    -s, --save          : Save the processing results to a video file (default: False).
-    -sh, --show         : Visualize results during processing (default: False).
-    -vm, --viz-mode <int> : Set visualization mode for the output video: 0 - original,
-                        1 - stabilized, 2 - reference frame (default: 0).
-    -pt, --plot-trajectories : Plot trajectories on the reference frame (default: False).
-    -pd, --plot-delay <int> : Number of frames to plot trajectories when --plot-trajectories is enabled (default: 30).
-    -sc, --show-conf    : Show confidence values (default: False).
-    -sl, --show-lanes   : Show lane numbers (default: False).
-    -scn, --show-class-names : Show class names (default: False).
-    -hl, --hide-labels  : Hide labels entirely (default: False).
-    -ht, --hide-tracks  : Hide trailing tracking lines (default: False).
-    -hs, --hide-speed   : Hide speed values (if available) (default: False).
-    -su, --speed-unit <choice> : Speed unit for visualization: km/h or mi/h (default: km/h).
-    -cf, --class-filter <int> [<int> ...] : Exclude specified classes (e.g., -cf 1 2) (default: None).
+    --save, -s          : Save the annotated output video to file. Defaults to cfg -> visualization -> save.
+    --show, -sh         : Open a live preview window during processing. Defaults to cfg -> visualization -> show.
+    --viz-mode, -vm <int> : Frame source for annotation: 0=original, 1=stabilized, 2=reference frame.
+                        Defaults to cfg -> visualization -> viz_mode.
+    --plot-trajectories, -pt : Overlay trajectory positions on the first frame.
+                        Defaults to cfg -> visualization -> plot_trajectories.
+    --plot-delay, -pd <int> : Number of frames to display the trajectory overlay;
+                        only relevant when --plot-trajectories is enabled.
+                        Defaults to cfg -> visualization -> plot_delay.
+    --show-conf, -sc    : Include detection confidence in labels. Defaults to cfg -> visualization -> show_conf.
+    --show-lanes, -sl   : Include lane ID in labels. Defaults to cfg -> visualization -> show_lanes.
+    --show-class-names, -scn : Include class name in labels. Defaults to cfg -> visualization -> show_class_names.
+    --hide-labels, -hl  : Suppress all label text. Defaults to cfg -> visualization -> hide_labels.
+    --hide-tracks, -ht  : Suppress track tail lines. Defaults to cfg -> visualization -> hide_tracks.
+    --hide-speed, -hs   : Suppress speed values in labels. Defaults to cfg -> visualization -> hide_speed.
+    --speed-unit, -su <choice> : Speed display unit: km/h or mi/h. Defaults to cfg -> visualization -> speed_unit.
+    --class-filter, -cf <int> [<int> ...] : Class IDs to exclude (e.g., -cf 1 2). Defaults to cfg -> visualization -> class_filter.
 
 Plotting Options:
-    -pa, --plot-aggregate : Aggregate data per location ID (intersection) when plotting (default: False).
-    -pp, --plot-points  : Plot trajectory points instead of lines (default: False).
+    --plot-save, -ps    : Save plots as PDF files. Defaults to cfg -> plotting -> save.
+    --plot-show, -psh   : Show plots in an interactive window. Defaults to cfg -> plotting -> show.
+    --aggregate, -a     : Aggregate trajectories per location ID when plotting.
+                        Defaults to cfg -> plotting -> aggregate.
+    --points, -p        : Plot trajectory points instead of lines. Defaults to cfg -> plotting -> plot_points.
+    --segmentations, -seg : Colour-code trajectory backgrounds using road-segment orthophotos.
+                        Defaults to cfg -> plotting -> use_segmentations.
+    --plot-class-filter, -pcf <int> [<int> ...] : Class IDs to exclude from plots (e.g., -pcf 1 2).
+                        Defaults to cfg -> plotting -> class_filter.
 
 Examples:
   1. Process a directory without saving/showing video visualization:
@@ -94,11 +109,6 @@ Examples:
   6. Generate and save trajectory plots after processing:
      python batch_process.py path/to/videos/ --plot
 
-Notes:
-  - Ensure that all paths provided are accessible and that necessary permissions are set.
-  - Check that all required dependencies and modules are properly installed.
-  - Additional configurations can be set in the main configuration file (default: cfg/default.yaml)
-    and linked config files therein.
 """
 
 import argparse
@@ -156,17 +166,17 @@ def run_plotting(path: Path, args: argparse.Namespace, logger: logging.Logger) -
     if not args.dry_run:
         plot_args = argparse.Namespace(
             input=path,
-            save=True,
-            no_show=True,
+            save=True if args.plot_save is None else args.plot_save,
+            show=False if args.plot_show is None else args.plot_show,
             cfg=args.cfg,
             log_file=args.log_file,
             verbose=args.verbose,
-            aggregate=args.plot_aggregate,
+            aggregate=args.aggregate,
             ortho_folder=args.ortho_folder,
-            segmentations=False,
+            segmentations=args.segmentations,
             id=0,
-            points=args.plot_points,
-            class_filter=args.class_filter if args.class_filter else [],
+            points=args.points,
+            class_filter=args.plot_class_filter,
         )
         generate_plots(plot_args, logger)
 
@@ -270,56 +280,62 @@ def parse_cli_args() -> argparse.Namespace:
     # Required arguments
     parser.add_argument('input', type=Path, help='Path to the input directory or video file (e.g., path/to/video_dir/)')
 
-    # Batch processing options
-    parser.add_argument('--yes', '-y', action='store_true', help='Automatically confirm prompts without waiting for user input')
-    parser.add_argument('--overwrite', '-o', action='store_true', help='Overwrite existing files that have already been processed')
-    parser.add_argument('--dry-run', '-dr', action='store_true', help='Simulate the command execution without actually running any processes')
-    parser.add_argument('--viz-only', '-vo', action='store_true', help='Only visualize the results; skip any processing operations')
-    parser.add_argument('--geo-only', '-go', action='store_true', help='Only run georeferencing; skip detection, tracking, and stabilization')
-    parser.add_argument('--no-geo', '-ng', action='store_true', help='Do not georeference the tracking data')
-    parser.add_argument('--plot', '-pl', action='store_true', help='Generate and save trajectory plots and distribution charts')
-    parser.add_argument('--plot-only', '-po', action='store_true', help='Only generate plots; skip processing, georeferencing, and visualization')
-    parser.add_argument("--folders-exclude", "-fe", type=str, nargs='+', default=['results'], help="Folders to exclude from the batch processing")
-    parser.add_argument("--exclude-patterns", "-ep", type=str, nargs='+', default=None, help="File name patterns to exclude (e.g., --exclude-patterns car_test drone_2023)")
+    batch = parser.add_argument_group('Batch processing options')
+    batch.add_argument('--yes', '-y', action='store_true', help='Automatically confirm prompts without waiting for user input')
+    batch.add_argument('--overwrite', '-o', action='store_true', help='Overwrite existing files that have already been processed')
+    batch.add_argument('--dry-run', '-dr', action='store_true', help='Simulate the command execution without actually running any processes')
+    batch.add_argument('--viz-only', '-vo', action='store_true', help='Only visualize the results; skip any processing operations')
+    batch.add_argument('--geo-only', '-go', action='store_true', help='Only run georeferencing; skip detection, tracking, and stabilization')
+    batch.add_argument('--no-geo', '-ng', action='store_true', help='Do not georeference the tracking data')
+    batch.add_argument('--plot', '-pl', action='store_true', help='Generate and save trajectory plots and distribution charts')
+    batch.add_argument('--plot-only', '-po', action='store_true', help='Only generate plots; skip processing, georeferencing, and visualization')
+    batch.add_argument("--folders-exclude", "-fe", type=str, nargs='+', default=['results'], help="Folders to exclude from the batch processing")
+    batch.add_argument("--exclude-patterns", "-ep", type=str, nargs='+', default=None, help="File name patterns to exclude (e.g., --exclude-patterns car_test drone_2023)")
 
-    # Shared processing, georeferencing, and visualization options
-    parser.add_argument('--cfg', '-c', type=Path, default='cfg/default.yaml', help='Path to the main geo-trax configuration file')
-    parser.add_argument('--log-file', '-lf', type=str, default=None, help="Filename to save detailed logs. Saved in the 'logs' folder.")
-    parser.add_argument('--verbose', '-v', action='store_true', help='Set print verbosity level to INFO (default: WARNING)')
+    shared = parser.add_argument_group('Shared options')
+    shared.add_argument('--cfg', '-c', type=Path, default='cfg/default.yaml', help='Path to the main geo-trax configuration file')
+    shared.add_argument('--log-file', '-lf', type=str, default=None, help="Filename to save detailed logs. Saved in the 'logs' folder.")
+    shared.add_argument('--verbose', '-v', action='store_true', help='Set print verbosity level to INFO (default: WARNING)')
 
-    # Detection and tracking options
-    parser.add_argument('--classes', '-cls', nargs='+', type=int, help='Class IDs to extract (e.g., --classes 0 1 2). Defaults to cfg -> cfg_ultralytics -> classes.')
-    parser.add_argument('--cut-frame-left', '-cfl', type=int, default=0, help='Skip the first N frames. Default: 0.')
-    parser.add_argument('--cut-frame-right', '-cfr', type=int, default=None, help='Stop processing after this frame. Only considered if input is a single video file.')
+    processing = parser.add_argument_group('Processing options',
+        'For full detection and tracking control (model, IoU, image size, tracker settings, etc.), '
+        'edit cfg/ultralytics/default.yaml and the linked tracker config.')
+    processing.add_argument('--conf', '-co', type=float, default=None, help='Detection confidence threshold. Defaults to cfg -> cfg_ultralytics -> conf.')
+    processing.add_argument('--classes', '-cls', nargs='+', type=int, default=None, help='Class IDs to extract (e.g., --classes 0 1 2). Defaults to cfg -> cfg_ultralytics -> classes.')
+    processing.add_argument('--cut-frame-left', '-cfl', type=int, default=None, help='Skip the first N frames. Defaults to cfg -> processing -> cut_frame_left.')
+    processing.add_argument('--cut-frame-right', '-cfr', type=int, default=None, help='Stop processing after this frame. Only considered if input is a single video file. Defaults to cfg -> processing -> cut_frame_right.')
 
-    # Georeferencing options
-    parser.add_argument("--ortho-folder", "-of", type=Path, default=None, help="Custom path to the folder with orthophotos (.png, .tif, .txt). Defaults to 'ORTHOPHOTOS' at the same level as 'PROCESSED' in 'input'.")
-    parser.add_argument("--geo-source", "-gs", choices=['metadata-tif', 'text-file', 'center-text-file'], default=None, help="Source of georeferencing parameters. If not provided, the system will auto-detect")
-    parser.add_argument("--ref-frame", "-rf", type=int, default=0, help="Use custom reference frame number (should be the same as the one used for stabilization).")
-    parser.add_argument("--no-master", "-nm", action="store_true", help="Disable the master frame approach.")
-    parser.add_argument("--master-folder", "-mf", type=Path, default=None, help="Custom path to the folder containing master frame files (.png). If not provided, '--ortho-folder / master_frames' will be used.")
-    parser.add_argument("--recompute", "-r", action="store_true", help="Force recompute master-> ortho homography even if it exists.")
-    parser.add_argument("--segmentation-folder", "-osf", type=Path, default=None, help="Custom path to the folder containing orthophoto segmentation files (.csv). If not provided, '--ortho-folder / segmentations' will be used.")
+    georef = parser.add_argument_group('Georeferencing options')
+    georef.add_argument("--ortho-folder", "-of", type=Path, default=None, help="Custom path to the folder with orthophotos (.png, .tif, .txt). Defaults to 'ORTHOPHOTOS' at the same level as 'PROCESSED' in 'input'.")
+    georef.add_argument("--geo-source", "-gs", choices=['metadata-tif', 'text-file', 'center-text-file'], default=None, help="Source of georeferencing parameters. Defaults to cfg -> georef -> processing -> geo_source.")
+    georef.add_argument("--ref-frame", "-rf", type=int, default=None, help="Reference frame number (must match stabilization setting). Defaults to cfg -> georef -> processing -> ref_frame.")
+    georef.add_argument("--no-master", "-nm", action="store_const", const=True, default=None, help="Disable the master frame approach regardless of config. When not set, cfg -> georef -> processing -> use_master applies.")
+    georef.add_argument("--master-folder", "-mf", type=Path, default=None, help="Custom path to the folder containing master frame files (.png). If not provided, '--ortho-folder / master_frames' will be used.")
+    georef.add_argument("--recompute", "-r", action="store_const", const=True, default=None, help="Force recompute master->ortho homography even if cached. Defaults to cfg -> georef -> processing -> recompute.")
+    georef.add_argument("--segmentation-folder", "-osf", type=Path, default=None, help="Custom path to the folder containing orthophoto segmentation files (.csv). If not provided, '--ortho-folder / segmentations' will be used.")
 
-    # Visualization options
-    group = parser.add_mutually_exclusive_group(required=False)
-    group.add_argument('--save', '-s', action='store_true', help='Save the processing results to a video file')
-    group.add_argument('--show', '-sh', action='store_true', help='Visualize results during processing')
-    parser.add_argument('--viz-mode', '-vm', type=int, default=0, choices=[0, 1, 2], help='Set visualization mode for the output video: 0 - original, 1 - stabilized, 2 - reference frame')
-    parser.add_argument("--plot-trajectories", "-pt", action="store_true", help='Plot trajectories on the reference frame')
-    parser.add_argument("--plot-delay", "-pd", type=int, default=30, help='Number of frames to plot trajectories when --plot-trajectories is enabled')
-    parser.add_argument("--show-conf", "-sc", action="store_true", help='Show confidence values')
-    parser.add_argument("--show-lanes", "-sl", action="store_true", help='Show lane numbers')
-    parser.add_argument("--show-class-names", "-scn", action="store_true", help='Show class names')
-    parser.add_argument("--hide-labels", "-hl", action="store_true", help='Hide labels entirely')
-    parser.add_argument("--hide-tracks", "-ht", action="store_true", help='Hide trailing tracking lines')
-    parser.add_argument("--hide-speed", "-hs", action="store_true", help='Hide speed values (if available)')
-    parser.add_argument('--speed-unit', '-su', type=str, default='km/h', choices=['km/h', 'mi/h'], help='Speed unit for visualization: km/h or mi/h (default: km/h)')
-    parser.add_argument('--class-filter', '-cf', type=int, nargs='+', help='Exclude specified classes (e.g., -cf 1 2)')
+    viz = parser.add_argument_group('Visualization options')
+    viz.add_argument('--save', '-s', action=argparse.BooleanOptionalAction, default=None, help='Save the annotated output video to file. Defaults to cfg -> visualization -> save.')
+    viz.add_argument('--show', '-sh', action=argparse.BooleanOptionalAction, default=None, help='Open a live preview window during processing. Defaults to cfg -> visualization -> show.')
+    viz.add_argument('--viz-mode', '-vm', type=int, default=None, choices=[0, 1, 2], help='Frame source for annotation: 0=original, 1=stabilized, 2=reference frame. Defaults to cfg -> visualization -> viz_mode.')
+    viz.add_argument("--plot-trajectories", "-pt", action=argparse.BooleanOptionalAction, default=None, help='Overlay trajectory positions on the first frame. Defaults to cfg -> visualization -> plot_trajectories.')
+    viz.add_argument("--plot-delay", "-pd", type=int, default=None, help='Number of frames to display the trajectory overlay; only relevant when --plot-trajectories is enabled. Defaults to cfg -> visualization -> plot_delay.')
+    viz.add_argument("--show-conf", "-sc", action=argparse.BooleanOptionalAction, default=None, help='Include detection confidence in labels. Defaults to cfg -> visualization -> show_conf.')
+    viz.add_argument("--show-lanes", "-sl", action=argparse.BooleanOptionalAction, default=None, help='Include lane ID in labels. Defaults to cfg -> visualization -> show_lanes.')
+    viz.add_argument("--show-class-names", "-scn", action=argparse.BooleanOptionalAction, default=None, help='Include class name in labels. Defaults to cfg -> visualization -> show_class_names.')
+    viz.add_argument("--hide-labels", "-hl", action=argparse.BooleanOptionalAction, default=None, help='Suppress all label text. Defaults to cfg -> visualization -> hide_labels.')
+    viz.add_argument("--hide-tracks", "-ht", action=argparse.BooleanOptionalAction, default=None, help='Suppress track tail lines. Defaults to cfg -> visualization -> hide_tracks.')
+    viz.add_argument("--hide-speed", "-hs", action=argparse.BooleanOptionalAction, default=None, help='Suppress speed values in labels. Defaults to cfg -> visualization -> hide_speed.')
+    viz.add_argument('--speed-unit', '-su', type=str, default=None, choices=['km/h', 'mi/h'], help='Speed display unit: km/h or mi/h. Defaults to cfg -> visualization -> speed_unit.')
+    viz.add_argument('--class-filter', '-cf', type=int, nargs='+', default=None, help='Class IDs to exclude from visualization (e.g., -cf 1 2). Defaults to cfg -> visualization -> class_filter.')
 
-    # Plotting options
-    parser.add_argument('--plot-aggregate', '-pa', action='store_true', help='Aggregate data per location ID (intersection) when plotting')
-    parser.add_argument('--plot-points', '-pp', action='store_true', help='Plot trajectory points instead of lines')
+    plotting = parser.add_argument_group('Plotting options')
+    plotting.add_argument('--plot-save', '-ps', action=argparse.BooleanOptionalAction, default=None, help='Save plots as PDF files. Defaults to cfg -> plotting -> save.')
+    plotting.add_argument('--plot-show', '-psh', action=argparse.BooleanOptionalAction, default=None, help='Show plots in an interactive window. Defaults to cfg -> plotting -> show.')
+    plotting.add_argument('--aggregate', '-a', action=argparse.BooleanOptionalAction, default=None, help='Aggregate trajectories per location ID when plotting. Defaults to cfg -> plotting -> aggregate.')
+    plotting.add_argument('--points', '-p', action=argparse.BooleanOptionalAction, default=None, help='Plot trajectory points instead of lines. Defaults to cfg -> plotting -> plot_points.')
+    plotting.add_argument('--segmentations', '-seg', action=argparse.BooleanOptionalAction, default=None, help='Colour-code trajectory backgrounds using road-segment orthophotos. Defaults to cfg -> plotting -> use_segmentations.')
+    plotting.add_argument('--plot-class-filter', '-pcf', type=int, nargs='+', default=None, help='Class IDs to exclude from plots (e.g., -pcf 1 2). Defaults to cfg -> plotting -> class_filter.')
 
     return parser.parse_args()
 

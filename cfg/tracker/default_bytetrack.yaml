@@ -3,10 +3,10 @@
 # ByteTrack tracker defaults for mode="track"
 # Docs: https://docs.ultralytics.com/modes/track/
 
-tracker_type: bytetrack # (str) Tracker backend: botsort|bytetrack; choose bytetrack for the classic baseline
-track_high_thresh: 0.5 # (float) First-stage match threshold; raise for cleaner tracks, lower to keep more
-track_low_thresh: 0.1 # (float) Second-stage threshold for low-score matches; balances recovery vs drift
-new_track_thresh: 0.6 # (float) Start a new track if no match ≥ this; higher reduces false tracks
-track_buffer: 30 # (int) Frames to keep lost tracks alive; higher handles occlusion, increases ID switches risk
-match_thresh: 0.8 # (float) Association similarity threshold (IoU/cost); tune with detector quality
-fuse_score: True # (bool) Fuse detection score with motion/IoU for matching; stabilizes weak detections
+tracker_type: bytetrack  # Tracker backend; choices: [botsort, bytetrack] — bytetrack is faster but lacks ReID/GMC
+track_high_thresh: 0.5   # Detection confidence threshold for first-stage (high-confidence) association; [0.0, 1.0]
+track_low_thresh: 0.1    # Detection confidence threshold for second-stage (low-confidence) recovery; [0.0, 1.0]
+new_track_thresh: 0.6    # Minimum confidence to initialise a new track; higher reduces false track initiations; [0.0, 1.0]
+track_buffer: 30         # Frames to keep a lost track alive before deletion; higher tolerates longer occlusions; [1, inf)
+match_thresh: 0.8        # IoU/cost threshold for track-detection assignment; higher = stricter matching; [0.0, 1.0]
+fuse_score: true         # Fuse detection confidence with the IoU cost matrix; improves weak-detection robustness; [true, false]
