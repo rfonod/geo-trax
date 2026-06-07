@@ -73,6 +73,7 @@ Notes:
 import argparse
 import hashlib
 import logging
+import shutil
 import sys
 from pathlib import Path
 from typing import Union
@@ -114,8 +115,10 @@ def georeference(args: argparse.Namespace, logger: logging.Logger) -> None:
         args.no_master = not gproc['use_master']
 
     n_steps = 8 if args.no_master else 10
+    _bar_w = max(10, shutil.get_terminal_size().columns - 88)
     pbar = tqdm(total=n_steps, unit='step', colour='cyan', leave=True,
-                desc=f'{args.source.name} - georeferencing      ')
+                desc=f'{args.source.name} - georeferencing      ',
+                bar_format=f'{{l_bar}}{{bar:{_bar_w}}}{{r_bar}}')
 
     pbar.set_postfix_str('loading tracking data')
     location_id = determine_location_id(args.source, logger)
@@ -180,6 +183,7 @@ def georeference(args: argparse.Namespace, logger: logging.Logger) -> None:
     save_homography(args.source, homography_reference_to_ortho, logger)
     pbar.update()
 
+    pbar.set_postfix_str('done')
     pbar.close()
 
 

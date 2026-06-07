@@ -73,5 +73,5 @@ plotting:
   show: true                # Show plots in an interactive window — CLI: --show / --no-show
   aggregate: false          # When the input is a folder, merge trajectories from all videos sharing the same location ID into one plot per location — CLI: --aggregate / --no-aggregate
   plot_points: false        # Plot discrete trajectory points instead of connected lines — CLI: --points / --no-points
-  use_segmentations: false  # Colour-code trajectory backgrounds using road-segment orthophotos — CLI: --segmentations / --no-segmentations
+  use_segmentations: false  # Produce an extra trajectory plot on the lane segmentation overlay PNG alongside the plain-orthophoto plot (pre-generate overlays with tools/viz_segmentations.py) — CLI: --segmentations / --no-segmentations
   class_filter: []          # Vehicle class IDs to exclude from plots (e.g. [1] hides bus) — CLI: --class-filter

@@ -1,112 +1,173 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-# Authors: Haechan Cho (gkqkemwh@kaist.ac.kr)
+# Author: Haechan Cho (gkqkemwh@kaist.ac.kr)
 
 """
-viz_segmentations.py - Lane Segmentation Visualization Tool
+viz_segmentations.py - Road Segmentation Visualization Tool
 
-This script overlays lane segmentation data onto orthophoto images by drawing polygonal lane boundaries
-and labeling them with lane and section identifiers. It processes orthophotos and their corresponding
-CSV segmentation files to create annotated visualization images.
-
-The tool draws red contours for individual lanes with lane IDs and blue labels for section identifiers,
-providing a clear visual representation of the road network structure.
+Overlays lane and road-section segmentation data onto orthophoto images. For each
+orthophoto that has a matching CSV file, the script draws red polygonal lane contours
+with lane-number labels and blue section identifiers, then saves the annotated image.
 
 Usage:
-  python tools/viz_segmentations.py --ortho-folder <path> --segmentation-path <path> [options]
+  python tools/viz_segmentations.py <ortho_folder> [options]
 
 Arguments:
-  --ortho-folder <path>      : Path to folder containing orthophoto files (.png, .tif, .tiff).
-  --segmentation-path <path> : Path to folder containing lane segmentation CSV files.
+  ortho_folder               : Path to folder containing orthophoto images.
 
 Options:
   -h, --help                 : Show this help message and exit.
-  --ortho-suffix <str>       : File extension of orthophoto files (default: png).
+  -sf, --seg-folder <path>   : Path to folder containing lane segmentation CSV files
+                               (default: <ortho_folder>/segmentations).
+  -o, --output <path>        : Output folder for annotated images
+                               (default: same as --seg-folder).
+  -e, --ext <str>            : File extension of orthophoto images (default: png).
 
 Input:
-- Orthophoto images in specified format (.png, .tif, .tiff)
-- CSV segmentation files with matching filenames containing lane polygon coordinates
-- CSV format: columns for Section, lane ID, and 4 polygon corner coordinates (x1,y1,x2,y2,x3,y3,x4,y4)
+  - Orthophoto images (PNG/TIF/TIFF) in <ortho_folder>.
+  - CSV segmentation files with columns:
+      Section, Lane, tlx, tly, blx, bly, brx, bry, trx, try
+    where tl/bl/br/tr are top-left, bottom-left, bottom-right, top-right corner coordinates.
 
 Output:
-- Annotated orthophoto images saved to ortho_folder/segmentations/
-- Red polygonal lane boundaries with lane ID labels
-- Blue section labels positioned at section centers
-- PNG format output images
+  - Annotated orthophotos saved as PNG files to <output>.
+  - Red polygonal lane boundaries labeled with lane numbers.
+  - Blue section identifiers placed at the center of each section's middle lane.
 
 Notes:
-- CSV files must have the same base filename as corresponding orthophoto files
-- Lane polygons are drawn as 4-point contours with 15-pixel red borders
-- Section labels are positioned at the geometric center of middle lanes
-- Output images are saved in a 'segmentations' subfolder within the orthophoto folder
+  - CSV files must share the same filename stem as their orthophoto (e.g., A.csv <-> A.png).
+  - Orthophotos without a matching CSV are silently skipped.
+
+Examples:
+  1. Default run — CSVs and output both resolve to <ortho_folder>/segmentations/:
+       python tools/viz_segmentations.py data/orthophotos/
+
+  2. Explicit segmentation folder and output:
+       python tools/viz_segmentations.py data/orthophotos/ -sf data/segmentations/ -o data/output/
+
+  3. Process TIFF orthophotos:
+       python tools/viz_segmentations.py data/orthophotos/ -e tif
 """
 
 import argparse
+import logging
 from pathlib import Path
 
 import cv2
 import numpy as np
 import pandas as pd
-from shapely.geometry import Point
+
+LOGGER_PREFIX = f'[{Path(__file__).name}]'
+
+LANE_COLOR = (0, 0, 255)
+SECTION_COLOR = (255, 0, 0)
+LANE_BORDER = 15
+LANE_LABEL_SCALE = 3.0
+LANE_LABEL_THICKNESS = 3
+SECTION_LABEL_SCALE = 4.0
+SECTION_LABEL_THICKNESS = 8
+FONT = cv2.FONT_HERSHEY_SIMPLEX
 
 
-def process_ortho_images(ortho_folder, segmentation_path, ortho_suffix):
-    """
-    Draw the lane segmentation for each orthophoto in the ortho_folder.
-    """
-    ortho_files = list(ortho_folder.glob(f"*.{ortho_suffix}"))
+def visualize_segmentations(ortho_folder, seg_folder, output, ext, logger=None):
+    """Overlay lane segmentations onto each orthophoto and write annotated images."""
+    if logger is None:
+        logger = logging.getLogger(__name__)
+
+    ext = ext.lstrip('.')
+    ortho_files = sorted(ortho_folder.glob(f'*.{ext}'))
+    if not ortho_files:
+        logger.warning(f'{LOGGER_PREFIX} No *.{ext} files found in "{ortho_folder}".')
+        return
+
+    output.mkdir(parents=True, exist_ok=True)
+    n_saved = 0
 
     for ortho_file in ortho_files:
-        segmentation_file = segmentation_path / f"{ortho_file.stem}.csv"
-
-        if not segmentation_file.exists():
-            print(f"No segmentation file found for {ortho_file.name}. Skipping...")
+        seg_file = seg_folder / f'{ortho_file.stem}.csv'
+        if not seg_file.exists():
+            logger.warning(f'{LOGGER_PREFIX} No segmentation CSV for "{ortho_file.name}" — skipping.')
             continue
 
-        ortho = cv2.imread(str(ortho_file))
-        lanes = pd.read_csv(segmentation_file)
+        img = cv2.imread(str(ortho_file))
+        if img is None:
+            logger.warning(f'{LOGGER_PREFIX} Could not read "{ortho_file}" — skipping.')
+            continue
 
-        for i in range(len(lanes)):
-            Poly = np.array([[
-                [lanes.iloc[i, 2], lanes.iloc[i, 3]],
-                [lanes.iloc[i, 4], lanes.iloc[i, 5]],
-                [lanes.iloc[i, 6], lanes.iloc[i, 7]],
-                [lanes.iloc[i, 8], lanes.iloc[i, 9]]
-            ]])
+        lanes = pd.read_csv(seg_file)
+        _draw_lanes(img, lanes)
+        _draw_sections(img, lanes)
 
-            center = Point(int((lanes.iloc[i, 2] + lanes.iloc[i, 4] + lanes.iloc[i, 6] + lanes.iloc[i, 8]) / 4),
-                           int((lanes.iloc[i, 3] + lanes.iloc[i, 5] + lanes.iloc[i, 7] + lanes.iloc[i, 9]) / 4))
+        out_path = output / f'{ortho_file.stem}.png'
+        cv2.imwrite(str(out_path), img)
+        logger.info(f'{LOGGER_PREFIX} Saved "{out_path.name}".')
+        n_saved += 1
 
-            ortho = cv2.drawContours(ortho, Poly, -1, (0, 0, 255), 15)
-            text = str(lanes.iloc[i, 1])
-            ortho = cv2.putText(ortho, text, (int(center.x)-30, int(center.y)+20), 
-                                cv2.FONT_HERSHEY_SIMPLEX, 3, (0, 0, 255), 3, cv2.LINE_8)
-
-        sections = np.unique(lanes['Section'])
-        for section in sections:
-            section_lanes = lanes[lanes['Section'] == section].reset_index(drop=True)
-            mid = int(len(section_lanes) / 2)
-            center = Point(int((section_lanes.iloc[mid, 2] + section_lanes.iloc[mid, 4] + section_lanes.iloc[mid, 6] + section_lanes.iloc[mid, 8]) / 4),
-                           int((section_lanes.iloc[mid, 3] + section_lanes.iloc[mid, 5] + section_lanes.iloc[mid, 7] + section_lanes.iloc[mid, 9]) / 4))
-            text = str(section)
-            ortho = cv2.putText(ortho, text, (int(center.x) - 160, int(center.y)+20), 
-                                cv2.FONT_HERSHEY_SIMPLEX, 4, (255, 0, 0), 8, cv2.LINE_AA)
-
-        output_path = ortho_folder / "segmentations" / f"{ortho_file.stem}.png"
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        cv2.imwrite(str(output_path), ortho)
-        print(f"Processed and saved orthophoto for {ortho_file.stem}")
+    if n_saved:
+        logger.info(f'{LOGGER_PREFIX} Done — {n_saved} image(s) saved to "{output}".')
+    else:
+        logger.warning(f'{LOGGER_PREFIX} No images were processed.')
 
 
-def parse_opt():
-    parser = argparse.ArgumentParser(description="Visualize lane segmentations on orthophoto images.")
-    parser.add_argument('--ortho-folder', type=Path, required=True, help='Path to the folder containing orthophoto files (.png, .tif, .tiff).')
-    parser.add_argument('--segmentation-path', type=Path, required=True, help='Path to the folder containing lane and road segmentation csv files.')
-    parser.add_argument('--ortho-suffix', type=str, default='png', help='Suffix of the orthophoto files (e.g., "png", "tif").')
-    opt = parser.parse_args()
-    return opt
+def _draw_lanes(img, lanes):
+    """Draw a filled red contour and lane-number label for every lane row."""
+    for _, row in lanes.iterrows():
+        poly = np.array([[
+            [row['tlx'], row['tly']],
+            [row['blx'], row['bly']],
+            [row['brx'], row['bry']],
+            [row['trx'], row['try']],
+        ]], dtype=np.int32)
+        cx, cy = _poly_center(row)
+        cv2.drawContours(img, poly, -1, LANE_COLOR, LANE_BORDER)
+        cv2.putText(img, str(int(row['Lane'])), (cx - 30, cy + 20),
+                    FONT, LANE_LABEL_SCALE, LANE_COLOR, LANE_LABEL_THICKNESS, cv2.LINE_8)
 
 
-if __name__ == "__main__":
-    opt = parse_opt()
-    process_ortho_images(**vars(opt))
+def _draw_sections(img, lanes):
+    """Draw a blue section label at the centre of each section's middle lane."""
+    for section in lanes['Section'].unique():
+        sec_lanes = lanes[lanes['Section'] == section].reset_index(drop=True)
+        mid_row = sec_lanes.iloc[len(sec_lanes) // 2]
+        cx, cy = _poly_center(mid_row)
+        cv2.putText(img, str(section), (cx - 160, cy + 20),
+                    FONT, SECTION_LABEL_SCALE, SECTION_COLOR, SECTION_LABEL_THICKNESS, cv2.LINE_AA)
+
+
+def _poly_center(row):
+    """Return the integer centroid (cx, cy) of a four-corner lane polygon row."""
+    cx = int((row['tlx'] + row['blx'] + row['brx'] + row['trx']) / 4)
+    cy = int((row['tly'] + row['bly'] + row['bry'] + row['try']) / 4)
+    return cx, cy
+
+
+def get_cli_arguments():
+    parser = argparse.ArgumentParser(
+        description='Overlay road segmentation data onto orthophoto images.',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument('ortho_folder', type=Path,
+                        help='Path to folder containing orthophoto images.')
+    parser.add_argument('-sf', '--seg-folder', type=Path, default=None,
+                        help='Folder with lane segmentation CSV files '
+                             '(default: <ortho_folder>/segmentations).')
+    parser.add_argument('-o', '--output', type=Path, default=None,
+                        help='Output folder for annotated images (default: same as --seg-folder).')
+    parser.add_argument('-e', '--ext', type=str, default='png',
+                        help='File extension of orthophoto images (default: png).')
+    return parser.parse_args()
+
+
+if __name__ == '__main__':
+    logging.basicConfig(level=logging.INFO, format='%(message)s')
+    args = get_cli_arguments()
+
+    seg_folder = args.seg_folder or args.ortho_folder / 'segmentations'
+    output = args.output or seg_folder
+
+    visualize_segmentations(
+        ortho_folder=args.ortho_folder,
+        seg_folder=seg_folder,
+        output=output,
+        ext=args.ext,
+    )

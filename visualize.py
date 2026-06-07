@@ -69,6 +69,7 @@ Notes:
 
 import argparse
 import logging
+import shutil
 import sys
 from collections import defaultdict
 from pathlib import Path
@@ -327,7 +328,10 @@ def initialize_streams(args: argparse.Namespace, logger: logging.Logger) -> tupl
     else:
         vid_writer = None
 
-    pbar = tqdm(total=frame_count, unit='f', leave=True, colour='green', desc=f'{args.source.name} - visualizing @ mode {args.viz_mode}')
+    _bar_w = max(10, shutil.get_terminal_size().columns - 88)
+    pbar = tqdm(total=frame_count, unit='f', leave=True, colour='green',
+                desc=f'{args.source.name} - visualizing @ mode {args.viz_mode}',
+                bar_format=f'{{l_bar}}{{bar:{_bar_w}}}{{r_bar}}')
     return vid_reader, vid_writer, pbar
 
 
@@ -473,6 +477,7 @@ def finalize_video(vid_reader: cv2.VideoCapture, vid_writer: cv2.VideoWriter, pb
     pbar.total = frame_num + 1
     pbar.n = frame_num + 1
     pbar.refresh()
+    pbar.set_postfix_str('done')
     pbar.close()
 
 

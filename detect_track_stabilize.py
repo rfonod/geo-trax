@@ -55,6 +55,7 @@ Notes:
 
 import argparse
 import logging
+import shutil
 import sys
 import time
 from pathlib import Path
@@ -169,6 +170,7 @@ def track_with_model(model: Union[YOLO, RTDETR], config: Dict, logger: logging.L
         logger.info(f"Average pipeline time: {1000 / ((sum(yolo_time) + sum(stab_time)) / (1 + frame_num)):4.1f}fps.")
     finally:
         reader.release()
+        pbar.set_postfix_str('done')
         pbar.close()
 
     tracks, transforms = aggregate_results(frame_arr, track_id, bbox, bbox_stab, class_id, conf, transforms, logger)
@@ -211,8 +213,10 @@ def initialize_streams(config: Dict, imgsz: int, logger: logging.Logger) -> Tupl
         logger.error(f"Failed to open: '{video_filepath}'.")
         sys.exit(1)
 
+    _bar_w = max(10, shutil.get_terminal_size().columns - 88)
     pbar = tqdm(total=int(reader.get(cv2.CAP_PROP_FRAME_COUNT)), unit='f', leave=True, colour='yellow',
-                desc=f'{video_filepath.name} - {"" if config["args"].verbose else "processing"} @ {imgsz}px ')
+                desc=f'{video_filepath.name} - {"" if config["args"].verbose else "processing"} @ {imgsz}px ',
+                bar_format=f'{{l_bar}}{{bar:{_bar_w}}}{{r_bar}}')
     return reader, pbar
 
 

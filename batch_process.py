@@ -56,9 +56,10 @@ Georeferencing Options:
                         If not provided, '--ortho-folder / master_frames' will be used (default: None).
     --recompute, -r     : Force recompute master->ortho homography even if cached.
                         Defaults to cfg -> georef -> processing -> recompute.
-    --segmentation-folder, -osf <path> : Custom path to the folder containing orthophoto
-                        segmentation files (.csv). If not provided, '--ortho-folder / segmentations'
-                        will be used (default: None).
+    --segmentation-folder, -osf <path> : Path to the folder containing lane segmentation CSV files
+                        (used for lane assignment during georeferencing) and, when --segmentations
+                        is enabled, the corresponding overlay PNG files used as plot backgrounds.
+                        Defaults to '<ortho-folder>/segmentations'.
 
 Visualization Options:
     --save, -s          : Save the annotated output video to file. Defaults to cfg -> visualization -> save.
@@ -85,7 +86,10 @@ Plotting Options:
     --aggregate, -a     : When the input is a folder, merge trajectories from all videos sharing the same
                         location ID into a single plot per location. Defaults to cfg -> plotting -> aggregate.
     --points, -p        : Plot trajectory points instead of lines. Defaults to cfg -> plotting -> plot_points.
-    --segmentations, -seg : Colour-code trajectory backgrounds using road-segment orthophotos.
+    --segmentations, -seg : Produce an additional trajectory plot overlaid on the lane segmentation
+                        overlay PNG (from --segmentation-folder), alongside the standard
+                        plain-orthophoto plot. Requires pre-generated overlays
+                        (run: python tools/viz_segmentations.py <ortho_folder>/).
                         Defaults to cfg -> plotting -> use_segmentations.
     --plot-class-filter, -pcf <int> [<int> ...] : Class IDs to exclude from plots (e.g., -pcf 1 2).
                         Defaults to cfg -> plotting -> class_filter.
@@ -313,7 +317,7 @@ def parse_cli_args() -> argparse.Namespace:
     georef.add_argument("--no-master", "-nm", action="store_const", const=True, default=None, help="Disable the master frame approach regardless of config. When not set, cfg -> georef -> processing -> use_master applies.")
     georef.add_argument("--master-folder", "-mf", type=Path, default=None, help="Custom path to the folder containing master frame files (.png). If not provided, '--ortho-folder / master_frames' will be used.")
     georef.add_argument("--recompute", "-r", action="store_const", const=True, default=None, help="Force recompute master->ortho homography even if cached. Defaults to cfg -> georef -> processing -> recompute.")
-    georef.add_argument("--segmentation-folder", "-osf", type=Path, default=None, help="Custom path to the folder containing orthophoto segmentation files (.csv). If not provided, '--ortho-folder / segmentations' will be used.")
+    georef.add_argument("--segmentation-folder", "-osf", type=Path, default=None, help="Path to the folder containing lane segmentation CSV files (used for lane assignment during georeferencing) and, when --segmentations is enabled, the corresponding overlay PNG files used as plot backgrounds. Defaults to '<ortho-folder>/segmentations'.")
 
     viz = parser.add_argument_group('Visualization options')
     viz.add_argument('--save', '-s', action=argparse.BooleanOptionalAction, default=None, help='Save the annotated output video to file. Defaults to cfg -> visualization -> save.')
@@ -335,7 +339,7 @@ def parse_cli_args() -> argparse.Namespace:
     plotting.add_argument('--plot-show', '-psh', action=argparse.BooleanOptionalAction, default=None, help='Show plots in an interactive window. Defaults to cfg -> plotting -> show.')
     plotting.add_argument('--aggregate', '-a', action=argparse.BooleanOptionalAction, default=None, help='When the input is a folder, merge trajectories from all videos sharing the same location ID into a single plot per location. Defaults to cfg -> plotting -> aggregate.')
     plotting.add_argument('--points', '-p', action=argparse.BooleanOptionalAction, default=None, help='Plot trajectory points instead of lines. Defaults to cfg -> plotting -> plot_points.')
-    plotting.add_argument('--segmentations', '-seg', action=argparse.BooleanOptionalAction, default=None, help='Colour-code trajectory backgrounds using road-segment orthophotos. Defaults to cfg -> plotting -> use_segmentations.')
+    plotting.add_argument('--segmentations', '-seg', action=argparse.BooleanOptionalAction, default=None, help='Produce an additional trajectory plot overlaid on the lane segmentation overlay PNG (from --segmentation-folder), alongside the standard plain-orthophoto plot. Requires pre-generated overlays (run: python tools/viz_segmentations.py <ortho_folder>/). Defaults to cfg -> plotting -> use_segmentations.')
     plotting.add_argument('--plot-class-filter', '-pcf', type=int, nargs='+', default=None, help='Class IDs to exclude from plots (e.g., -pcf 1 2). Defaults to cfg -> plotting -> class_filter.')
 
     return parser.parse_args()
