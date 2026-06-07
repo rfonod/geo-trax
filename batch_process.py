@@ -82,8 +82,8 @@ Visualization Options:
 Plotting Options:
     --plot-save, -ps    : Save plots as PDF files. Defaults to cfg -> plotting -> save.
     --plot-show, -psh   : Show plots in an interactive window. Defaults to cfg -> plotting -> show.
-    --aggregate, -a     : Aggregate trajectories per location ID when plotting.
-                        Defaults to cfg -> plotting -> aggregate.
+    --aggregate, -a     : When the input is a folder, merge trajectories from all videos sharing the same
+                        location ID into a single plot per location. Defaults to cfg -> plotting -> aggregate.
     --points, -p        : Plot trajectory points instead of lines. Defaults to cfg -> plotting -> plot_points.
     --segmentations, -seg : Colour-code trajectory backgrounds using road-segment orthophotos.
                         Defaults to cfg -> plotting -> use_segmentations.
@@ -173,6 +173,7 @@ def run_plotting(path: Path, args: argparse.Namespace, logger: logging.Logger) -
             verbose=args.verbose,
             aggregate=args.aggregate,
             ortho_folder=args.ortho_folder,
+            segmentation_folder=args.segmentation_folder,
             segmentations=args.segmentations,
             id=0,
             points=args.points,
@@ -332,7 +333,7 @@ def parse_cli_args() -> argparse.Namespace:
     plotting = parser.add_argument_group('Plotting options')
     plotting.add_argument('--plot-save', '-ps', action=argparse.BooleanOptionalAction, default=None, help='Save plots as PDF files. Defaults to cfg -> plotting -> save.')
     plotting.add_argument('--plot-show', '-psh', action=argparse.BooleanOptionalAction, default=None, help='Show plots in an interactive window. Defaults to cfg -> plotting -> show.')
-    plotting.add_argument('--aggregate', '-a', action=argparse.BooleanOptionalAction, default=None, help='Aggregate trajectories per location ID when plotting. Defaults to cfg -> plotting -> aggregate.')
+    plotting.add_argument('--aggregate', '-a', action=argparse.BooleanOptionalAction, default=None, help='When the input is a folder, merge trajectories from all videos sharing the same location ID into a single plot per location. Defaults to cfg -> plotting -> aggregate.')
     plotting.add_argument('--points', '-p', action=argparse.BooleanOptionalAction, default=None, help='Plot trajectory points instead of lines. Defaults to cfg -> plotting -> plot_points.')
     plotting.add_argument('--segmentations', '-seg', action=argparse.BooleanOptionalAction, default=None, help='Colour-code trajectory backgrounds using road-segment orthophotos. Defaults to cfg -> plotting -> use_segmentations.')
     plotting.add_argument('--plot-class-filter', '-pcf', type=int, nargs='+', default=None, help='Class IDs to exclude from plots (e.g., -pcf 1 2). Defaults to cfg -> plotting -> class_filter.')

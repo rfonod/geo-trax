@@ -24,11 +24,14 @@ Options:
 Georeferencing Options:
   --ortho-folder, -of <path> : Custom path to the folder with orthophotos (.png).
                     Defaults to 'ORTHOPHOTOS' at the same level as 'PROCESSED' in 'input'.
+  --segmentation-folder, -osf <path> : Custom path to the folder with segmented orthophotos (.png).
+                    If not provided, '--ortho-folder / segmentations' will be used.
 
 Plotting Options:
   --save / --no-save, -s    : Save the plots as .pdf files. Defaults to cfg -> plotting -> save.
   --show / --no-show, -sh   : Show plots interactively. Defaults to cfg -> plotting -> show.
-  --aggregate, -a           : Aggregate data per location ID (intersection). Defaults to cfg -> plotting -> aggregate.
+  --aggregate, -a           : When the input is a folder, merge trajectories from all videos sharing the same
+                              location ID into a single plot per location. Defaults to cfg -> plotting -> aggregate.
   --points, -p              : Plot discrete trajectory points instead of lines. Defaults to cfg -> plotting -> plot_points.
   --segmentations, -seg     : Use segmented orthophotos for trajectory backgrounds. Defaults to cfg -> plotting -> use_segmentations.
   --id, -i                  : Vehicle ID to print/plot in detail (only for non-folder input) [default: 0].
@@ -59,6 +62,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
+from tqdm import tqdm
 
 from utils.utils import (
     PlotColors,
@@ -170,19 +174,51 @@ def plot_data(dfs: tuple, filepaths: tuple, coordinates: tuple, config: dict, lo
     """
     df_img, df_geo = dfs
     filepath_img, filepath_geo = filepaths[:2]
+    args = config['args']
 
-    plot_trajectories((df_img, df_geo), coordinates, filepaths, config, logger)
-
-    if config['args'].id > 0:
-        plot_kinematics_for_vehicle_id(df_geo, filepath_geo, config, logger)
+    n_steps = 1  # plot_trajectories
+    if args.id > 0 and df_geo is not None:
+        n_steps += 1  # plot_kinematics_for_vehicle_id
     elif df_geo is not None:
-        plot_kinematic_distribution(df_geo, filepath_geo, config, logger, 'speed')
-        plot_kinematic_distribution(df_geo, filepath_geo, config, logger, 'acceleration')
-        plot_kinematic_distribution_jointly(df_geo, filepath_geo, config, logger)
-        plot_class_distribution(df_geo, filepath_geo, config, logger)
-        plot_vehicle_dimensions_distribution(df_geo, filepath_geo, config, 'GEO', logger)
+        n_steps += 5  # speed, acceleration, joint, class, dimensions
     elif df_img is not None:
+        n_steps += 1  # dimensions
+
+    name = filepath_geo.name if filepath_geo else (filepath_img.name if filepath_img else 'unknown')
+    pbar = tqdm(total=n_steps, unit='plot', colour='magenta', leave=True,
+                desc=f'{name} - plotting            ')
+
+    pbar.set_postfix_str('trajectories')
+    plot_trajectories((df_img, df_geo), coordinates, filepaths, config, logger)
+    pbar.update()
+
+    if args.id > 0:
+        pbar.set_postfix_str('kinematics for vehicle')
+        plot_kinematics_for_vehicle_id(df_geo, filepath_geo, config, logger)
+        pbar.update()
+    elif df_geo is not None:
+        pbar.set_postfix_str('speed distribution')
+        plot_kinematic_distribution(df_geo, filepath_geo, config, logger, 'speed')
+        pbar.update()
+        pbar.set_postfix_str('acceleration distribution')
+        plot_kinematic_distribution(df_geo, filepath_geo, config, logger, 'acceleration')
+        pbar.update()
+        pbar.set_postfix_str('joint kinematic distribution')
+        plot_kinematic_distribution_jointly(df_geo, filepath_geo, config, logger)
+        pbar.update()
+        pbar.set_postfix_str('class distribution')
+        plot_class_distribution(df_geo, filepath_geo, config, logger)
+        pbar.update()
+        pbar.set_postfix_str('vehicle dimensions')
+        plot_vehicle_dimensions_distribution(df_geo, filepath_geo, config, 'GEO', logger)
+        pbar.update()
+    elif df_img is not None:
+        pbar.set_postfix_str('vehicle dimensions')
         plot_vehicle_dimensions_distribution(df_img, filepath_img, config, 'IMG', logger)
+        pbar.update()
+
+    pbar.set_postfix_str('done')
+    pbar.close()
 
 
 def determine_files_to_process(input_path: Path, skip_filenames_with: list, logger: logging.Logger) -> list:
@@ -223,8 +259,11 @@ def get_filepaths(file: Path, ortho_folder: Union[Path, None], config: dict, log
 
     location_id = determine_location_id(file, logger)
     if filepath_geo and ortho_folder:
-        subfolder = 'segmentations' if config['args'].segmentations else ''
-        filepath_ortho = ortho_folder / subfolder / f"{location_id}.png"
+        if config['args'].segmentations:
+            seg_folder = config['args'].segmentation_folder or ortho_folder / 'segmentations'
+            filepath_ortho = seg_folder / f"{location_id}.png"
+        else:
+            filepath_ortho = ortho_folder / f"{location_id}.png"
 
     return filepath_img, filepath_geo, filepath_ortho, location_id
 
@@ -669,6 +708,7 @@ def parse_cli_args() -> argparse.Namespace:
 
     georef = parser.add_argument_group('Georeferencing arguments')
     georef.add_argument("--ortho-folder", "-of", type=Path, default=None, help="Custom path to the folder with orthophotos (.png). Defaults to 'ORTHOPHOTOS' at the same level as 'PROCESSED' in 'input'.")
+    georef.add_argument("--segmentation-folder", "-osf", type=Path, default=None, help="Custom path to the folder with segmented orthophotos (.png). If not provided, '--ortho-folder / segmentations' will be used.")
 
     plotting = parser.add_argument_group('Plotting arguments')
     plotting.add_argument("--save", "-s", action=argparse.BooleanOptionalAction, default=None,
@@ -676,7 +716,7 @@ def parse_cli_args() -> argparse.Namespace:
     plotting.add_argument("--show", "-sh", action=argparse.BooleanOptionalAction, default=None,
                           help="Show plots interactively. Defaults to cfg -> plotting -> show.")
     plotting.add_argument("--aggregate", "-a", action=argparse.BooleanOptionalAction, default=None,
-                          help="Aggregate data per location ID (intersection). Defaults to cfg -> plotting -> aggregate.")
+                          help="When the input is a folder, merge trajectories from all videos sharing the same location ID into a single plot per location. Defaults to cfg -> plotting -> aggregate.")
     plotting.add_argument("--points", "-p", action=argparse.BooleanOptionalAction, default=None,
                           help="Plot discrete trajectory points instead of lines. Defaults to cfg -> plotting -> plot_points.")
     plotting.add_argument("--segmentations", "-seg", action=argparse.BooleanOptionalAction, default=None,

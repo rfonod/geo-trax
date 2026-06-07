@@ -65,7 +65,7 @@ plotting:
   skip_filenames_with: ['bus', 'ids', 'transf']  # Skip result files whose stem contains any of these substrings
   save: false               # Save plots as PDF files — CLI: --save / --no-save
   show: true                # Show plots in an interactive window — CLI: --show / --no-show
-  aggregate: false          # Aggregate trajectories per intersection/location ID — CLI: --aggregate / --no-aggregate
+  aggregate: false          # When the input is a folder, merge trajectories from all videos sharing the same location ID into one plot per location — CLI: --aggregate / --no-aggregate
   plot_points: false        # Plot discrete trajectory points instead of connected lines — CLI: --points / --no-points
   use_segmentations: false  # Colour-code trajectory backgrounds using road-segment orthophotos — CLI: --segmentations / --no-segmentations
   class_filter: []          # Vehicle class IDs to exclude from plots (e.g. [1] hides bus) — CLI: --class-filter
