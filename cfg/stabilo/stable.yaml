@@ -1,7 +1,7 @@
 # This is the high-accuracy Stabilo configuration (stable.yaml).
 #
-# Compared to default.yaml, this configuration uses full-resolution input (no downsampling)
-# and more keypoints, resulting in higher stabilization accuracy at the cost of slower processing.
+# Compared to default.yaml, this configuration uses full-resolution input (no downsampling),
+# resulting in higher-fidelity features and improved stabilization accuracy at the cost of slower processing.
 # Use this preset when stabilization quality is the priority.
 #
 # Full parameter reference: https://github.com/rfonod/stabilo

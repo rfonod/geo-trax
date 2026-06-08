@@ -1,5 +1,5 @@
 # Ultralytics 🚀 AGPL-3.0 License - https://ultralytics.com/license
-# Hyperparameters within the geo-trax project configured for single-image annotations that mimick the default
+# Hyperparameters within the geo-trax project configured for single-image annotations that mimic the default
 # geo-trax configuration file used within the trajectory extraction pipeline. This configuration file is used to
 # compare the performance of our model with the human annotated test set.
 
