@@ -206,7 +206,7 @@ def get_tracking_data(source: Path, logger: logging.Logger) -> tuple:
         logger.critical(f"No valid tracking data found in: '{tracking_data_filepath}'.")
     elif tracks.shape[1] < 14:
         logger.critical(f"Invalid tracking data format in: '{tracking_data_filepath}'. Expected at least 14 columns: \
-                [track_id, frame_num, x_c_unstab, y_c_unstab, w_unstab, h_unstab, x_c_stab, y_c_stab, \
+                [frame_id, vehicle_id, x_c_unstab, y_c_unstab, w_unstab, h_unstab, x_c_stab, y_c_stab, \
                     w_stab, h_stab, class_id, confidence, vehicle_length, vehicle_width]. Make sure you run \
                     geo-trax with stabilization enabled.")
         sys.exit(1)
@@ -274,7 +274,7 @@ def get_video_data(video_filepath: Path, ref_frame_num: int, logger: logging.Log
 
 def get_orthophoto(ortho_folder: Path, location_id: str, logger: logging.Logger) -> np.ndarray:
     """
-    Get orthophoto data (orthophoto image and dimensions) from the orthophoto
+    Load the orthophoto image from the orthophoto folder.
     """
     ortho_filepath = ortho_folder / (location_id + '.png')
     if not ortho_filepath.exists():
@@ -800,7 +800,7 @@ def apply_filter(data: np.ndarray, kernel_size: int, filter_type: str = 'gaussia
         polyorder = 2
         return savgol_filter(data, window_length=window_length, polyorder=polyorder, mode='nearest')
     else:
-        sys.exit(f"Error: Invalid filter type {filter_type}.")
+        raise ValueError(f"Invalid filter type: '{filter_type}'. Supported types: 'gaussian', 'savgol'.")
 
 
 def create_and_format_georeferenced_df(track_id, timestamps, frame_num, x_stab_ortho, y_stab_ortho, x_local, y_local,
@@ -813,7 +813,7 @@ def create_and_format_georeferenced_df(track_id, timestamps, frame_num, x_stab_o
         data = {
             'Vehicle_ID': track_id,
             'Timestamp': timestamps if timestamps.size > 0 else None,
-            'Frame_Number': frame_num if timestamps.size == 0 else None,
+            'Frame_Number': frame_num,
             'Ortho_X': x_stab_ortho,
             'Ortho_Y': y_stab_ortho,
             'Local_X': x_local,

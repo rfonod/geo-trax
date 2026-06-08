@@ -275,7 +275,7 @@ def get_ortho_folder(source: Path, ortho_folder: Union[Path, None], logger: logg
                 logger.critical(
                     f"Failed to find the orthophoto folder for source '{source}'. "
                     f"Please either provide a custom path using the --ortho-folder argument, "
-                    f"disable georeferencing with the --no-geo (or -ng) flag, "
+                    f"skip georeferencing with the --no-geo argument, "
                     f"or ensure that the default folder structure is in place."
                 )
                 sys.exit(1)
@@ -283,7 +283,7 @@ def get_ortho_folder(source: Path, ortho_folder: Union[Path, None], logger: logg
                 logger.info(
                     f"Failed to find the orthophoto folder for source '{source}'. "
                     f"Please either provide a custom path using the --ortho-folder argument, "
-                    f"disable georeferencing with the --no-geo (or -ng) flag, "
+                    f"skip georeferencing with the --no-geo argument, "
                     f"or ensure that the default folder structure is in place."
                 )
                 return None

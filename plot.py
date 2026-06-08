@@ -177,8 +177,10 @@ def handle_aggregation(data_at_location_id: dict, config: dict, logger: logging.
         config['args'].id = 0
     for location_id, data in data_at_location_id.items():
         logger.notice(f"Aggregating data for location ID {location_id}")
-        df_img = pd.concat(data['df_img_list'], ignore_index=True) if data['df_img_list'][0] is not None else None
-        df_geo = pd.concat(data['df_geo_list'], ignore_index=True) if data['df_geo_list'][0] is not None else None
+        valid_img = [df for df in data['df_img_list'] if df is not None]
+        df_img = pd.concat(valid_img, ignore_index=True) if valid_img else None
+        valid_geo = [df for df in data['df_geo_list'] if df is not None]
+        df_geo = pd.concat(valid_geo, ignore_index=True) if valid_geo else None
         filepath_img = data['filepath_img_base'] / f"{data['filepath_img_file']}.txt" if df_img is not None else None
         filepath_geo = data['filepath_geo_base'] / f"{data['filepath_geo_file']}.csv" if df_geo is not None else None
         plot_data((df_img, df_geo), (filepath_img, filepath_geo, data['filepath_ortho'], data['filepath_seg']), data['coordinates'], config, logger)
@@ -253,7 +255,7 @@ def determine_files_to_process(input_path: Path, skip_filenames_with: list, logg
         files = [f for f in files if not any(word in f.stem for word in skip_filenames_with)]
         files = sorted(files)
         if len(files) == 0:
-            logger.error(f"No valid video files ({VIDEO_FORMATS}) or result files ({RESULTS_FORMATS}) found in the input folder {input_path}")
+            logger.critical(f"No valid video files ({VIDEO_FORMATS}) or result files ({RESULTS_FORMATS}) found in the input folder {input_path}")
             sys.exit(1)
     return files
 
@@ -314,7 +316,6 @@ def read_trajectory_data(filepath_img: Path, filepath_geo: Path, config: dict, l
             ]
             if df_img.shape[1] == 14:
                 df_img.columns = all_columns
-                coordinates_img['Stabilized image coordinates'] = ['X_stabilized', 'Y_stabilized']
                 coordinates_img['Stabilized image coordinates'] = ['X_stabilized', 'Y_stabilized']
             elif df_img.shape[1] == 10:
                 df_img.columns = all_columns[:6] + all_columns[10:]

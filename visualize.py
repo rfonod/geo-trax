@@ -122,6 +122,7 @@ def visualize_results(args: argparse.Namespace, logger: logging.Logger) -> None:
     speed_lane_data = read_georeferenced_results(tracks_csv_filepath, logger)
     vid_reader, vid_writer, pbar = initialize_streams(args, logger)
 
+    frame_num = 0
     try:
         for frame_num, annotated_frame in process_frames(tracks, tracks_plotting, transforms, speed_lane_data, vid_reader, pbar, class_names, viz_config, args, logger):
             if args.show:
@@ -143,8 +144,8 @@ def process_frames(tracks: pd.DataFrame, tracks_plotting: pd.DataFrame, transfor
     viz_phase = args.plot_trajectories  # 0: normal processing phase, 1: trajectory plotting phase
     trajectory_frame = None
 
-    if viz_phase:
-        trajectory_frame = plot_trajectories(cap, tracks_plotting, args.cut_frame_left, args.cut_frame_right, viz_config)
+    if viz_phase and tracks_plotting is not None:
+        trajectory_frame = plot_trajectories(cap, tracks_plotting, args.cut_frame_left, args.cut_frame_right, viz_config, logger)
 
     while True:
         if viz_phase:
@@ -204,13 +205,13 @@ def get_and_verify_filepaths(args: argparse.Namespace, logger: logging.Logger) -
 
     tracks_txt_exist, tracks_txt_filepath = check_if_results_exist(args.source, 'processed')
     if not tracks_txt_exist:
-        logger.critical(f"Tracking results file '{tracks_txt_filepath}' not found. Make sure you have run the 'detect_track_stabilze.py' script.")
+        logger.critical(f"Tracking results file '{tracks_txt_filepath}' not found. Make sure you have run the 'detect_track_stabilize.py' script.")
         sys.exit(1)
 
     if args.viz_mode == 1:
         transforms_exist, transforms_filepath = check_if_results_exist(args.source, 'video_transformations')
         if not transforms_exist:
-            logger.critical(f"Transformation file '{transforms_filepath}' not found. Make sure you have enabled stabilization and run the 'detect_track_stabilze.py' script.")
+            logger.critical(f"Transformation file '{transforms_filepath}' not found. Make sure you have enabled stabilization and run the 'detect_track_stabilize.py' script.")
             sys.exit(1)
     else:
         transforms_filepath = None
@@ -236,8 +237,8 @@ def read_tracks(tracks_txt_filepath: Path, class_names: dict, args: argparse.Nam
     if args.plot_trajectories and tracks.shape[1] < 11:
         logger.error(f"No stabilized bounding boxes found in: '{tracks_txt_filepath}'. Disable the trajectory plotting option or re-run the 'detect_track_stabilize.py' script.")
         sys.exit(1)
-    else:
-        tracks_plotting = tracks[[0, 6, 7, 10]].copy()
+    tracks_plotting = tracks[[0, 6, 7, 10]].copy() if tracks.shape[1] >= 11 else None
+    if tracks_plotting is not None:
         tracks_plotting.columns = list(range(tracks_plotting.shape[1]))
     if args.viz_mode > 0:
         if tracks.shape[1] < 11:
@@ -297,7 +298,7 @@ def read_georeferenced_results(tracks_csv_filepath: Path, logger: logging.Logger
     if 'Frame_Number' in georeferenced_data.columns:
         georeferenced_data.rename(columns={'Frame_Number': 'Frame_ID'}, inplace=True)
     elif 'Timestamp' in georeferenced_data.columns:
-        georeferenced_data['Timestamp'] = georeferenced_data['Timestamp'].astype('category').cat.codes
+        logger.warning(f"'Frame_Number' column missing from '{tracks_csv_filepath}'. Speed/lane annotations may be misaligned. Re-run georeference.py to regenerate the CSV.")
         georeferenced_data.rename(columns={'Timestamp': 'Frame_ID'}, inplace=True)
     else:
         logger.error(f"Neither 'Frame_Number' nor 'Timestamp' column found in: '{tracks_csv_filepath}'.")
@@ -335,7 +336,7 @@ def initialize_streams(args: argparse.Namespace, logger: logging.Logger) -> tupl
     return vid_reader, vid_writer, pbar
 
 
-def plot_trajectories(cap: cv2.VideoCapture, tracks: pd.DataFrame, cut_frame_left: int, cut_frame_right: int, viz_config: dict) -> np.ndarray:
+def plot_trajectories(cap: cv2.VideoCapture, tracks: pd.DataFrame, cut_frame_left: int, cut_frame_right: int, viz_config: dict, logger: logging.Logger) -> np.ndarray:
     """
     Plot the trajectories on the reference frame with an alpha channel.
     """
@@ -351,7 +352,7 @@ def plot_trajectories(cap: cv2.VideoCapture, tracks: pd.DataFrame, cut_frame_lef
     line_width = viz_config['line_width']
     overlay = ref_frame.copy()
 
-    for _, row in tracks.iterrows():
+    for _, row in tracks_plot.iterrows():
         xc_stab, yc_stab, c = row[1:4]
         color = colors(c, True)
         cv2.circle(overlay, (int(xc_stab), int(yc_stab)), 1, color, line_width)
@@ -396,7 +397,7 @@ def annotate_frame(frame: np.ndarray, frame_num: int, tracks_frame: pd.DataFrame
                         speed = int(speed)
                 else:
                     speed = None
-                lane = int(lane) if not np.isnan(lane) else None
+                lane = int(lane) if lane not in ('', None) and pd.notna(lane) else None
 
         color = colors(c, True)
         x1n, y1n = int(xcn - wn / 2), int(ycn - hn / 2)

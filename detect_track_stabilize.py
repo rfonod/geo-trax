@@ -165,9 +165,10 @@ def track_with_model(model: Union[YOLO, RTDETR], config: Dict, logger: logging.L
     else:
         pbar.total = frame_num
         pbar.refresh()
-        logger.info(f"Average YOLOv8 (preprocess + inference + postprocess) time: {sum(yolo_time) / len(yolo_time):5.1f}ms.")
-        logger.info(f"Average stabilization time: {sum(stab_time) / len(stab_time):5.1f}ms") if stab_time else None
-        logger.info(f"Average pipeline time: {1000 / ((sum(yolo_time) + sum(stab_time)) / (1 + frame_num)):4.1f}fps.")
+        if yolo_time:
+            logger.info(f"Average YOLOv8 (preprocess + inference + postprocess) time: {sum(yolo_time) / len(yolo_time):5.1f}ms.")
+            logger.info(f"Average stabilization time: {sum(stab_time) / len(stab_time):5.1f}ms") if stab_time else None
+            logger.info(f"Average pipeline time: {1000 / ((sum(yolo_time) + sum(stab_time)) / (1 + frame_num)):4.1f}fps.")
     finally:
         reader.release()
         pbar.set_postfix_str('done')
@@ -326,7 +327,7 @@ def estimate_vehicle_dimensions(tracks: np.ndarray, config: Dict) -> np.ndarray:
     if valid_tracks.shape[1] > 8:
         idx_x, idx_y, idx_c = 6, 7, 10 # stabilized tracks available
     else:
-        idx_x, idx_y, idx_c = 2, 3, 6  # only unstabilzed tracks available
+        idx_x, idx_y, idx_c = 2, 3, 6  # only unstabilized tracks available
 
     for track in valid_tracks:
         track_id = int(track[1])
