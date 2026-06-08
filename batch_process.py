@@ -3,30 +3,48 @@
 # Author: Robert Fonod (robert.fonod@ieee.org)
 
 """
-batch_process.py - Process all videos in a folder (including sub-folders) or a single video file.
+batch_process.py - Primary Entry Point for the Full Geo-trax Pipeline
 
-This script allows batch processing of videos for detection, tracking, stabilization, georeferencing,
-and visualization. It provides extensive customization options for each processing step.
+This is the go-to script for running Geo-trax. It orchestrates the complete pipeline —
+detection/tracking/stabilization, georeferencing, visualization, and plotting — for a single
+video file or an entire directory tree of videos. Key features:
+- Smart skip-if-exists: each stage checks for its output before running; only missing results
+  are (re-)computed, making re-runs fast and safe.
+- Selective stage control: --viz-only, --geo-only, --no-geo, and --plot-only let you re-run
+  or skip any subset of stages without touching the rest.
+- Dry-run mode (--dry-run): prints exactly which files and stages would run — nothing is
+  executed. Combine with --verbose for a full preview before committing to a long batch job.
+- Batch-directory mode: recursively finds all videos under the input path, with optional
+  exclusion of specific sub-folders (--folders-exclude) or filename patterns
+  (--exclude-patterns). Note: --cut-frame-right is silently ignored in batch-directory mode
+  so that every video is always processed in full.
 
 Usage:
   python batch_process.py <input_path> [options]
 
 Arguments:
-  input_path : Path to the input directory or specific video file.
+  input_path : Path to a video file (.mp4, .mov, .avi, .mkv) or a directory that is searched
+               recursively for video files.
 
 Batch Processing Options:
-    --help, -h        : Show this help message and exit.
-    --yes, -y         : Automatically confirm prompts without waiting for user input (default: False).
-    --overwrite, -o   : Overwrite existing files that have already been processed (default: False).
-    --dry-run, -dr    : Simulate the command execution without actually running any processes (default: False).
-    --viz-only, -vo   : Only visualize the results; skip any processing operations (default: False).
-    --geo-only, -go   : Only run georeferencing; skip detection, tracking, and stabilization (default: False).
-    --no-geo, -ng     : Do not georeference the tracking data (default: False).
-    --plot, -pl       : Generate and save trajectory plots and distribution charts (default: False).
-    --plot-only, -po  : Only generate plots; skip processing, georeferencing, and visualization (default: False).
-    --folders-exclude, -fe <str> [<str> ...] : Folders to exclude from the batch processing (default: ['results']).
-    --exclude-patterns, -ep <str> [<str> ...] : File name patterns to exclude
-                        (e.g., --exclude-patterns car_test drone_2023) (default: None).
+    --help, -h          : Show this help message and exit.
+    --yes, -y           : Skip all overwrite confirmation prompts (use with --overwrite).
+    --overwrite, -o     : Re-run stages whose output already exists and overwrite it.
+    --dry-run, -dr      : Preview which files and stages would be processed without
+                          executing anything. Add --verbose for full per-stage detail.
+    --viz-only, -vo     : Skip detection, tracking, stabilization, and georeferencing;
+                          only (re-)run visualization. Requires existing .txt tracking results.
+    --geo-only, -go     : Skip detection, tracking, and stabilization; only (re-)run
+                          georeferencing. Requires existing .txt tracking results.
+    --no-geo, -ng       : Skip georeferencing; run detection/tracking/stabilization and
+                          visualization only (pixel-coordinate output).
+    --plot, -pl         : Also run the plotting stage after the main pipeline stages.
+    --plot-only, -po    : Skip all pipeline stages; only (re-)generate plots from existing
+                          results.
+    --folders-exclude, -fe <str> [<str> ...] : Sub-folder names to skip when scanning for
+                          videos (default: ['results']).
+    --exclude-patterns, -ep <str> [<str> ...] : Skip videos whose filename contains any of
+                          these substrings (e.g., --exclude-patterns test temp).
 
 Shared Options:
     --cfg, -c <path>    : Path to the main geo-trax configuration file (default: cfg/default.yaml).
@@ -35,84 +53,121 @@ Shared Options:
 
 Processing Options:
     --conf, -co <float>   : Detection confidence threshold. Defaults to cfg -> cfg_ultralytics -> conf.
-    --classes, -cls <int> [<int> ...] : Class IDs to extract (e.g., --classes 0 1 2).
-                        Defaults to cfg -> cfg_ultralytics -> classes.
+    --classes, -cls <int> [<int> ...] : Vehicle class IDs to extract (e.g., --classes 0 1 2).
+                          Defaults to cfg -> cfg_ultralytics -> classes.
     --cut-frame-left, -cfl <int> : Skip the first N frames. Defaults to cfg -> processing -> cut_frame_left.
-    --cut-frame-right, -cfr <int> : Stop processing after this frame. Only considered if input
-                        is a single video file. Defaults to cfg -> processing -> cut_frame_right.
+    --cut-frame-right, -cfr <int> : Stop at this frame number. Applies to single-file input only;
+                          silently ignored in batch-directory mode. Defaults to cfg -> processing -> cut_frame_right.
     For full detection and tracking control (model, IoU, image size, tracker settings, etc.),
     edit cfg/ultralytics/default.yaml and the linked tracker config.
 
 Georeferencing Options:
-    --ortho-folder, -of <path> : Custom path to the folder with orthophotos (.png, .tif, .txt).
-                        Defaults to 'ORTHOPHOTOS' at the same level as 'PROCESSED' in 'input' (default: None).
-    --geo-source, -gs <choice> : Source of georeferencing parameters. Choices: metadata-tif,
-                        text-file, center-text-file. Defaults to cfg -> georef -> processing -> geo_source.
-    --ref-frame, -rf <int> : Reference frame number (must match stabilization setting).
-                        Defaults to cfg -> georef -> processing -> ref_frame.
-    --no-master, -nm    : Disable the master frame approach regardless of config.
-                        When not set, cfg -> georef -> processing -> use_master applies.
-    --master-folder, -mf <path> : Custom path to the folder containing master frame files (.png).
-                        If not provided, '--ortho-folder / master_frames' will be used (default: None).
-    --recompute, -r     : Force recompute master->ortho homography even if cached.
-                        Defaults to cfg -> georef -> processing -> recompute.
-    --segmentation-folder, -osf <path> : Path to the folder containing lane segmentation CSV files
-                        (used for lane assignment during georeferencing) and, when --segmentations
-                        is enabled, the corresponding overlay PNG files used as plot backgrounds.
-                        Defaults to '<ortho-folder>/segmentations'.
+    --ortho-folder, -of <path>     : Path to the folder with orthophotos (.png, .tif, .txt).
+                          Defaults to 'ORTHOPHOTOS' at the same level as 'PROCESSED' in input.
+    --geo-source, -gs <choice>     : Georeferencing parameter source: metadata-tif, text-file, or
+                          center-text-file. Auto-detected if omitted.
+                          Defaults to cfg -> georef -> processing -> geo_source.
+    --ref-frame, -rf <int>         : Reference frame number; must match the value used for
+                          stabilization. Defaults to cfg -> georef -> processing -> ref_frame.
+    --no-master, -nm               : Disable the master-frame approach regardless of config.
+                          When not set, cfg -> georef -> processing -> use_master applies.
+    --master-folder, -mf <path>    : Path to the folder containing master frame files (.png).
+                          Defaults to '<ortho-folder>/master_frames'.
+    --recompute, -r                : Force recomputation of the master→orthophoto homography
+                          even if a cached result exists.
+                          Defaults to cfg -> georef -> processing -> recompute.
+    --segmentation-folder, -osf <path> : Path to the folder with road segmentation CSV files
+                          (used for lane assignment during georeferencing) and, when
+                          --segmentations is enabled, the corresponding overlay PNG files used
+                          as plot backgrounds. Defaults to '<ortho-folder>/segmentations'.
 
 Visualization Options:
-    --save, -s          : Save the annotated output video to file. Defaults to cfg -> visualization -> save.
-    --show, -sh         : Open a live preview window during processing. Defaults to cfg -> visualization -> show.
-    --viz-mode, -vm <int> : Frame source for annotation: 0=original, 1=stabilized, 2=reference frame.
-                        Defaults to cfg -> visualization -> viz_mode.
-    --plot-trajectories, -pt : Overlay trajectory positions on the first frame.
-                        Defaults to cfg -> visualization -> plot_trajectories.
-    --plot-delay, -pd <int> : Number of frames to display the trajectory overlay;
-                        only relevant when --plot-trajectories is enabled.
-                        Defaults to cfg -> visualization -> plot_delay.
-    --show-conf, -sc    : Include detection confidence in labels. Defaults to cfg -> visualization -> show_conf.
-    --show-lanes, -sl   : Include lane ID in labels. Defaults to cfg -> visualization -> show_lanes.
-    --show-class-names, -scn : Include class name in labels. Defaults to cfg -> visualization -> show_class_names.
-    --hide-labels, -hl  : Suppress all label text. Defaults to cfg -> visualization -> hide_labels.
-    --hide-tracks, -ht  : Suppress track tail lines. Defaults to cfg -> visualization -> hide_tracks.
-    --hide-speed, -hs   : Suppress speed values in labels. Defaults to cfg -> visualization -> hide_speed.
-    --speed-unit, -su <choice> : Speed display unit: km/h or mi/h. Defaults to cfg -> visualization -> speed_unit.
-    --class-filter, -cf <int> [<int> ...] : Class IDs to exclude (e.g., -cf 1 2). Defaults to cfg -> visualization -> class_filter.
+    --save / --no-save, -s  : Save the annotated output video to file.
+                          Defaults to cfg -> visualization -> save.
+    --show / --no-show, -sh : Open a live preview window during processing.
+                          Defaults to cfg -> visualization -> show.
+    --viz-mode, -vm <int>   : Annotation source frame: 0=original, 1=stabilized, 2=reference
+                          frame. Defaults to cfg -> visualization -> viz_mode.
+    --plot-trajectories, -pt : Overlay all trajectory positions on the first frame before the
+                          main annotation pass. Defaults to cfg -> visualization -> plot_trajectories.
+    --plot-delay, -pd <int> : Frames to hold the trajectory overlay; only relevant with
+                          --plot-trajectories. Defaults to cfg -> visualization -> plot_delay.
+    --show-conf, -sc    : Include detection confidence score in bounding-box labels.
+                          Defaults to cfg -> visualization -> show_conf.
+    --show-lanes, -sl   : Include lane ID in bounding-box labels (requires georeferencing).
+                          Defaults to cfg -> visualization -> show_lanes.
+    --show-class-names, -scn : Include vehicle class name in bounding-box labels.
+                          Defaults to cfg -> visualization -> show_class_names.
+    --hide-labels, -hl  : Suppress all text label overlays.
+                          Defaults to cfg -> visualization -> hide_labels.
+    --hide-tracks, -ht  : Suppress track tail lines.
+                          Defaults to cfg -> visualization -> hide_tracks.
+    --hide-speed, -hs   : Suppress speed values in labels (requires georeferencing).
+                          Defaults to cfg -> visualization -> hide_speed.
+    --speed-unit, -su <choice> : Speed display unit: km/h or mi/h.
+                          Defaults to cfg -> visualization -> speed_unit.
+    --class-filter, -cf <int> [<int> ...] : Vehicle class IDs to exclude from visualization
+                          (e.g., -cf 1 2 hides buses and trucks).
+                          Defaults to cfg -> visualization -> class_filter.
 
 Plotting Options:
-    --plot-save, -ps    : Save plots as PDF files. Defaults to cfg -> plotting -> save.
-    --plot-show, -psh   : Show plots in an interactive window. Defaults to cfg -> plotting -> show.
-    --aggregate, -a     : When the input is a folder, merge trajectories from all videos sharing the same
-                        location ID into a single plot per location. Defaults to cfg -> plotting -> aggregate.
-    --points, -p        : Plot trajectory points instead of lines. Defaults to cfg -> plotting -> plot_points.
-    --segmentations, -seg : Produce an additional trajectory plot overlaid on the lane segmentation
-                        overlay PNG (from --segmentation-folder), alongside the standard
-                        plain-orthophoto plot. Requires pre-generated overlays
-                        (run: python tools/viz_segmentations.py <ortho_folder>/).
-                        Defaults to cfg -> plotting -> use_segmentations.
-    --plot-class-filter, -pcf <int> [<int> ...] : Class IDs to exclude from plots (e.g., -pcf 1 2).
-                        Defaults to cfg -> plotting -> class_filter.
+    --plot-save / --no-plot-save, -ps  : Save plots as PDF files.
+                          Defaults to cfg -> plotting -> save.
+    --plot-show / --no-plot-show, -psh : Show plots interactively.
+                          Defaults to cfg -> plotting -> show.
+    --aggregate, -a     : When the input is a folder, merge trajectories from all videos
+                          sharing the same location ID into one combined plot per location.
+                          Defaults to cfg -> plotting -> aggregate.
+    --points, -p        : Plot discrete trajectory points instead of connected lines.
+                          Defaults to cfg -> plotting -> plot_points.
+    --segmentations, -seg : Produce an additional trajectory plot overlaid on the lane
+                          segmentation overlay PNG (pre-generate with tools/viz_segmentations.py).
+                          Defaults to cfg -> plotting -> use_segmentations.
+    --plot-class-filter, -pcf <int> [<int> ...] : Vehicle class IDs to exclude from plots
+                          (e.g., -pcf 1 2 excludes buses and trucks).
+                          Defaults to cfg -> plotting -> class_filter.
 
 Examples:
-  1. Process a directory without saving/showing video visualization:
-     python batch_process.py path/to/videos/
+  1. Full pipeline on a single video — detect, georeference, save annotated video with lane
+     IDs, and generate plots:
+        python batch_process.py data/video.mp4 -of data/orthophotos -osf data/segmentations \
+            -mf data/master_frames --save --show-lanes --plot
 
-  2. Process a directory without georeferencing and save video visualization:
-     python batch_process.py path/to/videos/ --no-geo --save
+  2. Pixel-coordinate only (no georeferencing) — detect, track, stabilize, save annotated
+     video with class names and confidence scores, and generate plots:
+        python batch_process.py data/U_video_cut.mp4 --no-geo --save --show-class-names --show-conf --plot
 
-  3. Process a single video file with a custom configuration file:
-     python batch_process.py path/to/video.mp4 -c cfg/custom_config.yaml
+  3. Dry-run on a directory to preview what would be processed without executing anything:
+        python batch_process.py path/to/PROCESSED/ --dry-run --verbose
 
-  4. Save video visualization without re-running detection, tracking, stabilization, and georeferencing:
-     python batch_process.py video.mp4 --save --viz-only
+  4. Re-run visualization only (existing .txt results) — save with lane IDs, stabilized view:
+        python batch_process.py data/video.mp4 --viz-only --save --show-lanes --viz-mode 1
 
-  5. Overwrite existing files with no confirmation needed:
-     python batch_process.py path/to/videos/ -o -y
+  5. Re-run georeferencing only with a forced homography recompute:
+        python batch_process.py data/video.mp4 --geo-only -of data/orthophotos --recompute
 
-  6. Generate and save trajectory plots after processing:
-     python batch_process.py path/to/videos/ --plot
+  6. Batch-process a directory, overwrite all existing results without prompts, save videos:
+        python batch_process.py path/to/PROCESSED/ -of path/to/ORTHOPHOTOS \
+            -osf path/to/segmentations --save --overwrite --yes
 
+  7. Generate aggregated trajectory plots only from existing results, excluding buses and trucks:
+        python batch_process.py path/to/PROCESSED/ --plot-only --aggregate \
+            -of path/to/ORTHOPHOTOS --plot-class-filter 1 2
+
+  8. Use a lenient detection preset and skip videos matching 'test' or 'tmp' in their name:
+        python batch_process.py path/to/videos/ -c cfg/lenient.yaml \
+            --exclude-patterns test tmp --no-geo --save
+
+Notes:
+  - Skip-if-exists: each stage silently skips if its output file already exists. Use
+    --overwrite (with optional --yes) to force re-execution of any stage.
+  - Stage dependencies: georeferencing and visualization both require .txt tracking results.
+    If these are missing, the dependent stage is skipped with an error message.
+  - --cut-frame-right is reset to null in batch-directory mode; all videos are always
+    processed through to their last frame.
+  - --dry-run does not create the log file; use it freely before committing to a long run.
+  - For full detection, tracking, and stabilization control (model, IoU, image size, tracker
+    algorithm, stabilizer settings), edit the linked sub-configs in cfg/.
 """
 
 import argparse
@@ -245,7 +300,7 @@ def should_process_file(file: Path, args: argparse.Namespace, logger: logging.Lo
     suffix = determine_suffix_and_fourcc()[0]
     txt_exists = check_if_results_exist(file, "processed")[0]
     csv_exists = check_if_results_exist(file, "georeferenced")[0]
-    vid_exists = check_if_results_exist(file, "visualized", args.viz_mode, suffix)[0]
+    vid_exists = check_if_results_exist(file, "visualized", args.viz_mode if args.viz_mode is not None else 0, suffix)[0]
 
     processing_steps = "detection, tracking, and stabilization"
     if action == "Detecting, tracking, and stabilizing":
@@ -280,7 +335,7 @@ def parse_cli_args() -> argparse.Namespace:
     """
     Parse command-line arguments.
     """
-    parser = argparse.ArgumentParser(description='Process all videos in a folder (including sub-folders) or a single video file.')
+    parser = argparse.ArgumentParser(description='Primary entry point for the full Geo-trax pipeline. Runs detection/tracking/stabilization, georeferencing, visualization, and plotting for a single video file or an entire directory tree. Stages are skipped if their output already exists; use --overwrite to force re-execution.')
 
     # Required arguments
     parser.add_argument('input', type=Path, help='Path to the input directory or video file (e.g., path/to/video_dir/)')
@@ -288,11 +343,11 @@ def parse_cli_args() -> argparse.Namespace:
     batch = parser.add_argument_group('Batch processing options')
     batch.add_argument('--yes', '-y', action='store_true', help='Automatically confirm prompts without waiting for user input')
     batch.add_argument('--overwrite', '-o', action='store_true', help='Overwrite existing files that have already been processed')
-    batch.add_argument('--dry-run', '-dr', action='store_true', help='Simulate the command execution without actually running any processes')
-    batch.add_argument('--viz-only', '-vo', action='store_true', help='Only visualize the results; skip any processing operations')
+    batch.add_argument('--dry-run', '-dr', action='store_true', help='Preview which files and stages would be processed without executing anything. Add --verbose for full per-stage detail.')
+    batch.add_argument('--viz-only', '-vo', action='store_true', help='Skip detection, tracking, stabilization, and georeferencing; only (re-)run visualization. Requires existing .txt tracking results.')
     batch.add_argument('--geo-only', '-go', action='store_true', help='Only run georeferencing; skip detection, tracking, and stabilization')
     batch.add_argument('--no-geo', '-ng', action='store_true', help='Do not georeference the tracking data')
-    batch.add_argument('--plot', '-pl', action='store_true', help='Generate and save trajectory plots and distribution charts')
+    batch.add_argument('--plot', '-pl', action='store_true', help='Also run the plotting stage after the main pipeline stages. Saving and display are controlled separately by --plot-save and --plot-show (or cfg -> plotting -> save/show).')
     batch.add_argument('--plot-only', '-po', action='store_true', help='Only generate plots; skip processing, georeferencing, and visualization')
     batch.add_argument("--folders-exclude", "-fe", type=str, nargs='+', default=['results'], help="Folders to exclude from the batch processing")
     batch.add_argument("--exclude-patterns", "-ep", type=str, nargs='+', default=None, help="File name patterns to exclude (e.g., --exclude-patterns car_test drone_2023)")
