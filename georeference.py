@@ -204,6 +204,7 @@ def get_tracking_data(source: Path, logger: logging.Logger) -> tuple:
 
     if tracks.size == 0 or tracks.ndim != 2:
         logger.critical(f"No valid tracking data found in: '{tracking_data_filepath}'.")
+        sys.exit(1)
     elif tracks.shape[1] < 14:
         logger.critical(f"Invalid tracking data format in: '{tracking_data_filepath}'. Expected at least 14 columns: \
                 [frame_id, vehicle_id, x_c_unstab, y_c_unstab, w_unstab, h_unstab, x_c_stab, y_c_stab, \
@@ -263,6 +264,7 @@ def get_video_data(video_filepath: Path, ref_frame_num: int, logger: logging.Log
     fps = cap.get(cv2.CAP_PROP_FPS)
     if fps == 0:
         logger.critical(f"Failed to retrieve FPS from video file: '{video_filepath}'.")
+        cap.release()
         sys.exit(1)
 
     frame_dimensions = ref_frame.shape[:2]
@@ -344,7 +346,8 @@ def get_geo_params_source(geo_source: Union[str, None], ortho_folder: Path, loca
     """
     if geo_source is not None:
         if geo_source not in ['metadata-tif', 'text-file', 'center-text-file']:
-            logger.error(f"Invalid --geo-source argument: '{geo_source}'. Use 'metadata-tif', 'text-file', or 'center-text-file'.")
+            logger.critical(f"Invalid --geo-source argument: '{geo_source}'. Use 'metadata-tif', 'text-file', or 'center-text-file'.")
+            sys.exit(1)
         return geo_source
 
     ortho_filepath = ortho_folder / (location_id + '.png')
@@ -553,7 +556,7 @@ def compute_homography(img_src: np.ndarray, img_dst: np.ndarray, src_dst: tuple,
         kpt_dst, desc_dst = sift.detectAndCompute(img_dst_gray, None)  # type: ignore
 
         if kpt_src is None or kpt_dst is None:
-            return None, None
+            return None, None, None
 
         desc_src = convert_to_rootsift(desc_src, rsift_eps)
         desc_dst = convert_to_rootsift(desc_dst, rsift_eps)
@@ -562,7 +565,7 @@ def compute_homography(img_src: np.ndarray, img_dst: np.ndarray, src_dst: tuple,
         try:
             matches = bf.knnMatch(desc_src, desc_dst, k=2)
         except cv2.error:
-            return None, None
+            return None, None, None
 
         good_matches = []
         for pair in matches:
@@ -572,13 +575,16 @@ def compute_homography(img_src: np.ndarray, img_dst: np.ndarray, src_dst: tuple,
                     good_matches.append(m)
 
         if len(good_matches) < 4:
-            return None, None
+            return None, None, None
 
         pts_src = np.array([kpt_src[m.queryIdx].pt for m in good_matches], dtype=np.float32).reshape(-1, 2)
         pts_dst = np.array([kpt_dst[m.trainIdx].pt for m in good_matches], dtype=np.float32).reshape(-1, 2)
 
         homography, inliers = cv2.findHomography(pts_src, pts_dst, method = ransac_method, confidence = ransac_confidence,
                                                  ransacReprojThreshold = ransac_epipolar_threshold, maxIters = ransac_max_iter)
+
+        if homography is None or inliers is None:
+            return None, None, None
 
         stats_txt = f"Keypoints in {src_dst[0]} frame: {len(kpt_src)}, in {src_dst[1]}: {len(kpt_dst)}. Inliers: {inliers.sum()} out of {len(inliers)} matches"
 

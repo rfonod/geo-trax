@@ -296,7 +296,7 @@ def read_trajectory_data(filepath_img: Path, filepath_geo: Path, config: dict, l
     if filepath_img:
         try:
             delimiter = detect_delimiter(filepath_img)
-            df_img = pd.read_csv(filepath_img, sep=delimiter, header=None, skiprows=0)
+            df_img = pd.read_csv(filepath_img, sep=delimiter, header=None)
             coordinates_img = {'Unstabilized image coordinates': ['X_unstabilized', 'Y_unstabilized']}
             all_columns = [
                 'Frame_ID',
@@ -559,7 +559,7 @@ def plot_kinematic_distribution_jointly(df: pd.DataFrame, filepath: Path, config
     plt.xlabel('' if args.save else 'Vehicle class')
     handles, labels = ax1.get_legend_handles_labels()
     ax1.legend(handles=handles, labels=labels, title=None, loc='best', ncol=2, fontsize=config['plotting']['savefig_font_size'] - 1 if args.save else None)
-    save_or_show_plot('Speed_and_accleration_distribution', filepath, args, logger)
+    save_or_show_plot('Speed_and_acceleration_distribution', filepath, args, logger)
 
 
 def report_high_value_instances(df: pd.DataFrame, flag: str, logger: logging.Logger) -> None:
@@ -597,13 +597,14 @@ def plot_class_distribution(df: pd.DataFrame, filepath: Path, config: dict, logg
     df = df.copy()
     df = df.groupby('Vehicle_ID').first().reset_index()
 
+    order = [cls for cls in config['class_names'].values() if cls in df['Vehicle_Class'].unique()]
     plt.figure()
-    sns.countplot(data=df, x='Vehicle_Class', order=[cls for cls in config['class_names'].values() if cls in df['Vehicle_Class'].unique()], edgecolor='black', hue='Vehicle_Class')
+    sns.countplot(data=df, x='Vehicle_Class', order=order, edgecolor='black', hue='Vehicle_Class')
+    position = {category: idx for idx, category in enumerate(order)}
     value_counts = df['Vehicle_Class'].value_counts()
-    for i, category in config['class_names'].items():
-        if category in value_counts:
-            count = value_counts.get(category, 0)
-            plt.text(i, count, str(count), ha='center', va='bottom', fontsize=config['plotting']['savefig_font_size'] - 3 if args.save else 10)
+    for category, count in value_counts.items():
+        if category in position:
+            plt.text(position[category], count, str(count), ha='center', va='bottom', fontsize=config['plotting']['savefig_font_size'] - 3 if args.save else 10)
     plt.title('' if args.save else f'Vehicle class distribution for {filepath.stem.replace("_", " & ")}')
     plt.xlabel('' if args.save else 'Vehicle class')
     plt.ylabel('Count', fontsize=config['plotting']['savefig_font_size'] if args.save else None)
@@ -725,7 +726,7 @@ def parse_cli_args() -> argparse.Namespace:
     """
     Parse command-line arguments
     """
-    parser = argparse.ArgumentParser(description="Trajectory visualization tool.")
+    parser = argparse.ArgumentParser(description="Trajectory and distribution plotting tool.")
 
     # Required arguments
     parser.add_argument("input", type=Path, help="Path to the video source or .txt/.csv file or folder with video or .csv/.txt files")

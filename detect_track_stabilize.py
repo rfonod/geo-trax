@@ -161,14 +161,14 @@ def track_with_model(model: Union[YOLO, RTDETR], config: Dict, logger: logging.L
             pbar.update()
     except Exception as e:
         logger.error(f"Error processing: '{config['main']['args'].source}' due to: {e}")
-        return np.array([[]]), np.array([[]])
+        return np.empty((0, 12), dtype=np.float32), np.empty((0, 10))
     else:
         pbar.total = frame_num
         pbar.refresh()
         if yolo_time:
             logger.info(f"Average YOLOv8 (preprocess + inference + postprocess) time: {sum(yolo_time) / len(yolo_time):5.1f}ms.")
             logger.info(f"Average stabilization time: {sum(stab_time) / len(stab_time):5.1f}ms") if stab_time else None
-            logger.info(f"Average pipeline time: {1000 / ((sum(yolo_time) + sum(stab_time)) / (1 + frame_num)):4.1f}fps.")
+            logger.info(f"Average pipeline time: {1000 * len(yolo_time) / (sum(yolo_time) + sum(stab_time)):4.1f}fps.")
     finally:
         reader.release()
         pbar.set_postfix_str('done')
@@ -247,12 +247,13 @@ def aggregate_results(frame_arr: list, track_id: list, bbox: list, bbox_stab: li
         conf = np.concatenate(conf, axis=0) if conf else np.array([[]])
 
         tracks = np.concatenate([frame_arr, track_id, bbox, bbox_stab, class_id, conf], axis=1, dtype=np.float32)
-        tracks = tracks[tracks[:, 1] != -1]
-        transforms = np.concatenate(transforms, axis=0) if transforms else np.array([[]])
+        if tracks.size > 0:
+            tracks = tracks[tracks[:, 1] != -1]
+        transforms = np.concatenate(transforms, axis=0) if transforms else np.empty((0, 10))
     except Exception as e:
         logger.error(f'Error aggregating results: {e}')
-        tracks = np.array([[]])
-        transforms = np.array([[]])
+        tracks = np.empty((0, 12))
+        transforms = np.empty((0, 10))
     return tracks, transforms
 
 
@@ -270,6 +271,8 @@ def remove_short_tracks(tracks: np.ndarray, logger: logging.Logger, min_length: 
     """
     Remove tracks with trajectory length shorter than specified.
     """
+    if tracks.size == 0:
+        return tracks
     unique_ids = np.unique(tracks[:, 1]).astype(int)
     count = 0
     for track_id in unique_ids:

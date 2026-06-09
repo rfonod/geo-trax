@@ -119,7 +119,7 @@ def visualize_results(args: argparse.Namespace, logger: logging.Logger) -> None:
     tracks_txt_filepath, transforms_filepath, tracks_csv_filepath = get_and_verify_filepaths(args, logger)
     tracks, tracks_plotting = read_tracks(tracks_txt_filepath, class_names, args, logger)
     transforms = read_transforms(transforms_filepath, logger)
-    speed_lane_data = read_georeferenced_results(tracks_csv_filepath, logger)
+    speed_lane_data = read_georeferenced_results(tracks_csv_filepath, tracks, logger)
     vid_reader, vid_writer, pbar = initialize_streams(args, logger)
 
     frame_num = 0
@@ -143,6 +143,7 @@ def process_frames(tracks: pd.DataFrame, tracks_plotting: pd.DataFrame, transfor
     frame_num = 0
     viz_phase = args.plot_trajectories  # 0: normal processing phase, 1: trajectory plotting phase
     trajectory_frame = None
+    ref_frame = None
 
     if viz_phase and tracks_plotting is not None:
         trajectory_frame = plot_trajectories(cap, tracks_plotting, args.cut_frame_left, args.cut_frame_right, viz_config, logger)
@@ -181,7 +182,8 @@ def process_frames(tracks: pd.DataFrame, tracks_plotting: pd.DataFrame, transfor
             h, w = frame.shape[:2]
             frame = cv2.warpPerspective(frame, transforms[frame_num], (w, h))
         elif args.viz_mode == 2:
-            frame = ref_frame.copy()
+            if ref_frame is not None:
+                frame = ref_frame.copy()
 
         annotated_frame = annotate_frame(frame, frame_num, tracks_frame, track_history, class_names, speed_lane_frame, viz_config, args, logger)
         yield frame_num, annotated_frame
@@ -269,6 +271,8 @@ def read_transforms(transforms_filepath: Path, logger: logging.Logger) -> dict:
     delimiter = detect_delimiter(transforms_filepath)
     transforms = np.loadtxt(transforms_filepath, delimiter=delimiter)
 
+    if transforms.ndim == 1:
+        transforms = transforms.reshape(1, -1)
     if transforms.shape[1] != 10:
         logger.error(f"Not valid transforms in: '{transforms_filepath}'.")
         sys.exit(1)
@@ -287,7 +291,7 @@ def read_transforms(transforms_filepath: Path, logger: logging.Logger) -> dict:
     return transforms
 
 
-def read_georeferenced_results(tracks_csv_filepath: Path, logger: logging.Logger) -> pd.DataFrame:
+def read_georeferenced_results(tracks_csv_filepath: Path, tracks: pd.DataFrame, logger: logging.Logger) -> pd.DataFrame:
     """
     Read the georeferenced tracking results from the CSV file.
     """
@@ -298,11 +302,21 @@ def read_georeferenced_results(tracks_csv_filepath: Path, logger: logging.Logger
     if 'Frame_Number' in georeferenced_data.columns:
         georeferenced_data.rename(columns={'Frame_Number': 'Frame_ID'}, inplace=True)
     elif 'Timestamp' in georeferenced_data.columns:
-        logger.warning(f"'Frame_Number' column missing from '{tracks_csv_filepath}'. Speed/lane annotations may be misaligned. Re-run georeference.py to regenerate the CSV.")
-        georeferenced_data.rename(columns={'Timestamp': 'Frame_ID'}, inplace=True)
+        start_frame = int(tracks[0].min())
+        csv_timestamps = sorted(georeferenced_data['Timestamp'].unique())
+        ts_to_frame = {ts: start_frame + i for i, ts in enumerate(csv_timestamps)}
+        georeferenced_data['Frame_ID'] = georeferenced_data['Timestamp'].map(ts_to_frame)
+        logger.warning(
+            f"'Frame_Number' column missing from '{tracks_csv_filepath.name}'. "
+            f"Frame IDs reconstructed from tracking results assuming no dropped frames. "
+            f"Re-run georeference.py to regenerate the CSV with proper frame numbers."
+        )
     else:
-        logger.error(f"Neither 'Frame_Number' nor 'Timestamp' column found in: '{tracks_csv_filepath}'.")
-        sys.exit(1)
+        logger.warning(
+            f"Neither 'Frame_Number' nor 'Timestamp' column found in '{tracks_csv_filepath.name}'. "
+            f"Speed/lane data cannot be displayed. Re-run georeference.py to regenerate the CSV."
+        )
+        return None
     georeferenced_data = georeferenced_data[['Frame_ID', 'Vehicle_ID', 'Vehicle_Speed', 'Lane_Number']]
     return georeferenced_data
 
