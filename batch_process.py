@@ -36,11 +36,10 @@ Batch Processing Options:
                           only (re-)run visualization. Requires existing .txt tracking results.
     --geo-only, -go     : Skip detection, tracking, and stabilization; only (re-)run
                           georeferencing. Requires existing .txt tracking results.
-    --no-geo, -ng       : Skip georeferencing; run detection/tracking/stabilization and
-                          visualization only (pixel-coordinate output).
-    --plot, -pl         : Also run the plotting stage after the main pipeline stages.
     --plot-only, -po    : Skip all pipeline stages; only (re-)generate plots from existing
                           results.
+    --no-geo, -ng       : Skip georeferencing; run detection/tracking/stabilization and
+                          visualization only (pixel-coordinate output).
     --folders-exclude, -fe <str> [<str> ...] : Sub-folder names to skip when scanning for
                           videos (default: ['results']).
     --exclude-patterns, -ep <str> [<str> ...] : Skip videos whose filename contains any of
@@ -128,14 +127,13 @@ Plotting Options:
                           Defaults to cfg -> plotting -> class_filter.
 
 Examples:
-  1. Full pipeline on a single video — detect, georeference, save annotated video with lane
+  1. Full pipeline on a single video — detect, track, stabilize, georeference, save annotated video with lane
      IDs, and generate plots:
-        python batch_process.py data/video.mp4 -of data/orthophotos -osf data/segmentations \
-            -mf data/master_frames --save --show-lanes --plot
+        python batch_process.py data/video.mp4 --show-lanes
 
   2. Pixel-coordinate only (no georeferencing) — detect, track, stabilize, save annotated
      video with class names and confidence scores, and generate plots:
-        python batch_process.py data/U_video_cut.mp4 --no-geo --save --show-class-names --show-conf --plot
+        python batch_process.py data/U_video_cut.mp4 --no-geo --show-class-names --show-conf
 
   3. Dry-run on a directory to preview what would be processed without executing anything:
         python batch_process.py path/to/PROCESSED/ --dry-run --verbose
@@ -144,19 +142,18 @@ Examples:
         python batch_process.py data/video.mp4 --viz-only --save --show-lanes --viz-mode 1
 
   5. Re-run georeferencing only with a forced homography recompute:
-        python batch_process.py data/video.mp4 --geo-only -of data/orthophotos --recompute
+        python batch_process.py data/video.mp4 --geo-only -of --recompute
 
   6. Batch-process a directory, overwrite all existing results without prompts, save videos:
-        python batch_process.py path/to/PROCESSED/ -of path/to/ORTHOPHOTOS \
-            -osf path/to/segmentations --save --overwrite --yes
+        python batch_process.py path/to/PROCESSED/ --overwrite --yes
 
   7. Generate aggregated trajectory plots only from existing results, excluding buses and trucks:
         python batch_process.py path/to/PROCESSED/ --plot-only --aggregate \
-            -of path/to/ORTHOPHOTOS --plot-class-filter 1 2
+            --plot-class-filter 1 2
 
   8. Use a lenient detection preset and skip videos matching 'test' or 'tmp' in their name:
         python batch_process.py path/to/videos/ -c cfg/lenient.yaml \
-            --exclude-patterns test tmp --no-geo --save
+            --exclude-patterns test tmp --no-geo
 
 Notes:
   - Skip-if-exists: each stage silently skips if its output file already exists. Use
@@ -213,7 +210,7 @@ def process_input(args: argparse.Namespace, logger: logging.Logger) -> None:
         logger.error("Batch processing interrupted by user.")
         return
 
-    if (args.plot or args.plot_only) and input_path.is_dir():
+    if (args.plot_save is not False or args.plot_show is not False) and not args.viz_only and not args.geo_only and input_path.is_dir():
         run_plotting(input_path, args, logger)
 
 
@@ -225,8 +222,8 @@ def run_plotting(path: Path, args: argparse.Namespace, logger: logging.Logger) -
     if not args.dry_run:
         plot_args = argparse.Namespace(
             input=path,
-            save=True if args.plot_save is None else args.plot_save,
-            show=False if args.plot_show is None else args.plot_show,
+            save=args.plot_save,
+            show=args.plot_show,
             cfg=args.cfg,
             log_file=args.log_file,
             verbose=args.verbose,
@@ -253,10 +250,10 @@ def process_file(file: Path, args: argparse.Namespace, logger: logging.Logger) -
         if not args.viz_only and not args.no_geo and not args.plot_only:
             process_step(file, args, logger, "Georeferencing", georeference)
 
-        if (args.save or args.show) and not args.plot_only:
+        if (args.save is not False or args.show is not False) and not args.plot_only:
             process_step(file, args, logger, "Visualizing", visualize_results)
 
-        if (args.plot or args.plot_only) and not args.input.is_dir():
+        if (args.plot_save is not False or args.plot_show is not False) and not args.viz_only and not args.geo_only and not args.input.is_dir():
             run_plotting(file, args, logger)
 
     except Exception as e:
@@ -346,9 +343,8 @@ def parse_cli_args() -> argparse.Namespace:
     batch.add_argument('--dry-run', '-dr', action='store_true', help='Preview which files and stages would be processed without executing anything. Add --verbose for full per-stage detail.')
     batch.add_argument('--viz-only', '-vo', action='store_true', help='Skip detection, tracking, stabilization, and georeferencing; only (re-)run visualization. Requires existing .txt tracking results.')
     batch.add_argument('--geo-only', '-go', action='store_true', help='Only run georeferencing; skip detection, tracking, and stabilization')
-    batch.add_argument('--no-geo', '-ng', action='store_true', help='Do not georeference the tracking data')
-    batch.add_argument('--plot', '-pl', action='store_true', help='Also run the plotting stage after the main pipeline stages. Saving and display are controlled separately by --plot-save and --plot-show (or cfg -> plotting -> save/show).')
     batch.add_argument('--plot-only', '-po', action='store_true', help='Only generate plots; skip processing, georeferencing, and visualization')
+    batch.add_argument('--no-geo', '-ng', action='store_true', help='Do not georeference the tracking data')
     batch.add_argument("--folders-exclude", "-fe", type=str, nargs='+', default=['results'], help="Folders to exclude from the batch processing")
     batch.add_argument("--exclude-patterns", "-ep", type=str, nargs='+', default=None, help="File name patterns to exclude (e.g., --exclude-patterns car_test drone_2023)")
 

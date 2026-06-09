@@ -46,10 +46,10 @@ processing:
 # --- Visualization settings (CLI override) ---
 # These control the annotated-video output from visualize.py. Override any key via its CLI flag.
 visualization:
+  save: true              # Save annotated output video to file — CLI: --save / --no-save
+  show: false             # Open a live preview window during processing — CLI: --show / --no-show
   tail_length: 30         # Track tail length [frames]; number of past positions drawn as a fading trail; [1, inf)
   line_width: 2           # Bounding-box and track stroke width [px]; [1, inf)
-  save: false             # Save annotated output video to file — CLI: --save / --no-save
-  show: false             # Open a live preview window during processing — CLI: --show / --no-show
   viz_mode: 0             # Frame source for annotation: 0=original, 1=stabilized, 2=reference frame — CLI: --viz-mode
   plot_trajectories: false  # Overlay all trajectory positions on the first frame before the main pass — CLI: --plot-trajectories / --no-plot-trajectories
   plot_delay: 30          # Frames to hold the trajectory overlay before starting the main pass; [1, inf) — CLI: --plot-delay
@@ -65,12 +65,12 @@ visualization:
 # --- Plotting settings (CLI override) ---
 # These control the output from plot.py. Override any key via its CLI flag.
 plotting:
+  save: true                # Save plots as PDF files — CLI: --save / --no-save
+  show: false               # Show plots in an interactive window — CLI: --show / --no-show
   stationary_speed_cutoff: 1  # Minimum speed [km/h] for a vehicle to appear in speed/acceleration plots; [0, inf)
   savefig_font_size: 14       # Font size used in saved figures; [1, inf)
   colors: ['#76b041', '#3274d9', '#ff61b4', '#ff9d00', '#9954bb', '#ffc000']  # Per-source trajectory colors used when aggregation is enabled
   skip_filenames_with: ['bus', 'ids', 'transf']  # Skip result files whose stem contains any of these substrings
-  save: false               # Save plots as PDF files — CLI: --save / --no-save
-  show: true                # Show plots in an interactive window — CLI: --show / --no-show
   aggregate: false          # When the input is a folder, merge trajectories from all videos sharing the same location ID into one plot per location — CLI: --aggregate / --no-aggregate
   plot_points: false        # Plot discrete trajectory points instead of connected lines — CLI: --points / --no-points
   use_segmentations: false  # Produce an extra trajectory plot on the lane segmentation overlay PNG alongside the plain-orthophoto plot (pre-generate overlays with tools/viz_segmentations.py) — CLI: --segmentations / --no-segmentations
