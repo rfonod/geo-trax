@@ -64,6 +64,7 @@ desktop.ini
 # Project-specific sensitive/local data
 data-private/
 projects/
+assets/*.drawio
 
 # Data directories that should not be committed
 data/sample_videos/
