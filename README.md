@@ -1,8 +1,6 @@
 # Geo-trax
 
-[![GitHub Release](https://img.shields.io/github/v/release/rfonod/geo-trax?include_prereleases)](https://github.com/rfonod/geo-trax/releases) [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/) [![License](https://img.shields.io/github/license/rfonod/geo-trax)](https://github.com/rfonod/geo-trax/blob/main/LICENSE) [![Development Status](https://img.shields.io/badge/development-active-brightgreen)](https://github.com/rfonod/geo-trax)
-[![Open Access](https://img.shields.io/badge/Journal-10.1016%2Fj.trc.2025.105205-blue)](https://doi.org/10.1016/j.trc.2025.105205)
-[![arXiv](https://img.shields.io/badge/arXiv-2411.02136-b31b1b.svg)](https://arxiv.org/abs/2411.02136) [![Archived Code](https://img.shields.io/badge/Zenodo-Software%20Archive-blue)](https://zenodo.org/doi/10.5281/zenodo.12119542) [![Project Website](https://img.shields.io/badge/REAL%20Lab-Geo--trax-informational)](https://www.real-lab.ch/geo-trax) [![YouTube](https://img.shields.io/badge/YouTube-Video-red?logo=youtube&logoColor=red)](https://youtu.be/gOGivL9FFLk)
+[![GitHub Release](https://img.shields.io/github/v/release/rfonod/geo-trax?include_prereleases)](https://github.com/rfonod/geo-trax/releases) [![Python](https://img.shields.io/badge/python-3.9--3.13-blue)](https://www.python.org/) [![License](https://img.shields.io/github/license/rfonod/geo-trax)](https://github.com/rfonod/geo-trax/blob/main/LICENSE) [![Development Status](https://img.shields.io/badge/development-active-brightgreen)](https://github.com/rfonod/geo-trax) [![GitHub Issues](https://img.shields.io/github/issues/rfonod/geo-trax)](https://github.com/rfonod/geo-trax/issues) [![Open Access](https://img.shields.io/badge/Journal-10.1016%2Fj.trc.2025.105205-blue)](https://doi.org/10.1016/j.trc.2025.105205) [![arXiv](https://img.shields.io/badge/arXiv-2411.02136-b31b1b.svg)](https://arxiv.org/abs/2411.02136) [![Archived Code](https://img.shields.io/badge/Zenodo-Software%20Archive-blue)](https://zenodo.org/doi/10.5281/zenodo.12119542) [![Project Website](https://img.shields.io/badge/REAL%20Lab-Geo--trax-informational)](https://www.real-lab.ch/geo-trax) [![YouTube](https://img.shields.io/badge/YouTube-Video-red?logo=youtube&logoColor=red)](https://youtu.be/gOGivL9FFLk)
 
 **Geo-trax** (GEO-referenced TRAjectory eXtraction) is a comprehensive pipeline for extracting high-accuracy georeferenced vehicle trajectories from high-altitude drone imagery. Designed specifically for quasi-stationary aerial monitoring in urban traffic scenarios, Geo-trax transforms raw, bird's-eye view (BEV) video footage into precise, real-world vehicle trajectories. The framework integrates state-of-the-art computer vision and deep learning modules for vehicle detection, tracking, and trajectory stabilization, followed by a georeferencing stage that employs image registration to align the stabilized video frames with an orthophoto. This registration enables the accurate mapping of vehicle trajectories to real-world coordinates. The resulting pipeline supports large-scale traffic studies by delivering spatially and temporally consistent trajectory data suitable for traffic behavior analysis and simulation. Geo-trax is optimized for urban intersections and arterial corridors, where high-fidelity vehicle-level insights are essential for intelligent transportation systems and digital twin applications.
 
@@ -19,12 +17,12 @@
 ## Features
 
 1. **Vehicle Detection**: Utilizes a pre-trained YOLO model to detect vehicles (cars, buses, trucks, and motorcycles) in the video frames.
-2. **Vehicle Tracking**: Implements a selected tracking algorithm to follow detected vehicles, ensuring robust trajectory data and continuity across frames.
+2. **Vehicle Tracking**: Implements the selected tracking algorithm to follow detected vehicles, ensuring robust trajectory data and continuity across frames.
 3. **Trajectory Stabilization**: Corrects for unintentional drone movement by aligning trajectories to a reference frame, using bounding boxes of detected vehicles to enhance stability. Leverages the [Stabilo](https://github.com/rfonod/stabilo) 🌀 library, fine-tuned by [Stabilo-Optimize](https://github.com/rfonod/stabilo-optimize) 🎯, to achieve reliable, consistent stabilization.
-4. **Georeferencing**: Maps stabilized trajectories to real-world coordinates using an orthophoto and image registration technique.
+4. **Georeferencing**: Maps stabilized trajectories to real-world coordinates using an orthophoto and an image registration technique.
 5. **Dataset Creation**: Compiles trajectory and related metadata (e.g., velocity, acceleration, dimension estimates) into a structured dataset.
 6. **Visualization Tools**: Visualizes extracted trajectories, overlays paths on video frames, and generates plots for traffic data analysis.
-7. **Auxiliary Tools**: Data wrangling, analysis, and model training scripts/tools provided to support dataset preparation, advanced analytics, and custom model development.
+7. **Auxiliary Tools**: Provides data wrangling, analysis, and model training scripts/tools to support dataset preparation, advanced analytics, and custom model development.
 8. **Customization and Configuration**: Flexible configuration options to adjust pipeline settings, including detection/tracking parameters, stabilization methods, and visualization modes.
 
 <details>
@@ -32,24 +30,21 @@
 
 ### Release Plan
 
-- **Version =1.0.0**
-  - Release all data wrangling and analysis tools.
-  - Add documentation and examples covering all core functionalities.
-  - Host the object detection model file on Hugging Face.
+- **Version 1.0.0**
+  - Installable package via PyPI (`pip install geo-trax`) with CLI entry points and a modular package layout.
+  - Comprehensive documentation in a dedicated `docs/` folder, including tool-specific READMEs.
+  - Code cleanup: unified style, type hints, improved docstrings, and refactored utilities into focused modules.
+  - Additional data wrangling and analysis tools.
+  - Unit tests for core functions and automated testing via GitHub Actions.
+  - Detection model hosted on Hugging Face.
 
 - **Future Versions**
-  - Support for custom, user-provided models for detection.
-  - Modularization of the pipeline: detection, tracking, and stabilization as separate steps with support for custom reference frames.
-  - Rationalized configuration using a single `.yaml` file with nested dictionaries.
-  - Support for per-class confidence thresholds and oriented bounding box visualization (with azimuth and dimension estimates).
-  - Refactored utilities into focused modules (e.g., `file_utils`, `config_utils`, `data_utils`).
-  - Unit tests for all main functions and automated testing via GitHub Actions.
-  - Expanded documentation and separate README for analysis tools.
-  - Installable package via PyPI (`pip install geo-trax`) with a modular package layout.
-  - Upgrade to latest `ultralytics` (>8.2) and `numpy` (>2.0) releases.
-  - Batch inference and multi-thread processing for improved scalability.
-  - GPU-accelerated image registration and track interpolation in image coordinates.
-  - Integration with real-world map visualization tools (e.g., MovingPandas, contextily).
+  - Modularized, OOP-based pipeline with custom reference frame support and georeferencing leveraging Stabilo's image-matching backend.
+  - Rationalized single-file YAML configuration.
+  - Per-class confidence thresholds and oriented bounding box visualization (using azimuth and dimension estimates).
+  - Trajectory interpolation and SAHI-based small-object detection.
+  - Batch inference, GPU-accelerated image registration, and multi-thread processing.
+  - Real-world map visualization (e.g., MovingPandas, contextily) and interactive web app.
 
 </details>
 
@@ -81,32 +76,43 @@ Geo-trax was validated in a large-scale urban traffic monitoring experiment cond
     cd geo-trax
     ```
 
-2. **Create and activate a Python virtual environment** (Python >= 3.10 and <= 3.12), e.g., using [Miniconda3](https://www.anaconda.com/docs/getting-started/miniconda/install):
+2. **Create and activate a Python virtual environment** (Python >= 3.9 and <= 3.13):
 
+    ```bash
+    python3.11 -m venv .venv
+    source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+    ```
+
+    <details>
+    <summary>Alternatives: conda or uv</summary>
+
+    **[Miniconda](https://www.anaconda.com/docs/getting-started/miniconda/install):**
     ```bash
     conda create -n geo-trax python=3.11 -y
     conda activate geo-trax
     ```
 
-    or using [venv](https://docs.python.org/3/library/venv.html):
-
+    **[uv](https://docs.astral.sh/uv/getting-started/installation/) (fastest; use `uv pip install` in step 3):**
     ```bash
-    python3.11 -m venv .venv
-    source .venv/bin/activate  # On Windows, use `.venv\Scripts\activate`
+    uv venv --python 3.11
+    source .venv/bin/activate  # On Windows: .venv\Scripts\activate
     ```
+    </details>
 
 3. **Install dependencies** from `pyproject.toml`:
 
     ```bash
-    pip install -e .
+    pip install -e .              # pip  (-e: editable mode, reflects code changes without reinstalling)
+    # uv pip install -e .         # uv   (faster; requires uv venv from step 2)
+    # poetry install              # Poetry (auto-manages virtualenv; skip step 2)
     ```
-
-    > **Note:** Installing in *editable mode* (`-e`) is recommended, as it allows immediate reflection of code changes.
 
 4. **[Optional] Install development dependencies** (for development, testing, or other non-core auxiliary scripts):
 
     ```bash
-    pip install -e '.[dev]'
+    pip install -e '.[dev]'           # pip
+    # uv pip install -e '.[dev]'      # uv
+    # poetry install --extras dev     # Poetry
     ```
 
 ## Model Training
@@ -137,22 +143,22 @@ python batch_process.py path/to/videos/ --no-geo
 python batch_process.py video.mp4 -c cfg/custom_config.yaml
 ```
 
-#### Example 3: Process and save visualization for a specific video
-
-```bash
-python batch_process.py video.mp4 --save
-```
-
-#### Example 4: Save tracking results in video without re-running extraction
+#### Example 3: Save tracking results in a video without re-running extraction
 
 ```bash
 python batch_process.py video.mp4 --viz-only --save
 ```
 
-#### Example 5: Generate plots only for all videos in a directory
+#### Example 4: Show lane IDs and hide speeds in the visualization (requires georeferencing)
 
 ```bash
-python batch_process.py path/to/videos/ --plot-only --plot
+python batch_process.py video.mp4 --viz-only --save --show-lanes --hide-speeds
+```
+
+#### Example 5: Generate aggregated trajectory plots only from existing results, excluding buses and trucks
+
+```bash
+python batch_process.py path/to/processed-data/ --plot-only --aggregate --plot-class-filter 1 2
 ```
 
 > [!TIP]
@@ -185,28 +191,29 @@ Suppose the input video is named `video.mp4`. The output files will be saved in 
   frame_id, h11, h12, h13, h21, h22, h23, h31, h32, h33
   ```
 
-    where
-  - `frame_id`: Frame number (1, 2, ...).
-  - `hij`: Elements of the 3x3 homography matrix that maps each frame (`frame_id`) to the reference frame (frame 0).
+    where:
+  - `frame_id`: Frame number of the stabilized frame (starts from `cut_frame_left + 1` since the reference frame itself has no transform).
+  - `hij`: Elements of the 3x3 homography matrix that maps each frame (`frame_id`) to the reference frame.
 
-- **video.yaml**: Video metadata and the configuration settings used for processing the `video.mp4`. (this file is saved in the same directory as the input video.)
+- **video.yaml**: Video metadata and the configuration settings used for processing the `video.mp4`. (This file is saved in the same directory as the input video.)
 
 - **video_mode_X.mp4**: Processed video in various visualization modes (X = 0, 1, 2):
   - **Mode 0**: Results overlaid on the original (unstabilized) video.
   - **Mode 1**: Results overlaid on the stabilized video.
   - **Mode 2**: Results plotted on top of the static reference frame.
 
-  Each version can display vehicle bounding boxes, IDs, class labels, confidence scores, and short trajectory trails that fade and vary in thickness to indicate the recency of the movement. If an input `video.csv` file is available in the same directory as the input video, i.e., the converted flight logs, vehicle speed and lane information can be also displayed.
+  Each version can display vehicle bounding boxes, IDs, class labels, confidence scores, and short trajectory trails that fade and vary in thickness to indicate the recency of the movement. If an input `video.csv` file is available in the same directory as the input video, i.e., the converted flight logs, vehicle speed and lane information can also be displayed.
 
 - **video.csv**: Contains the georeferenced vehicle trajectories in a tabular format. This file includes both geographic and local coordinates, estimated real-world dimensions, kinematic data, road section, and lane information. The columns are:
 
   ```text
-  Vehicle_ID, Timestamp, Ortho_X, Ortho_Y, Local_X, Local_Y, Latitude, Longitude, Vehicle_Length, Vehicle_Width, Vehicle_Class, Vehicle_Speed, Vehicle_Acceleration, Road_Section, Lane_Number, Visibility
+  Vehicle_ID, [Timestamp,] Frame_Number, Ortho_X, Ortho_Y, Local_X, Local_Y, Latitude, Longitude, Vehicle_Length, Vehicle_Width, Vehicle_Class, Vehicle_Speed, Vehicle_Acceleration, Road_Section, Lane_Number, Visibility
   ```
 
     where:
   - `Vehicle_ID`: Unique vehicle identifier.
-  - `Timestamp`: Timestamp of the frame (YYYY-MM-DD HH:MM:SS.ms).
+  - `Timestamp`: Timestamp of the frame (YYYY-MM-DD HH:MM:SS.ms). Present only when a flight-log CSV with timestamps is available alongside the video.
+  - `Frame_Number`: Video frame index corresponding to this detection.
   - `Ortho_X`, `Ortho_Y`: X and Y coordinates of the vehicle centroid in the orthophoto's pixel coordinate system.
   - `Local_X`, `Local_Y`: X and Y coordinates of the vehicle centroid in a local projected coordinate system (e.g., EPSG:5186 for KGD2002 / Central Belt 2010 used in the Songdo experiment).
   - `Latitude`, `Longitude`: Geographic coordinates of the vehicle centroid (WGS84).
@@ -230,7 +237,7 @@ Suppose the input video is named `video.mp4`. The output files will be saved in 
 
 ## Citation
 
-If you use **Geo-trax** in your research, software, or to generate datasets, please cite the following resources appropriately:
+If you use **Geo-trax** in your research, software, or dataset generation, please cite the following resources appropriately:
 
 1. **Preferred Citation:** Please cite the associated article for any use of the Geo-trax framework, including research, applications, and derivative work:
 
@@ -254,11 +261,11 @@ If you use **Geo-trax** in your research, software, or to generate datasets, ple
     @software{fonod2026geo-trax,
       author = {Fonod, Robert},
       license = {MIT},
-      month = may,
+      month = jun,
       title = {Geo-trax: A Comprehensive Framework for Georeferenced Vehicle Trajectory Extraction from Drone Imagery},
       url = {https://github.com/rfonod/geo-trax},
       doi = {10.5281/zenodo.12119542},
-      version = {0.8.0},
+      version = {0.9.0},
       year = {2026}
     }
     ```

@@ -12,11 +12,19 @@ This folder contains Bash scripts for training YOLOv8 object detection models an
 
 ## Prerequisites
 
-Install the package with development extras (recommended):
+Install the core package (covers training and Comet ML logging):
 
 ```bash
-pip install -e ".[dev]"
+pip install -e .
 ```
+
+For model export, additional dependencies are required depending on the format:
+
+- **ONNX** (`onnx` format): install the `export` extras:
+  ```bash
+  pip install -e ".[export]"
+  ```
+- **TensorRT** (`engine` format): requires a CUDA-capable GPU and a separate TensorRT installation (not pip-installable). See the [TensorRT install guide](https://docs.nvidia.com/deeplearning/tensorrt/install-guide).
 
 Or install the minimum required packages manually:
 
@@ -106,7 +114,7 @@ Recursively searches a directory for `.pt` files and exports them to the specifi
 | `-o` | Overwrite already-exported files |
 | `-c <config_file>` | Path to a custom Ultralytics config (default: `cfg/ultralytics/default.yaml`) |
 
-> **Note:** TensorRT (`engine`) export requires a CUDA-capable GPU. ONNX export has no GPU requirement. Additional packages (`onnx`, `onnxsim`) are needed for ONNX export and are included in the `dev` extras.
+> **Note:** TensorRT (`engine`) export requires a CUDA-capable GPU and a separate TensorRT installation (not pip-installable). ONNX export has no GPU requirement. Additional packages (`onnx`, `onnxslim`, `onnxruntime`) are needed for ONNX export and are included in the `export` extras: `pip install -e ".[export]"`.
 
 ### Examples
 

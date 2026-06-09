@@ -3,48 +3,72 @@
 # Author: Robert Fonod (robert.fonod@ieee.org)
 
 """
-plot.py - Trajectory plotting tool
+plot.py - Trajectory and Distribution Plotting Tool
 
-This script generates plots for the input video file or directory with video or .txt/.csv files.
-The script reads the tracking results in image and/or geo coordinates, and plots the trajectory data,
-speed and acceleration distributions, class distribution, and vehicle dimensions distribution.
+Generates trajectory plots and kinematic, class, and dimension distribution charts from geo-trax
+detection and tracking output. Reads pixel-space tracking results (.txt), georeferenced results
+(.csv), or paired results from video files. For georeferenced trajectories, plots can be overlaid
+on plain orthophotos or pre-rendered lane segmentation overlay images.
 
 Usage:
-  python plot.py input [options]
+  python plot.py <input> [options]
 
 Arguments:
-  input: Path to an individual video file, .txt/.csv file, or folder with video or .txt/.csv files.
+  input : Path to a video file, .txt (pixel-space results), .csv (georeferenced results),
+          or a folder containing any of the above.
 
 Options:
-  --save, -s: Save the plots as .pdf files [default: False]
-  --no-show, -ns: Do not show the plots [default: False]
-  --cfg, -c: Path to the main geo-trax configuration file [default: cfg/default.yaml]
-  --log-file, -lf: Filename to save detailed logs. Saved in the 'logs' folder. [default: plot.log]
-  --verbose, -v: Set print verbosity level to INFO (default: WARNING)
-  --aggregate, -a: Aggregate the input data (folder input) per location ID (intersection) [default: False]
-  --ortho-folder, -of: Custom path to the folder with orthophotos (.png). Defaults to 'ORTHOPHOTOS' at the same level as 'PROCESSED' in 'input'.
-  --segmentations, -seg: Use the segmented orthophotos [default: False]
-  --id, -i: Vehicle ID to print/plot in detail (only for non-folder input) [default: None]
-  --points, -p: Plot the trajectory points [default: False]
-  --class-filter, -cf: Exclude specified vehicle classes [default: None]
+  --help, -h       : Show this help message and exit.
+  --cfg, -c        : Path to the main geo-trax configuration file (default: cfg/default.yaml).
+  --log-file, -lf  : Filename to save detailed logs. Saved in the 'logs' folder (default: None).
+  --verbose, -v    : Set verbosity to INFO (default: WARNING).
+
+Plot Background Options:
+  --ortho-folder, -of <path>         : Path to the folder with orthophoto images (.png) used as
+                                       plot backgrounds for georeferenced trajectories. Defaults to
+                                       'ORTHOPHOTOS' at the same level as 'PROCESSED' in 'input'.
+  --segmentation-folder, -osf <path> : Path to the folder containing lane segmentation CSV files
+                                       (used during georeferencing for lane assignment) and,
+                                       when --segmentations is enabled, the corresponding overlay
+                                       PNG files used as plot backgrounds. Defaults to
+                                       '<ortho-folder>/segmentations'.
+
+Plotting Options:
+  --save / --no-save, -s             : Save plots as PDF files. Defaults to cfg -> plotting -> save.
+  --show / --no-show, -sh            : Show plots interactively. Defaults to cfg -> plotting -> show.
+  --aggregate, -a                    : When the input is a folder, merge trajectories sharing the
+                                       same location ID into a single plot per location.
+                                       Defaults to cfg -> plotting -> aggregate.
+  --points, -p                       : Plot discrete trajectory points instead of continuous lines.
+                                       Defaults to cfg -> plotting -> plot_points.
+  --segmentations, -seg              : Produce an additional trajectory plot overlaid on the lane
+                                       segmentation overlay PNG (from --segmentation-folder),
+                                       alongside the standard plain-orthophoto plot. Overlay PNGs
+                                       must be pre-generated with tools/viz_segmentations.py.
+                                       Defaults to cfg -> plotting -> use_segmentations.
+  --id, -i                           : Vehicle ID to print/plot in detail (single-file input only)
+                                       [default: 0].
+  --class-filter, -cf <int> [<int> ...] : Vehicle class IDs to exclude from plots.
+                                       Defaults to cfg -> plotting -> class_filter.
 
 Examples:
-1. Plot the trajectory data for a video file:
+1. Plot results for a single video file (pixel-space only):
    python plot.py /path/to/video.mp4
 
-2. Plot the trajectory data using the georeferenced tracking results:
-   python plot.py /path/to/results/video.csv
+2. Plot georeferenced trajectories from a CSV file, overlaid on the orthophoto:
+   python plot.py /path/to/results/video.csv -of /path/to/orthophotos/
 
-3. Plot the trajectory data for a folder with video files and aggregate the data:
-   python plot.py /path/to/videos -a
+3. Aggregate and plot all results from a folder:
+   python plot.py /path/to/videos/ -a
 
-4. Plot the trajectory data for a folder with video files, use the segmented orthophotos, and filter out vehicle class 1:
-   python plot.py /path/to/videos -seg -cf 1 -of /path/to/orthophotos
+4. Plot with lane segmentation overlays as backgrounds, excluding buses:
+   python plot.py /path/to/videos/ -of /path/to/orthophotos/ -osf /path/to/segmentations/ -seg -cf 1
 """
 
 
 import argparse
 import logging
+import shutil
 import sys
 from pathlib import Path
 from typing import Union
@@ -53,6 +77,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
+from tqdm import tqdm
 
 from utils.utils import (
     PlotColors,
@@ -75,7 +100,14 @@ def generate_plots(args: argparse.Namespace, logger: logging.Logger) -> None:
     Generate plots for the input file or directory.
     """
     config = load_config_all(args, logger)['main']
-    colors.set_colors(config['plotting']['colors'])
+    plot_cfg = config['plotting']
+    if args.save is None:          args.save          = plot_cfg['save']
+    if args.show is None:          args.show          = plot_cfg['show']
+    if args.aggregate is None:     args.aggregate     = plot_cfg['aggregate']
+    if args.points is None:        args.points        = plot_cfg['plot_points']
+    if args.segmentations is None: args.segmentations = plot_cfg['use_segmentations']
+    if args.class_filter is None:  args.class_filter  = plot_cfg['class_filter']
+    colors.set_colors(plot_cfg['colors'])
     files = determine_files_to_process(args.input, config['plotting']['skip_filenames_with'], logger)
     ortho_folder = get_ortho_folder(args.input, args.ortho_folder, logger, critical=False)
 
@@ -95,19 +127,19 @@ def process_file(file: Path, ortho_folder: Union[Path, None], data_at_location_i
     """
     Process an individual file and generate plots or aggregate data.
     """
-    filepath_img, filepath_geo, filepath_ortho, location_id = get_filepaths(file, ortho_folder, config, logger)
+    filepath_img, filepath_geo, filepath_ortho, filepath_seg, location_id = get_filepaths(file, ortho_folder, config, logger)
     if filepath_img is None and filepath_geo is None:
         logger.warning(f"No tracking results found for {file.stem}. Skipping...")
         return
 
     df_img, df_geo, coordinates = read_trajectory_data(filepath_img, filepath_geo, config, logger)
     if not config['args'].aggregate or (df_geo is not None and 'Drone_ID' in df_geo.columns):
-        plot_data((df_img, df_geo), (filepath_img, filepath_geo, filepath_ortho), coordinates, config, logger)
+        plot_data((df_img, df_geo), (filepath_img, filepath_geo, filepath_ortho, filepath_seg), coordinates, config, logger)
     else:
-        aggregate_data(file, df_img, df_geo, location_id, data_at_location_id, filepath_img, filepath_geo, coordinates, filepath_ortho)
+        aggregate_data(file, df_img, df_geo, location_id, data_at_location_id, filepath_img, filepath_geo, coordinates, filepath_ortho, filepath_seg)
 
 
-def aggregate_data(file: Path, df_img: pd.DataFrame, df_geo: pd.DataFrame, location_id: str, data_at_location_id: dict, filepath_img: Path, filepath_geo: Path, coordinates: tuple, filepath_ortho: Path) -> None:
+def aggregate_data(file: Path, df_img: pd.DataFrame, df_geo: pd.DataFrame, location_id: str, data_at_location_id: dict, filepath_img: Path, filepath_geo: Path, coordinates: tuple, filepath_ortho: Path, filepath_seg: Path) -> None:
     """
     Aggregate data for a specific location ID.
     """
@@ -126,6 +158,7 @@ def aggregate_data(file: Path, df_img: pd.DataFrame, df_geo: pd.DataFrame, locat
             'filepath_geo_file': 'agg',
             'coordinates': coordinates,
             'filepath_ortho': filepath_ortho,
+            'filepath_seg': filepath_seg,
         }
     data_at_location_id[location_id]['df_img_list'].append(df_img)
     data_at_location_id[location_id]['df_geo_list'].append(df_geo)
@@ -144,11 +177,13 @@ def handle_aggregation(data_at_location_id: dict, config: dict, logger: logging.
         config['args'].id = 0
     for location_id, data in data_at_location_id.items():
         logger.notice(f"Aggregating data for location ID {location_id}")
-        df_img = pd.concat(data['df_img_list'], ignore_index=True) if data['df_img_list'][0] is not None else None
-        df_geo = pd.concat(data['df_geo_list'], ignore_index=True) if data['df_geo_list'][0] is not None else None
+        valid_img = [df for df in data['df_img_list'] if df is not None]
+        df_img = pd.concat(valid_img, ignore_index=True) if valid_img else None
+        valid_geo = [df for df in data['df_geo_list'] if df is not None]
+        df_geo = pd.concat(valid_geo, ignore_index=True) if valid_geo else None
         filepath_img = data['filepath_img_base'] / f"{data['filepath_img_file']}.txt" if df_img is not None else None
         filepath_geo = data['filepath_geo_base'] / f"{data['filepath_geo_file']}.csv" if df_geo is not None else None
-        plot_data((df_img, df_geo), (filepath_img, filepath_geo, data['filepath_ortho']), data['coordinates'], config, logger)
+        plot_data((df_img, df_geo), (filepath_img, filepath_geo, data['filepath_ortho'], data['filepath_seg']), data['coordinates'], config, logger)
 
 
 def plot_data(dfs: tuple, filepaths: tuple, coordinates: tuple, config: dict, logger: logging.Logger) -> None:
@@ -157,19 +192,53 @@ def plot_data(dfs: tuple, filepaths: tuple, coordinates: tuple, config: dict, lo
     """
     df_img, df_geo = dfs
     filepath_img, filepath_geo = filepaths[:2]
+    args = config['args']
 
-    plot_trajectories((df_img, df_geo), coordinates, filepaths, config, logger)
-
-    if config['args'].id > 0:
-        plot_kinematics_for_vehicle_id(df_geo, filepath_geo, config, logger)
+    n_steps = 1  # plot_trajectories
+    if args.id > 0 and df_geo is not None:
+        n_steps += 1  # plot_kinematics_for_vehicle_id
     elif df_geo is not None:
-        plot_kinematic_distribution(df_geo, filepath_geo, config, logger, 'speed')
-        plot_kinematic_distribution(df_geo, filepath_geo, config, logger, 'acceleration')
-        plot_kinematic_distribution_jointly(df_geo, filepath_geo, config, logger)
-        plot_class_distribution(df_geo, filepath_geo, config, logger)
-        plot_vehicle_dimensions_distribution(df_geo, filepath_geo, config, 'GEO', logger)
+        n_steps += 5  # speed, acceleration, joint, class, dimensions
     elif df_img is not None:
+        n_steps += 1  # dimensions
+
+    name = filepath_geo.name if filepath_geo else (filepath_img.name if filepath_img else 'unknown')
+    _bar_w = max(10, shutil.get_terminal_size().columns - 88)
+    pbar = tqdm(total=n_steps, unit='plot', colour='magenta', leave=True,
+                desc=f'{name} - plotting            ',
+                bar_format=f'{{l_bar}}{{bar:{_bar_w}}}{{r_bar}}')
+
+    pbar.set_postfix_str('trajectories')
+    plot_trajectories((df_img, df_geo), coordinates, filepaths, config, logger)
+    pbar.update()
+
+    if args.id > 0:
+        pbar.set_postfix_str('kinematics for vehicle')
+        plot_kinematics_for_vehicle_id(df_geo, filepath_geo, config, logger)
+        pbar.update()
+    elif df_geo is not None:
+        pbar.set_postfix_str('speed distribution')
+        plot_kinematic_distribution(df_geo, filepath_geo, config, logger, 'speed')
+        pbar.update()
+        pbar.set_postfix_str('acceleration distribution')
+        plot_kinematic_distribution(df_geo, filepath_geo, config, logger, 'acceleration')
+        pbar.update()
+        pbar.set_postfix_str('joint kinematic distribution')
+        plot_kinematic_distribution_jointly(df_geo, filepath_geo, config, logger)
+        pbar.update()
+        pbar.set_postfix_str('class distribution')
+        plot_class_distribution(df_geo, filepath_geo, config, logger)
+        pbar.update()
+        pbar.set_postfix_str('vehicle dimensions')
+        plot_vehicle_dimensions_distribution(df_geo, filepath_geo, config, 'GEO', logger)
+        pbar.update()
+    elif df_img is not None:
+        pbar.set_postfix_str('vehicle dimensions')
         plot_vehicle_dimensions_distribution(df_img, filepath_img, config, 'IMG', logger)
+        pbar.update()
+
+    pbar.set_postfix_str('done')
+    pbar.close()
 
 
 def determine_files_to_process(input_path: Path, skip_filenames_with: list, logger: logging.Logger) -> list:
@@ -186,16 +255,16 @@ def determine_files_to_process(input_path: Path, skip_filenames_with: list, logg
         files = [f for f in files if not any(word in f.stem for word in skip_filenames_with)]
         files = sorted(files)
         if len(files) == 0:
-            logger.error(f"No valid video files ({VIDEO_FORMATS}) or result files ({RESULTS_FORMATS}) found in the input folder {input_path}")
+            logger.critical(f"No valid video files ({VIDEO_FORMATS}) or result files ({RESULTS_FORMATS}) found in the input folder {input_path}")
             sys.exit(1)
     return files
 
 
 def get_filepaths(file: Path, ortho_folder: Union[Path, None], config: dict, logger: logging.Logger) -> tuple:
     """
-    Get the file paths for the image, geo, and orthophoto files.
+    Get the file paths for the image, geo, orthophoto, and segmentation overlay files.
     """
-    filepath_img, filepath_geo, filepath_ortho = None, None, None
+    filepath_img, filepath_geo, filepath_ortho, filepath_seg = None, None, None, None
     if file.suffix.lower() in VIDEO_FORMATS:
         filepath_img = file.parent / 'results' / file.name.replace(file.suffix, '.txt')
         filepath_geo = file.parent / 'results' / file.name.replace(file.suffix, '.csv')
@@ -210,10 +279,12 @@ def get_filepaths(file: Path, ortho_folder: Union[Path, None], config: dict, log
 
     location_id = determine_location_id(file, logger)
     if filepath_geo and ortho_folder:
-        subfolder = 'segmentations' if config['args'].segmentations else ''
-        filepath_ortho = ortho_folder / subfolder / f"{location_id}.png"
+        filepath_ortho = ortho_folder / f"{location_id}.png"
+        if config['args'].segmentations:
+            seg_folder = config['args'].segmentation_folder or ortho_folder / 'segmentations'
+            filepath_seg = seg_folder / f"{location_id}.png"
 
-    return filepath_img, filepath_geo, filepath_ortho, location_id
+    return filepath_img, filepath_geo, filepath_ortho, filepath_seg, location_id
 
 
 def read_trajectory_data(filepath_img: Path, filepath_geo: Path, config: dict, logger: logging.Logger) -> tuple:
@@ -225,7 +296,7 @@ def read_trajectory_data(filepath_img: Path, filepath_geo: Path, config: dict, l
     if filepath_img:
         try:
             delimiter = detect_delimiter(filepath_img)
-            df_img = pd.read_csv(filepath_img, sep=delimiter, header=None, skiprows=0)
+            df_img = pd.read_csv(filepath_img, sep=delimiter, header=None)
             coordinates_img = {'Unstabilized image coordinates': ['X_unstabilized', 'Y_unstabilized']}
             all_columns = [
                 'Frame_ID',
@@ -245,7 +316,6 @@ def read_trajectory_data(filepath_img: Path, filepath_geo: Path, config: dict, l
             ]
             if df_img.shape[1] == 14:
                 df_img.columns = all_columns
-                coordinates_img['Stabilized image coordinates'] = ['X_stabilized', 'Y_stabilized']
                 coordinates_img['Stabilized image coordinates'] = ['X_stabilized', 'Y_stabilized']
             elif df_img.shape[1] == 10:
                 df_img.columns = all_columns[:6] + all_columns[10:]
@@ -297,13 +367,23 @@ def plot_trajectories(dfs: tuple, coordinates: tuple, filepaths: tuple, config: 
     for i, df in enumerate(dfs):
         if df is not None:
             filepath_ortho = filepaths[2]
+            filepath_seg = filepaths[3] if len(filepaths) > 3 else None
             for coordinate, (x_key, y_key) in coordinates[i].items():
                 plot_trajectories_in_given_coordinates(df, coordinate, x_key, y_key, filepaths[i], None, config, logger)
                 if "Orthophoto" in coordinate and filepath_ortho:
                     plot_trajectories_in_given_coordinates(df, coordinate, x_key, y_key, filepaths[i], filepath_ortho, config, logger)
+                if "Orthophoto" in coordinate and filepath_seg:
+                    if not filepath_seg.exists():
+                        logger.warning(
+                            f"Segmentation overlay PNG not found: {filepath_seg}. "
+                            f"Generate it with: python tools/viz_segmentations.py "
+                            f"{config['args'].ortho_folder} -sf {filepath_seg.parent}"
+                        )
+                    else:
+                        plot_trajectories_in_given_coordinates(df, coordinate, x_key, y_key, filepaths[i], filepath_seg, config, logger, is_seg=True)
 
 
-def plot_trajectories_in_given_coordinates(df: pd.DataFrame, coordinates: str, x_key: str, y_key: str, filepath: Path, filepath_ortho: Union[Path, None], config: dict, logger: logging.Logger) -> None:
+def plot_trajectories_in_given_coordinates(df: pd.DataFrame, coordinates: str, x_key: str, y_key: str, filepath: Path, filepath_ortho: Union[Path, None], config: dict, logger: logging.Logger, is_seg: bool = False) -> None:
     """
     Plot the trajectories in the given coordinates.
     """
@@ -317,7 +397,7 @@ def plot_trajectories_in_given_coordinates(df: pd.DataFrame, coordinates: str, x
             try:
                 ortho = plt.imread(filepath_ortho)
             except Exception as e:
-                logger.warning(f"Error reading the orthophoto {filepath_ortho}: {str(e)}")
+                logger.warning(f"Could not read orthophoto '{filepath_ortho}': {str(e)}")
                 ortho = None
         else:
             ortho = None
@@ -371,7 +451,8 @@ def plot_trajectories_in_given_coordinates(df: pd.DataFrame, coordinates: str, x
         else:
             if len(source_label_mapping) > 1:
                 plt.legend(loc='best', fontsize=config['plotting']['savefig_font_size'] - 5 if args.save else None)
-            save_or_show_plot(coordinates + ' on orthophoto', filepath, args, logger, contains_raster=True)
+            background_label = 'on segmentation overlay' if is_seg else 'on orthophoto'
+            save_or_show_plot(coordinates + f' {background_label}', filepath, args, logger, contains_raster=True)
 
 
 def plot_kinematic_distribution(df: pd.DataFrame, filepath: Path, config: dict, logger: logging.Logger, kinematic_type: str) -> None:
@@ -478,7 +559,7 @@ def plot_kinematic_distribution_jointly(df: pd.DataFrame, filepath: Path, config
     plt.xlabel('' if args.save else 'Vehicle class')
     handles, labels = ax1.get_legend_handles_labels()
     ax1.legend(handles=handles, labels=labels, title=None, loc='best', ncol=2, fontsize=config['plotting']['savefig_font_size'] - 1 if args.save else None)
-    save_or_show_plot('Speed_and_accleration_distribution', filepath, args, logger)
+    save_or_show_plot('Speed_and_acceleration_distribution', filepath, args, logger)
 
 
 def report_high_value_instances(df: pd.DataFrame, flag: str, logger: logging.Logger) -> None:
@@ -516,13 +597,14 @@ def plot_class_distribution(df: pd.DataFrame, filepath: Path, config: dict, logg
     df = df.copy()
     df = df.groupby('Vehicle_ID').first().reset_index()
 
+    order = [cls for cls in config['class_names'].values() if cls in df['Vehicle_Class'].unique()]
     plt.figure()
-    sns.countplot(data=df, x='Vehicle_Class', order=[cls for cls in config['class_names'].values() if cls in df['Vehicle_Class'].unique()], edgecolor='black', hue='Vehicle_Class')
+    sns.countplot(data=df, x='Vehicle_Class', order=order, edgecolor='black', hue='Vehicle_Class')
+    position = {category: idx for idx, category in enumerate(order)}
     value_counts = df['Vehicle_Class'].value_counts()
-    for i, category in config['class_names'].items():
-        if category in value_counts:
-            count = value_counts.get(category, 0)
-            plt.text(i, count, str(count), ha='center', va='bottom', fontsize=config['plotting']['savefig_font_size'] - 3 if args.save else 10)
+    for category, count in value_counts.items():
+        if category in position:
+            plt.text(position[category], count, str(count), ha='center', va='bottom', fontsize=config['plotting']['savefig_font_size'] - 3 if args.save else 10)
     plt.title('' if args.save else f'Vehicle class distribution for {filepath.stem.replace("_", " & ")}')
     plt.xlabel('' if args.save else 'Vehicle class')
     plt.ylabel('Count', fontsize=config['plotting']['savefig_font_size'] if args.save else None)
@@ -626,7 +708,7 @@ def save_or_show_plot(name: str, filepath: Path, args: argparse.Namespace, logge
     """
     Save or show the plot.
     """
-    if not args.no_show:
+    if args.show:
         plt.show()
     if args.save:
         img_dir = filepath.parent / 'plots'
@@ -644,25 +726,34 @@ def parse_cli_args() -> argparse.Namespace:
     """
     Parse command-line arguments
     """
-    parser = argparse.ArgumentParser(description="Trajectory visualization tool.")
+    parser = argparse.ArgumentParser(description="Trajectory and distribution plotting tool.")
 
-    # Required argument
+    # Required arguments
     parser.add_argument("input", type=Path, help="Path to the video source or .txt/.csv file or folder with video or .csv/.txt files")
 
-    # Main arguments
-    parser.add_argument("--save", "-s", action="store_true", help="Save the plots as .pdf files [default: False]")
-    parser.add_argument("--no-show", "-ns", action="store_true", help="Do not show the plots [default: False]")
+    optional = parser.add_argument_group('Optional arguments')
+    optional.add_argument('--cfg', '-c', type=Path, default='cfg/default.yaml', help='Path to the main geo-trax configuration file')
+    optional.add_argument("--log-file", "-lf", type=str, default=None, help="Filename to save detailed logs. Saved in the 'logs' folder.")
+    optional.add_argument("--verbose", "-v", action='store_true', help='Set print verbosity level to INFO (default: WARNING)')
 
-    # Optional arguments
-    parser.add_argument('--cfg', '-c', type=Path, default='cfg/default.yaml', help='Path to the main geo-trax configuration file')
-    parser.add_argument("--log-file", "-lf", type=str, default=None, help="Filename to save detailed logs. Saved in the 'logs' folder.")
-    parser.add_argument("--verbose", "-v", action='store_true', help='Set print verbosity level to INFO (default: WARNING)')
-    parser.add_argument("--aggregate", "-a", action="store_true", help="aggregate the data for the same intersection [default: False]")
-    parser.add_argument("--ortho-folder", "-of", type=Path, default=None, help="Custom path to the folder with orthophotos (.png). Defaults to 'ORTHOPHOTOS' at the same level as 'PROCESSED' in 'input'.")
-    parser.add_argument("--segmentations", "-seg", action="store_true", help="Use the segmented orthophotos [default: False]")
-    parser.add_argument("--id", "-i", type=int, default=0, help="vehicle ID to print/plot in detail (only for non-folder input) [default: 0]")
-    parser.add_argument("--points", "-p", action="store_true", help="plot the trajectory points [default: False]")
-    parser.add_argument("--class-filter", "-cf", nargs="+", default=[], help="exclude specified vehicle classes [default: None]")
+    georef = parser.add_argument_group('Plot background arguments')
+    georef.add_argument("--ortho-folder", "-of", type=Path, default=None, help="Path to the folder with orthophoto images (.png) used as plot backgrounds for georeferenced trajectories. Defaults to 'ORTHOPHOTOS' at the same level as 'PROCESSED' in 'input'.")
+    georef.add_argument("--segmentation-folder", "-osf", type=Path, default=None, help="Path to the folder containing lane segmentation CSV files (used during georeferencing for lane assignment) and, when --segmentations is enabled, the corresponding overlay PNG files used as plot backgrounds. Defaults to '<ortho-folder>/segmentations'.")
+
+    plotting = parser.add_argument_group('Plotting arguments')
+    plotting.add_argument("--save", "-s", action=argparse.BooleanOptionalAction, default=None,
+                          help="Save the plots as .pdf files. Defaults to cfg -> plotting -> save.")
+    plotting.add_argument("--show", "-sh", action=argparse.BooleanOptionalAction, default=None,
+                          help="Show plots interactively. Defaults to cfg -> plotting -> show.")
+    plotting.add_argument("--aggregate", "-a", action=argparse.BooleanOptionalAction, default=None,
+                          help="When the input is a folder, merge trajectories from all videos sharing the same location ID into a single plot per location. Defaults to cfg -> plotting -> aggregate.")
+    plotting.add_argument("--points", "-p", action=argparse.BooleanOptionalAction, default=None,
+                          help="Plot discrete trajectory points instead of lines. Defaults to cfg -> plotting -> plot_points.")
+    plotting.add_argument("--segmentations", "-seg", action=argparse.BooleanOptionalAction, default=None,
+                          help="Produce an additional trajectory plot overlaid on the lane segmentation overlay PNG (from --segmentation-folder), alongside the standard plain-orthophoto plot. Requires pre-generated overlays (run: python tools/viz_segmentations.py <ortho_folder>/). Defaults to cfg -> plotting -> use_segmentations.")
+    plotting.add_argument("--id", "-i", type=int, default=0, help="Vehicle ID to print/plot in detail (only for non-folder input) [default: 0]")
+    plotting.add_argument("--class-filter", "-cf", nargs="+", default=None,
+                          help="Vehicle class IDs to exclude from plots. Defaults to cfg -> plotting -> class_filter.")
 
     return parser.parse_args()
 

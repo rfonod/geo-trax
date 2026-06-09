@@ -23,46 +23,57 @@ share/python-wheels/
 *.egg
 MANIFEST
 
-# Environments
+# Virtual environments
 .env
 .venv
-.idea
 env/
 venv/
 ENV/
 env.bak/
 venv.bak/
 
-# Logging
-.comet.config
-*.log
+# Package manager lock files (not committed; generated locally)
+uv.lock
+poetry.lock
 
-# VSCode
+# IDE/editor folders
 .vscode/
-!.vscode/settings.json
-!.vscode/tasks.json
-!.vscode/launch.json
-!.vscode/extensions.json
+.idea/
 *.code-workspace
-
-# Local History for Visual Studio Code
 .history/
 
-# Mac OS-specific storage files
+# Runtime / tooling logs
+*.log
+.comet.config
+
+# Python test / typecheck / build caches
+.pytest_cache/
+.tox/
+.nox/
+.mypy_cache/
+.coverage
+coverage.xml
+htmlcov/
+__pypackages__/
+
+# System files
 .DS_Store
-**/.DS_Store
+Thumbs.db
+desktop.ini
 
-# Google Drive specific files
-.tmp.driveupload
-.tmp.drivedownload
+# Project-specific sensitive/local data
+data-private/
+projects/
+assets/*.drawio
 
-# Downloaded datasets
+# Data directories that should not be committed
 data/sample_videos/
 data/orthophotos/
 data/segmentations/
 data/master_frames/
+data/results/
+*.yaml
 
-# Data and project
-projects/
-data-private/
-
+# Optional Google Drive temporary files
+.tmp.driveupload
+.tmp.drivedownload

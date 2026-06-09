@@ -101,7 +101,7 @@ def setup_logger(name: str, verbose: bool = False, filename: str = '', dry_run: 
 
 def load_config_all(args: argparse.Namespace, logger: logging.Logger) -> dict:
     """
-    Load all configuration files and return the contents as dictionaries
+    Load all configuration files and return a nested dict.
     """
 
     kwargs_main = load_config(args.cfg, logger)
@@ -113,23 +113,21 @@ def load_config_all(args: argparse.Namespace, logger: logging.Logger) -> dict:
     kwargs_main['class_names'] = load_class_names(class_names_filepath, logger)
     kwargs_main['args'] = args
 
-    keys_to_update = ['classes', 'show']
+    keys_to_update = ['classes', 'conf', 'show']
     for arg, value in vars(args).items():
         if value is not None and arg in keys_to_update:
             kwargs_ultralytics[arg] = value
             logger.info(f"The default ultralytics value for {arg} has been updated to the provided CLI argument: {value}.")
     kwargs_ultralytics['tracker'] = kwargs_main['cfg_tracker']
 
-    config = {
+    logger.info(f"The main configuration file and all sub-configurations therein have been loaded from: '{args.cfg}'.")
+
+    return {
         'main': kwargs_main,
         'stabilo': kwargs_stabilo,
         'ultralytics': kwargs_ultralytics,
         'georef': kwargs_georef
     }
-
-    logger.info(f"The main configuration file and all sub-configurations therein have been loaded from: '{args.cfg}'.")
-
-    return config
 
 
 def load_config(cfg_filepath: Path, logger: logging.Logger) -> dict:
@@ -277,7 +275,7 @@ def get_ortho_folder(source: Path, ortho_folder: Union[Path, None], logger: logg
                 logger.critical(
                     f"Failed to find the orthophoto folder for source '{source}'. "
                     f"Please either provide a custom path using the --ortho-folder argument, "
-                    f"disable georeferencing with the --no-geo (or -ng) flag, "
+                    f"skip georeferencing with the --no-geo argument, "
                     f"or ensure that the default folder structure is in place."
                 )
                 sys.exit(1)
@@ -285,7 +283,7 @@ def get_ortho_folder(source: Path, ortho_folder: Union[Path, None], logger: logg
                 logger.info(
                     f"Failed to find the orthophoto folder for source '{source}'. "
                     f"Please either provide a custom path using the --ortho-folder argument, "
-                    f"disable georeferencing with the --no-geo (or -ng) flag, "
+                    f"skip georeferencing with the --no-geo argument, "
                     f"or ensure that the default folder structure is in place."
                 )
                 return None

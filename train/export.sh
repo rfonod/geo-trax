@@ -22,7 +22,10 @@
 # Notes:
 # - Exported files will be saved in the same directory as the input files.
 # - Ensure the script has execute permissions: chmod +x export.sh.
-# - The script requires dev dependencies: pip install -e ".[dev]".
+# - ONNX export requires: pip install -e ".[export]"
+# - TensorRT (engine) export requires a CUDA-capable GPU and a separate
+#   TensorRT installation (not pip-installable; install via NVIDIA SDK or
+#   https://docs.nvidia.com/deeplearning/tensorrt/install-guide).
 # - The default configuration file is cfg/ultralytics/default.yaml.
 
 #-------------------------------------------------------------------------------

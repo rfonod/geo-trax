@@ -1,10 +1,32 @@
+# Overview:
+# This pyproject.toml manages the build, packaging, and distribution of the geo-trax library.
+# It defines project metadata, dependencies, and tool settings.
+#
+# Key Sections:
+# - [build-system]: Build requirements and backend (setuptools).
+# - [project]: Metadata, required and optional dependencies.
+# - [project.optional-dependencies]: Optional packages for development (dev) and model export (export).
+# - [tool.poetry]: Poetry settings (package-mode = false; deps-only, not installable yet).
+# - [tool.*]: Tool configurations (setuptools, ruff, pytest).
+#
+# Installation:
+#   pip install -e .                    # core; -e (editable) reflects code changes without reinstalling
+#   pip install -e '.[dev]'             # core + dev (pip)
+#   pip install -e '.[export]'          # core + export (pip)
+#   poetry install                      # core (Poetry; auto-manages virtualenv)
+#   poetry install --extras dev         # core + dev (Poetry)
+#   poetry install --extras export      # core + export (Poetry)
+#   uv venv --python 3.11 && uv pip install -e .           # core (uv; faster)
+#   uv venv --python 3.11 && uv pip install -e '.[dev]'    # core + dev (uv)
+#   uv venv --python 3.11 && uv pip install -e '.[export]' # core + export (uv)
+
 [build-system]
 requires = ["setuptools>=77.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "geo-trax"
-version = "0.8.0"
+version = "0.9.0"
 description = "A Comprehensive Framework for Georeferenced Vehicle Trajectory Extraction from Drone Imagery"
 authors = [
     { name = "Robert Fonod", email = "robert.fonod@ieee.org" },
@@ -12,15 +34,17 @@ authors = [
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
-requires-python = ">=3.10"
+requires-python = ">=3.9"
 keywords = ["trajectory-extraction", "trajectory-analysis", "object-detection", "object-tracking", "object-stabilization", "georeferencing", "computer-vision", "deep-learning"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Intended Audience :: Developers",
     "Intended Audience :: Science/Research",
     "Topic :: Scientific/Engineering",
@@ -28,26 +52,28 @@ classifiers = [
     "Topic :: Multimedia :: Video",
 ]
 dependencies = [
-    "ultralytics==8.0.209",
+    "ultralytics[extra]>=8.4.40,<9.0",
     "lapx>=0.5.2",
     "stabilo>=1.2.0",
     "geopandas>=1.0.0",
-    "numpy>=1.26.4,<2.0",
-    "torch>=1.10.0,<2.6",
+    "matplotlib>=3.3.0",
+    "seaborn>=0.11.0",
+    "pysrt>=1.1.2",
+    "tifffile",
+    "comet_ml",
 ]
 
 [project.optional-dependencies]
 dev = [
-    "pytest>=8.3.0",
-    "scikit-image>=0.25.0",
-    "comet_ml",
-    "albumentations>=1.3.1",
-    "onnx>=1.12.0",
-    "onnxsim>=0.4.1",
-    "thop>=0.1.1",
-    "pycocotools>=2.0.6",
-    "pyproj>=3.6.1",
-    "pysrt>=1.1.2",
+    "ultralytics[dev]",
+]
+export = [
+    "onnx>=1.12.0; platform_system != 'Darwin'",                                                          # ONNX export
+    "onnx>=1.12.0,<1.18.0; platform_system == 'Darwin' and python_version < '3.13'",                     # ONNX export (macOS, TF compat)
+    "onnx>=1.20.0; platform_system == 'Darwin' and python_version >= '3.13'",                             # ONNX export (macOS, Python 3.13+)
+    "onnxslim>=0.1.82",                                                                                    # ONNX graph optimization
+    "onnxruntime<1.20.0; python_version < '3.11' and (platform_machine != 'aarch64' or platform_system != 'Linux')",  # ONNX inference/validation
+    "onnxruntime>=1.20.0; python_version >= '3.11'",                                                      # ONNX inference/validation
 ]
 
 [project.urls]
@@ -55,6 +81,9 @@ Homepage = "https://github.com/rfonod/geo-trax/"
 Repository = "https://github.com/rfonod/geo-trax/"
 Changelog = "https://github.com/rfonod/geo-trax/releases"
 Issues = "https://github.com/rfonod/geo-trax/issues/"
+
+[tool.poetry]
+package-mode = false  # geo-trax is not yet an installable package; manage deps only
 
 [tool.setuptools]
 packages = { find = { where = ["."], include = ["utils", "utils.*"] } }

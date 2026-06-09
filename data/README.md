@@ -15,7 +15,7 @@ python tools/recut_video_and_csv.py data/sample_videos/U_D10_2022-10-07_PM5_60s.
 To reproduce the pixel-coordinate results in the `data/results-pixel/` directory, run the following command from the repository root:
 
 ```bash
-python batch_process.py data/U_video_cut.mp4 --no-geo --save --show-class-names --show-conf --plot
+python batch_process.py data/U_video_cut.mp4 --no-geo --show-class-names --show-conf
 ```
 
 ### Full Pipeline Results
@@ -23,7 +23,7 @@ python batch_process.py data/U_video_cut.mp4 --no-geo --save --show-class-names 
 To reproduce the full Geo-trax pipeline results in the `data/results-full/` directory, including georeferencing, road segmentation, kinematics, and real-world vehicle dimension estimation, run the following command from the repository root:
 
 ```bash
-python batch_process.py data/U_video_cut.mp4 -of data/orthophotos -osf data/segmentations -mf data/master_frames --save --show-lanes --plot
+python batch_process.py data/U_video_cut.mp4 -of data/orthophotos -osf data/segmentations -mf data/master_frames --show-lanes --segmentations
 ```
 
 > **Note:** The trajectory and distribution plots generated from this 5-second sample are not statistically meaningful due to the limited sample size. Longer video clips are needed for representative results.
@@ -31,7 +31,7 @@ python batch_process.py data/U_video_cut.mp4 -of data/orthophotos -osf data/segm
 **Prerequisites:** Download the required files as described in the [Sample Videos and Data](#sample-videos-and-data-for-full-pipeline-testing) section:
 
 - Orthophoto files: `orthophotos/U_center.txt`, `orthophotos/U.png`, `orthophotos/ortho_parameters.txt`
-- Segmentation masks: `segmentations/U.csv`
+- Segmentation files: `segmentations/U.csv`; optional overlay PNG can be generated later (see [overlay instructions](#generate-segmentation-overlays)).
 - Master frame files: `master_frames/U.png`, `master_frames/U.txt`
 
 > **Tip:** You can easily process any sample video from the Songdo Traffic dataset by replacing `U_video_cut.mp4` with the desired filename (e.g., `A_D1_2022-10-07_PM5_60s.mp4`).
@@ -61,7 +61,7 @@ Run the following commands from the `data/` directory to automatically download,
 
 **Note for macOS users:** Replace `wget` with `curl -L` and `-O` with `-o`, or install wget via [Homebrew](https://brew.sh/): `brew install wget`
 
-**Note for Windows users:** Install wget via [Chocolatey](https://chocolatey.org/) (`choco install wget`), or use [Option 1](#option-1-direct-downloads)
+**Note for Windows users:** Install wget via [Chocolatey](https://chocolatey.org/) (`choco install wget`), or use [Option 1](#option-1-direct-downloads).
 
 ```bash
 # Download and extract sample videos
@@ -109,10 +109,22 @@ geo-trax/
     │   ├── A_D1_2022-10-07_PM5_60s.mp4
     │   ├── ...
     │   └── U_D10_2022-10-07_PM5_60s.mp4
-    ├── segmentations
+    ├── segmentations/
     │   ├── A.csv
+    │   ├── A.png          ← generated (see note below)
     │   ├── ...
-    │   └── U.csv
+    │   ├── U.csv
+    │   └── U.png          ← generated (see note below)
     ├── U_video_cut.csv
     └── U_video_cut.mp4
 ```
+
+### Generate Segmentation Overlay PNGs
+
+> **Note:** The segmentation visualization PNGs (`segmentations/*.png`) are **not** included in the downloaded `segmentations.zip`. Generate them locally after downloading the orthophotos and segmentation CSVs:
+>
+> ```bash
+> python tools/viz_segmentations.py data/orthophotos/ -sf data/segmentations/
+> ```
+>
+> This overlays each CSV's lane polygons and section labels onto the corresponding orthophoto and writes the annotated PNG to `data/segmentations/`.

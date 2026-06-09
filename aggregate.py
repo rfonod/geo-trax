@@ -60,6 +60,7 @@ Notes:
 
 import argparse
 import logging
+import sys
 import zipfile
 from pathlib import Path
 
@@ -79,14 +80,14 @@ def aggregate_results(args: argparse.Namespace, logger: logging.Logger) -> None:
 
     if not input_path.exists():
         logger.critical(f"Input folder '{input_path}' does not exist.")
-        return
+        sys.exit(1)
 
     output_path.mkdir(parents=True, exist_ok=True)
 
     csv_files = list(input_path.rglob('**/results/*.csv'))
     if not csv_files:
         logger.critical(f"No CSV files found in '{input_path}'")
-        return
+        sys.exit(1)
 
     file_groups = {}
     for file_path in csv_files:

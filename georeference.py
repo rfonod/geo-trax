@@ -27,16 +27,19 @@ Options:
     --log-file, -lf <str>          : Filename to save detailed logs. Saved in the 'logs' folder.
     --verbose, -v                  : Set print verbosity level to INFO (default: WARNING).
 
+Georeferencing Options:
     --ortho-folder, -of <path>     : Custom path to the folder with orthophotos (.png, .tif, .txt).
                                      Defaults to 'ORTHOPHOTOS' at the same level as 'PROCESSED' in 'input'.
     --geo-source, -gs <str>        : Source of georeferencing parameters (metadata-tif, text-file, center-text-file).
-                                     If not provided, the system will auto-detect.
-    --ref-frame, -rf <int>         : Use custom reference frame number (default: 0).
-                                     Should be the same as the one used for stabilization.
-    --no-master, -nm               : Disable the master frame approach.
+                                     If not provided, the system will auto-detect. Defaults to cfg -> georef -> processing -> geo_source.
+    --ref-frame, -rf <int>         : Use custom reference frame number. Should be the same as the one
+                                     used for stabilization. Defaults to cfg -> georef -> processing -> ref_frame.
+    --no-master, -nm               : Disable the master frame approach regardless of config.
+                                     When not set, cfg -> georef -> processing -> use_master applies.
     --master-folder, -mf <path>    : Custom path to the folder containing master frame files (.png).
                                      If not provided, '--ortho-folder / master_frames' will be used.
-    --recompute, -r                : Force recompute master-> ortho homography even if it exists.
+    --recompute, -r                : Force recompute master->ortho homography even if cached.
+                                     Defaults to cfg -> georef -> processing -> recompute.
     --segmentation-folder, -osf <path> : Custom path to the folder containing orthophoto segmentation files (.csv).
                                          If not provided, '--ortho-folder / segmentations' will be used.
 
@@ -55,18 +58,22 @@ Examples:
      python georeference.py path/to/video.mp4 -gs metadata-tif -nm
 
 Notes:
-  - Ensure that the orthophotos and segmentation data are correctly formatted and located in the specified folders.
-  - The script assumes that the orthophotos are georeferenced to a known coordinate system.
-  - The master frame approach can improve the robustness of the homography estimation but may require extra processing.
-  - Additional configurations can be set in the main configuration file (default: cfg/default.yaml) and its associated config files.
-  - Video decoding behavior may vary across different systems due to variations in FFmpeg backend versions used by OpenCV,
-    potentially affecting frame extraction consistency and georeferencing results. For reproducible outputs across
-    environments, ensure consistent OpenCV and FFmpeg versions.
+  - Orthophotos must be georeferenced; their coordinate system must match the source_crs configured
+    in cfg/georef/default.yaml (default: EPSG:4326 / WGS84).
+  - Additional options (image matching, CRS, kinematic filtering, etc.) can be configured in
+    cfg/georef/default.yaml; no CLI overrides exist for those settings.
+  - The master frame approach registers reference->master and master->ortho separately, improving homography
+    robustness by leveraging a stable high-quality reference image. Use --no-master only when master frames
+    are unavailable.
+  - Video decoding behavior may vary across different systems due to variations in FFmpeg backend versions used
+    by OpenCV, potentially affecting frame extraction consistency and georeferencing results. For reproducible
+    outputs across environments, ensure consistent OpenCV and FFmpeg versions.
 """
 
 import argparse
 import hashlib
 import logging
+import shutil
 import sys
 from pathlib import Path
 from typing import Union
@@ -79,6 +86,7 @@ from PIL import Image, TiffImagePlugin
 from scipy.ndimage import gaussian_filter1d
 from scipy.signal import savgol_filter
 from shapely.geometry import Polygon
+from tqdm import tqdm
 
 from utils.utils import (
     check_if_results_exist,
@@ -94,39 +102,89 @@ def georeference(args: argparse.Namespace, logger: logging.Logger) -> None:
     """
     Georeference the tracking data using orthophotos.
     """
-    config = load_config_all(args, logger)['georef']
+    full_config = load_config_all(args, logger)
+    config = full_config['georef']
+    gproc = config['processing']
+    if args.ref_frame is None:
+        args.ref_frame = gproc['ref_frame']
+    if args.recompute is None:
+        args.recompute = gproc['recompute']
+    if args.geo_source is None:
+        args.geo_source = gproc['geo_source']
+    if args.no_master is None:
+        args.no_master = not gproc['use_master']
+
+    n_steps = 8 if args.no_master else 10
+    _bar_w = max(10, shutil.get_terminal_size().columns - 88)
+    pbar = tqdm(total=n_steps, unit='step', colour='cyan', leave=True,
+                desc=f'{args.source.name} - georeferencing      ',
+                bar_format=f'{{l_bar}}{{bar:{_bar_w}}}{{r_bar}}')
+
+    pbar.set_postfix_str('loading tracking data')
     location_id = determine_location_id(args.source, logger)
     track_id, frame_num, bbox_unstab, x_stab_frame, y_stab_frame, class_id, veh_dim_px = get_tracking_data(args.source, logger)
     timestamps = get_timestamps(args.source, frame_num, logger)
+    pbar.update()
+
+    pbar.set_postfix_str('reading reference frame')
     reference_frame, frame_size, fps = get_video_data(args.source, args.ref_frame, logger)
+    pbar.update()
+
+    pbar.set_postfix_str('loading orthophoto data')
     ortho_folder = get_ortho_folder(args.source, args.ortho_folder, logger)
     geo_source = get_geo_params_source(args.geo_source, ortho_folder, location_id, logger)
     ortho = get_orthophoto(ortho_folder, location_id, logger)
-    ortho_params = get_ortho_parameters(ortho_folder, location_id, geo_source, ortho, config['cutout_width_px'], logger)
+    ortho_params = get_ortho_parameters(ortho_folder, location_id, geo_source, ortho, config['transformation']['cutout_width_px'], logger)
     ortho_segmentation = get_road_section_lane_geometry(ortho_folder, args.segmentation_folder, location_id, logger)
+    pbar.update()
 
     if args.no_master:
+        pbar.set_postfix_str('computing reference → orthophoto homography')
         homography_reference_to_ortho = get_reference_to_ortho_homography(reference_frame, ortho, config['matching'], logger)
+        pbar.update()
     else:
+        pbar.set_postfix_str('loading master frame')
         master_frame = get_master_frame(ortho_folder, args.master_folder, location_id, logger)
+        pbar.update()
+
+        pbar.set_postfix_str('computing reference → master homography')
         homography_reference_to_master = get_reference_to_master_homography(reference_frame, master_frame, config['matching'], logger)
+        pbar.update()
+
+        pbar.set_postfix_str('computing master → orthophoto homography')
         homography_master_to_ortho = get_master_to_ortho_homography(master_frame, ortho, ortho_folder, args.master_folder, location_id, args.recompute, config['matching'], logger)
         homography_reference_to_ortho = np.dot(homography_master_to_ortho, homography_reference_to_master)
+        pbar.update()
 
+    pbar.set_postfix_str('transforming coordinates')
     x_stab_ortho, y_stab_ortho = apply_homography(x_stab_frame, y_stab_frame, homography_reference_to_ortho)
     latitude, longitude = ortho2geo(x_stab_ortho, y_stab_ortho, ortho_params)
-    x_local, y_local = geo2local(latitude, longitude, **config['transformation'])
-    veh_dim_real = convert_dimensions(track_id, veh_dim_px, frame_size, homography_reference_to_ortho, ortho_params, **config['transformation'])
-    visibility = calculate_visibility(track_id, bbox_unstab, frame_size, config['visibility_margin'])
-    veh_speed, veh_acceleration = compute_kinematics(track_id, frame_num, x_local, y_local, visibility, fps, **config['filtering'])
-    road_section, lane_number = assign_road_section_lane(x_stab_ortho, y_stab_ortho, ortho_segmentation)
+    source_crs = config['transformation']['source_crs']
+    target_crs = config['transformation']['target_crs']
+    x_local, y_local = geo2local(latitude, longitude, source_crs, target_crs)
+    veh_dim_real = convert_dimensions(track_id, veh_dim_px, frame_size, homography_reference_to_ortho, ortho_params, source_crs, target_crs)
+    visibility = calculate_visibility(track_id, bbox_unstab, frame_size, config['filtering']['visibility_margin'])
+    pbar.update()
 
+    pbar.set_postfix_str('computing kinematics')
+    veh_speed, veh_acceleration = compute_kinematics(track_id, frame_num, x_local, y_local, visibility, fps,
+                                                     config['filtering']['filter_type'], config['filtering']['kernel_size'])
+    pbar.update()
+
+    pbar.set_postfix_str('assigning road sections')
+    road_section, lane_number = assign_road_section_lane(x_stab_ortho, y_stab_ortho, ortho_segmentation)
+    pbar.update()
+
+    pbar.set_postfix_str('saving results')
     georeferenced_df = create_and_format_georeferenced_df(track_id, timestamps, frame_num, x_stab_ortho, y_stab_ortho, x_local, y_local,
                                                       latitude, longitude, veh_dim_real, class_id, veh_speed, veh_acceleration,
-                                                      road_section, lane_number, visibility, config['min_traj_length'], logger)
-
+                                                      road_section, lane_number, visibility, config['filtering']['min_traj_length'], logger)
     save_georeferenced_data(args.source, georeferenced_df, logger)
     save_homography(args.source, homography_reference_to_ortho, logger)
+    pbar.update()
+
+    pbar.set_postfix_str('done')
+    pbar.close()
 
 
 def get_tracking_data(source: Path, logger: logging.Logger) -> tuple:
@@ -146,9 +204,10 @@ def get_tracking_data(source: Path, logger: logging.Logger) -> tuple:
 
     if tracks.size == 0 or tracks.ndim != 2:
         logger.critical(f"No valid tracking data found in: '{tracking_data_filepath}'.")
+        sys.exit(1)
     elif tracks.shape[1] < 14:
         logger.critical(f"Invalid tracking data format in: '{tracking_data_filepath}'. Expected at least 14 columns: \
-                [track_id, frame_num, x_c_unstab, y_c_unstab, w_unstab, h_unstab, x_c_stab, y_c_stab, \
+                [frame_id, vehicle_id, x_c_unstab, y_c_unstab, w_unstab, h_unstab, x_c_stab, y_c_stab, \
                     w_stab, h_stab, class_id, confidence, vehicle_length, vehicle_width]. Make sure you run \
                     geo-trax with stabilization enabled.")
         sys.exit(1)
@@ -205,6 +264,7 @@ def get_video_data(video_filepath: Path, ref_frame_num: int, logger: logging.Log
     fps = cap.get(cv2.CAP_PROP_FPS)
     if fps == 0:
         logger.critical(f"Failed to retrieve FPS from video file: '{video_filepath}'.")
+        cap.release()
         sys.exit(1)
 
     frame_dimensions = ref_frame.shape[:2]
@@ -216,7 +276,7 @@ def get_video_data(video_filepath: Path, ref_frame_num: int, logger: logging.Log
 
 def get_orthophoto(ortho_folder: Path, location_id: str, logger: logging.Logger) -> np.ndarray:
     """
-    Get orthophoto data (orthophoto image and dimensions) from the orthophoto
+    Load the orthophoto image from the orthophoto folder.
     """
     ortho_filepath = ortho_folder / (location_id + '.png')
     if not ortho_filepath.exists():
@@ -286,7 +346,8 @@ def get_geo_params_source(geo_source: Union[str, None], ortho_folder: Path, loca
     """
     if geo_source is not None:
         if geo_source not in ['metadata-tif', 'text-file', 'center-text-file']:
-            logger.error(f"Invalid --geo-source argument: '{geo_source}'. Use 'metadata-tif', 'text-file', or 'center-text-file'.")
+            logger.critical(f"Invalid --geo-source argument: '{geo_source}'. Use 'metadata-tif', 'text-file', or 'center-text-file'.")
+            sys.exit(1)
         return geo_source
 
     ortho_filepath = ortho_folder / (location_id + '.png')
@@ -495,7 +556,7 @@ def compute_homography(img_src: np.ndarray, img_dst: np.ndarray, src_dst: tuple,
         kpt_dst, desc_dst = sift.detectAndCompute(img_dst_gray, None)  # type: ignore
 
         if kpt_src is None or kpt_dst is None:
-            return None, None
+            return None, None, None
 
         desc_src = convert_to_rootsift(desc_src, rsift_eps)
         desc_dst = convert_to_rootsift(desc_dst, rsift_eps)
@@ -504,7 +565,7 @@ def compute_homography(img_src: np.ndarray, img_dst: np.ndarray, src_dst: tuple,
         try:
             matches = bf.knnMatch(desc_src, desc_dst, k=2)
         except cv2.error:
-            return None, None
+            return None, None, None
 
         good_matches = []
         for pair in matches:
@@ -514,13 +575,16 @@ def compute_homography(img_src: np.ndarray, img_dst: np.ndarray, src_dst: tuple,
                     good_matches.append(m)
 
         if len(good_matches) < 4:
-            return None, None
+            return None, None, None
 
         pts_src = np.array([kpt_src[m.queryIdx].pt for m in good_matches], dtype=np.float32).reshape(-1, 2)
         pts_dst = np.array([kpt_dst[m.trainIdx].pt for m in good_matches], dtype=np.float32).reshape(-1, 2)
 
         homography, inliers = cv2.findHomography(pts_src, pts_dst, method = ransac_method, confidence = ransac_confidence,
                                                  ransacReprojThreshold = ransac_epipolar_threshold, maxIters = ransac_max_iter)
+
+        if homography is None or inliers is None:
+            return None, None, None
 
         stats_txt = f"Keypoints in {src_dst[0]} frame: {len(kpt_src)}, in {src_dst[1]}: {len(kpt_dst)}. Inliers: {inliers.sum()} out of {len(inliers)} matches"
 
@@ -742,7 +806,7 @@ def apply_filter(data: np.ndarray, kernel_size: int, filter_type: str = 'gaussia
         polyorder = 2
         return savgol_filter(data, window_length=window_length, polyorder=polyorder, mode='nearest')
     else:
-        sys.exit(f"Error: Invalid filter type {filter_type}.")
+        raise ValueError(f"Invalid filter type: '{filter_type}'. Supported types: 'gaussian', 'savgol'.")
 
 
 def create_and_format_georeferenced_df(track_id, timestamps, frame_num, x_stab_ortho, y_stab_ortho, x_local, y_local,
@@ -755,7 +819,7 @@ def create_and_format_georeferenced_df(track_id, timestamps, frame_num, x_stab_o
         data = {
             'Vehicle_ID': track_id,
             'Timestamp': timestamps if timestamps.size > 0 else None,
-            'Frame_Number': frame_num if timestamps.size == 0 else None,
+            'Frame_Number': frame_num,
             'Ortho_X': x_stab_ortho,
             'Ortho_Y': y_stab_ortho,
             'Local_X': x_local,
@@ -836,19 +900,19 @@ def parse_cli_args() -> argparse.Namespace:
     # Required arguments
     parser.add_argument("source", type=Path, help="Path to the input video file")
 
-    # Optional arguments
-    parser.add_argument('--cfg', '-c', type=Path, default='cfg/default.yaml', help='Path to the main geo-trax configuration file')
-    parser.add_argument('--log-file', '-lf', type=str, default=None, help="Filename to save detailed logs. Saved in the 'logs' folder.")
-    parser.add_argument('--verbose', '-v', action='store_true', help='Set print verbosity level to INFO (default: WARNING)')
+    optional = parser.add_argument_group('Optional arguments')
+    optional.add_argument('--cfg', '-c', type=Path, default='cfg/default.yaml', help='Path to the main geo-trax configuration file')
+    optional.add_argument('--log-file', '-lf', type=str, default=None, help="Filename to save detailed logs. Saved in the 'logs' folder.")
+    optional.add_argument('--verbose', '-v', action='store_true', help='Set print verbosity level to INFO (default: WARNING)')
 
-    # Georeferencing arguments
-    parser.add_argument("--ortho-folder", "-of", type=Path, default=None, help="Custom path to the folder with orthophotos (.png, .tif, .txt). Defaults to 'ORTHOPHOTOS' at the same level as 'PROCESSED' in 'input'.")
-    parser.add_argument("--geo-source", "-gs", choices=['metadata-tif', 'text-file', 'center-text-file'], default=None, help="Source of georeferencing parameters. If not provided, the system will auto-detect")
-    parser.add_argument("--ref-frame", "-rf", type=int, default=0, help="Use custom reference frame number (should be the same as the one used for stabilization).")
-    parser.add_argument("--no-master", "-nm", action="store_true", help="Disable the master frame approach.")
-    parser.add_argument("--master-folder", "-mf", type=Path, default=None, help="Custom path to the folder containing master frame files (.png). If not provided, '--ortho-folder / master_frames' will be used.")
-    parser.add_argument("--recompute", "-r", action="store_true", help="Force recompute master-> ortho homography even if it exists.")
-    parser.add_argument("--segmentation-folder", "-osf", type=Path, default=None, help="Custom path to the folder containing orthophoto segmentation files (.csv). If not provided, '--ortho-folder / segmentations' will be used.")
+    georef = parser.add_argument_group('Georeferencing arguments')
+    georef.add_argument("--ortho-folder", "-of", type=Path, default=None, help="Custom path to the folder with orthophotos (.png, .tif, .txt). Defaults to 'ORTHOPHOTOS' at the same level as 'PROCESSED' in 'input'.")
+    georef.add_argument("--geo-source", "-gs", choices=['metadata-tif', 'text-file', 'center-text-file'], default=None, help="Source of georeferencing parameters. If not provided, falls back to cfg -> georef -> processing -> geo_source, then auto-detect.")
+    georef.add_argument("--ref-frame", "-rf", type=int, default=None, help="Reference frame number (must match stabilization setting). Defaults to cfg -> georef -> processing -> ref_frame.")
+    georef.add_argument("--no-master", "-nm", action="store_const", const=True, default=None, help="Disable the master frame approach regardless of config. When not set, cfg -> georef -> processing -> use_master applies.")
+    georef.add_argument("--master-folder", "-mf", type=Path, default=None, help="Custom path to the folder containing master frame files (.png). If not provided, '--ortho-folder / master_frames' will be used.")
+    georef.add_argument("--recompute", "-r", action="store_const", const=True, default=None, help="Force recompute master->ortho homography even if cached. Defaults to cfg -> georef -> processing -> recompute.")
+    georef.add_argument("--segmentation-folder", "-osf", type=Path, default=None, help="Custom path to the folder containing orthophoto segmentation files (.csv). If not provided, '--ortho-folder / segmentations' will be used.")
 
     return parser.parse_args()
 

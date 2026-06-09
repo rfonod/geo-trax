@@ -26,10 +26,14 @@ Options:
     --log-file, -lf <str>     : Filename to save detailed logs. Saved in the 'logs' folder (default: None).
     --verbose, -v             : Set print verbosity level to INFO (default: WARNING).
 
+Processing Options:
+    --conf, -co <float>       : Detection confidence threshold. Defaults to cfg -> cfg_ultralytics -> conf.
     --classes, -cls <int> [<int> ...] : Class IDs to extract (e.g., --classes 0 1 2).
-                              Defaults to cfg -> cfg_ultralytics -> classes (default: None).
-    --cut-frame-left, -cfl <int> : Skip the first N frames (default: 0).
-    --cut-frame-right, -cfr <int> : Stop processing after this frame (default: None).
+                              Defaults to cfg -> cfg_ultralytics -> classes.
+    --cut-frame-left, -cfl <int> : Skip the first N frames. Defaults to cfg -> processing -> cut_frame_left.
+    --cut-frame-right, -cfr <int> : Stop processing after this frame. Defaults to cfg -> processing -> cut_frame_right.
+    For full detection and tracking control (model, IoU, image size, tracker settings, etc.),
+    edit cfg/ultralytics/default.yaml and the linked tracker config.
 
 Examples:
   1. Process a video with default settings:
@@ -42,11 +46,16 @@ Examples:
         python detect_track_stabilize.py path/to/video.mp4 --cut-frame-left 100 --cut-frame-right 500
 
 Notes:
-  - Additional configurations can be set in the main configuration file (default: cfg/default.yaml) and linked config files therein.
+  - Detection parameters (model, confidence, IoU, image size, etc.) are controlled via cfg/ultralytics/default.yaml.
+  - Tracking parameters (algorithm, track buffer, matching thresholds, etc.) are controlled via the tracker config
+    linked under cfg_tracker in the main config (default: cfg/tracker/default_botsort.yaml).
+  - Stabilization parameters are controlled via the stabilo config linked under cfg_stabilo in the main config
+    (default: cfg/stabilo/default.yaml).
 """
 
 import argparse
 import logging
+import shutil
 import sys
 import time
 from pathlib import Path
@@ -75,6 +84,11 @@ def detect_track_stabilize(args: argparse.Namespace, logger: logging.Logger) -> 
     Process video based on provided arguments.
     """
     config = load_config_all(args, logger)
+    proc = config['main']['processing']
+    if args.cut_frame_left is None:
+        args.cut_frame_left = proc['cut_frame_left']
+    if args.cut_frame_right is None:
+        args.cut_frame_right = proc['cut_frame_right']
     model = load_detector(config['ultralytics'], logger)
     tracks, transforms = track_with_model(model, config, logger)
     tracks = postprocess_tracks(tracks, config, logger)
@@ -147,15 +161,17 @@ def track_with_model(model: Union[YOLO, RTDETR], config: Dict, logger: logging.L
             pbar.update()
     except Exception as e:
         logger.error(f"Error processing: '{config['main']['args'].source}' due to: {e}")
-        return np.array([[]]), np.array([[]])
+        return np.empty((0, 12), dtype=np.float32), np.empty((0, 10))
     else:
         pbar.total = frame_num
         pbar.refresh()
-        logger.info(f"Average YOLOv8 (preprocess + inference + postprocess) time: {sum(yolo_time) / len(yolo_time):5.1f}ms.")
-        logger.info(f"Average stabilization time: {sum(stab_time) / len(stab_time):5.1f}ms") if stab_time else None
-        logger.info(f"Average pipeline time: {1000 / ((sum(yolo_time) + sum(stab_time)) / (1 + frame_num)):4.1f}fps.")
+        if yolo_time:
+            logger.info(f"Average YOLOv8 (preprocess + inference + postprocess) time: {sum(yolo_time) / len(yolo_time):5.1f}ms.")
+            logger.info(f"Average stabilization time: {sum(stab_time) / len(stab_time):5.1f}ms") if stab_time else None
+            logger.info(f"Average pipeline time: {1000 * len(yolo_time) / (sum(yolo_time) + sum(stab_time)):4.1f}fps.")
     finally:
         reader.release()
+        pbar.set_postfix_str('done')
         pbar.close()
 
     tracks, transforms = aggregate_results(frame_arr, track_id, bbox, bbox_stab, class_id, conf, transforms, logger)
@@ -198,8 +214,10 @@ def initialize_streams(config: Dict, imgsz: int, logger: logging.Logger) -> Tupl
         logger.error(f"Failed to open: '{video_filepath}'.")
         sys.exit(1)
 
+    _bar_w = max(10, shutil.get_terminal_size().columns - 88)
     pbar = tqdm(total=int(reader.get(cv2.CAP_PROP_FRAME_COUNT)), unit='f', leave=True, colour='yellow',
-                desc=f'{video_filepath.name} - {"" if config["args"].verbose else "processing"} @ {imgsz}px ')
+                desc=f'{video_filepath.name} - {"" if config["args"].verbose else "processing"} @ {imgsz}px ',
+                bar_format=f'{{l_bar}}{{bar:{_bar_w}}}{{r_bar}}')
     return reader, pbar
 
 
@@ -229,12 +247,13 @@ def aggregate_results(frame_arr: list, track_id: list, bbox: list, bbox_stab: li
         conf = np.concatenate(conf, axis=0) if conf else np.array([[]])
 
         tracks = np.concatenate([frame_arr, track_id, bbox, bbox_stab, class_id, conf], axis=1, dtype=np.float32)
-        tracks = tracks[tracks[:, 1] != -1]
-        transforms = np.concatenate(transforms, axis=0) if transforms else np.array([[]])
+        if tracks.size > 0:
+            tracks = tracks[tracks[:, 1] != -1]
+        transforms = np.concatenate(transforms, axis=0) if transforms else np.empty((0, 10))
     except Exception as e:
         logger.error(f'Error aggregating results: {e}')
-        tracks = np.array([[]])
-        transforms = np.array([[]])
+        tracks = np.empty((0, 12))
+        transforms = np.empty((0, 10))
     return tracks, transforms
 
 
@@ -252,6 +271,8 @@ def remove_short_tracks(tracks: np.ndarray, logger: logging.Logger, min_length: 
     """
     Remove tracks with trajectory length shorter than specified.
     """
+    if tracks.size == 0:
+        return tracks
     unique_ids = np.unique(tracks[:, 1]).astype(int)
     count = 0
     for track_id in unique_ids:
@@ -309,7 +330,7 @@ def estimate_vehicle_dimensions(tracks: np.ndarray, config: Dict) -> np.ndarray:
     if valid_tracks.shape[1] > 8:
         idx_x, idx_y, idx_c = 6, 7, 10 # stabilized tracks available
     else:
-        idx_x, idx_y, idx_c = 2, 3, 6  # only unstabilzed tracks available
+        idx_x, idx_y, idx_c = 2, 3, 6  # only unstabilized tracks available
 
     for track in valid_tracks:
         track_id = int(track[1])
@@ -415,15 +436,18 @@ def parse_cli_args() -> argparse.Namespace:
     # Required arguments
     parser.add_argument('source', type=Path, help='Path to the video file (e.g., path/to/video/video.mp4)')
 
-    # Optional arguments
-    parser.add_argument('--cfg', '-c', type=Path, default='cfg/default.yaml', help='Path to the main geo-trax configuration file')
-    parser.add_argument('--log-file', '-lf', type=str, default=None, help="Filename to save detailed logs. Saved in the 'logs' folder.")
-    parser.add_argument('--verbose', '-v', action='store_true', help='Set print verbosity level to INFO (default: WARNING)')
+    optional = parser.add_argument_group('Optional arguments')
+    optional.add_argument('--cfg', '-c', type=Path, default='cfg/default.yaml', help='Path to the main geo-trax configuration file')
+    optional.add_argument('--log-file', '-lf', type=str, default=None, help="Filename to save detailed logs. Saved in the 'logs' folder.")
+    optional.add_argument('--verbose', '-v', action='store_true', help='Set print verbosity level to INFO (default: WARNING)')
 
-    # Additional arguments
-    parser.add_argument('--classes', '-cls', nargs='+', type=int, help='Class IDs to extract (e.g., --classes 0 1 2). Defaults to cfg -> cfg_ultralytics -> classes.')
-    parser.add_argument('--cut-frame-left', '-cfl', type=int, default=0, help='Skip the first N frames. Default: 0.')
-    parser.add_argument('--cut-frame-right', '-cfr', type=int, default=None, help='Stop processing after this frame. Default: None.')
+    processing = parser.add_argument_group('Processing arguments',
+        'For full detection and tracking control (model, IoU, image size, tracker settings, etc.), '
+        'edit cfg/ultralytics/default.yaml and the linked tracker config.')
+    processing.add_argument('--conf', '-co', type=float, default=None, help='Detection confidence threshold. Defaults to cfg -> cfg_ultralytics -> conf.')
+    processing.add_argument('--classes', '-cls', nargs='+', type=int, default=None, help='Class IDs to extract (e.g., --classes 0 1 2). Defaults to cfg -> cfg_ultralytics -> classes.')
+    processing.add_argument('--cut-frame-left', '-cfl', type=int, default=None, help='Skip the first N frames. Defaults to cfg -> processing -> cut_frame_left.')
+    processing.add_argument('--cut-frame-right', '-cfr', type=int, default=None, help='Stop processing after this frame. Defaults to cfg -> processing -> cut_frame_right.')
 
     return parser.parse_args()
 
