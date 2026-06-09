@@ -31,23 +31,20 @@
 ### Release Plan
 
 - **Version 1.0.0**
-  - Release all data wrangling and analysis tools.
-  - Add documentation and examples covering all core functionalities.
-  - Host the object detection model file on Hugging Face.
+  - Installable package via PyPI (`pip install geo-trax`) with CLI entry points and a modular package layout.
+  - Comprehensive documentation in a dedicated `docs/` folder, including tool-specific READMEs.
+  - Code cleanup: unified style, type hints, improved docstrings, and refactored utilities into focused modules.
+  - Additional data wrangling and analysis tools.
+  - Unit tests for core functions and automated testing via GitHub Actions.
+  - Detection model hosted on Hugging Face.
 
 - **Future Versions**
-  - Support for custom, user-provided models for detection.
-  - Modularization of the pipeline: detection, tracking, and stabilization as separate steps with support for custom reference frames.
-  - Rationalized configuration using a single `.yaml` file with nested dictionaries.
-  - Support for per-class confidence thresholds and oriented bounding box visualization (with azimuth and dimension estimates).
-  - Refactored utilities into focused modules (e.g., `file_utils`, `config_utils`, `data_utils`).
-  - Unit tests for all main functions and automated testing via GitHub Actions.
-  - Expanded documentation and separate README for analysis tools.
-  - Installable package via PyPI (`pip install geo-trax`) with a modular package layout.
-  - Upgrade to latest `ultralytics` (>8.2) and `numpy` (>2.0) releases.
-  - Batch inference and multi-thread processing for improved scalability.
-  - GPU-accelerated image registration and track interpolation in image coordinates.
-  - Integration with real-world map visualization tools (e.g., MovingPandas, contextily).
+  - Modularized, OOP-based pipeline with custom reference frame support and georeferencing leveraging Stabilo's image-matching backend.
+  - Rationalized single-file YAML configuration.
+  - Per-class confidence thresholds and oriented bounding box visualization (using azimuth and dimension estimates).
+  - Trajectory interpolation and SAHI-based small-object detection.
+  - Batch inference, GPU-accelerated image registration, and multi-thread processing.
+  - Real-world map visualization (e.g., MovingPandas, contextily) and interactive web app.
 
 </details>
 
@@ -264,11 +261,11 @@ If you use **Geo-trax** in your research, software, or dataset generation, pleas
     @software{fonod2026geo-trax,
       author = {Fonod, Robert},
       license = {MIT},
-      month = may,
+      month = jun,
       title = {Geo-trax: A Comprehensive Framework for Georeferenced Vehicle Trajectory Extraction from Drone Imagery},
       url = {https://github.com/rfonod/geo-trax},
       doi = {10.5281/zenodo.12119542},
-      version = {0.8.0},
+      version = {0.9.0},
       year = {2026}
     }
     ```
