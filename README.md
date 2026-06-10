@@ -137,7 +137,7 @@ Geo-trax supports six multi-object trackers bundled with [Ultralytics](https://g
 
 > ¹ **GMC** (global motion compensation) corrects for camera/drone movement *inside the tracker's association step*. It runs during tracking and is independent of Geo-trax's separate [Stabilo](https://github.com/rfonod/stabilo) stage, which stabilizes the already-extracted trajectories against a reference frame as post-processing and has no effect on tracking itself.
 
-**Guidance for drone (BEV) footage:** start with **BoT-SORT** (the default). If throughput matters more than identity consistency, try **ByteTrack** or **OC-SORT**. For dense scenes with frequent occlusions, **Deep OC-SORT** or **TrackTrack** (with ReID enabled) tend to retain identities best, at the cost of speed. To compare two trackers on your own data, see [`tools/compare_tracking.py`](tools/compare_tracking.py).
+**Guidance for drone (BEV) footage:** start with **BoT-SORT** (the default). If throughput matters more than identity consistency, try **ByteTrack** or **OC-SORT**. For dense scenes with frequent occlusions, **Deep OC-SORT** or **TrackTrack** (with ReID enabled) tend to retain identities best, at the cost of speed. To compare two or more trackers on your own data, see [`tools/compare_tracking.py`](tools/compare_tracking.py).
 
 </details>
 

@@ -3,161 +3,166 @@
 # Author: Robert Fonod (robert.fonod@ieee.org)
 
 """
-Compare tracking results from two different vehicle tracking algorithms.
+Compare tracking results across two or more vehicle tracking algorithms.
 
-This script analyzes and compares the performance of BoT-SORT and ByteTrack tracking
-algorithms by evaluating trajectory length distributions and missing frame patterns.
-It processes tracking results from multiple videos, computes statistical metrics, and
-generates comprehensive visualizations to highlight differences between the algorithms.
+This script analyzes and compares the performance of any number of tracking algorithms
+by evaluating trajectory length distributions and missing frame patterns. It processes
+tracking results from multiple videos, computes statistical metrics (including pairwise
+KL divergence), and generates visualizations to highlight differences between algorithms.
+
+By default it compares the six trackers geo-trax ships with (BoT-SORT, ByteTrack, OC-SORT,
+Deep OC-SORT, FastTracker, TrackTrack), but any tracker name is accepted as long as a
+matching results folder exists.
 
 Usage:
-    python tools/compare_tracking.py INPUT [--show] [--save]
+    python tools/compare_tracking.py INPUT [--trackers NAME ...] [--show] [--save]
 
 Arguments:
-    INPUT                    Path to folder containing video files with tracking results
+    INPUT                    Path to folder containing video files and per-tracker results
 
 Options:
+    --trackers NAME ...      Tracker names to compare (default: the six geo-trax trackers).
+                             Each name must have a matching `results_<name>/` subfolder;
+                             names without one are skipped. At least two must remain.
     --show                   Display the generated plots interactively
     --save                   Save plots to 'plots/' subdirectory as PNG files
 
 Input Format:
-    Tracking results should be in text files with the following structure:
-    - results_botsort/{video_name}.txt
-    - results_bytetrack/{video_name}.txt
+    For each tracker NAME, results live in a sibling folder of the input videos:
+    - results_<NAME>/{video_name}.txt   (e.g. results_botsort/, results_ocsort/)
 
     Each line contains 14 comma-separated values:
     frame_number,vehicle_id,x,y,width,height,x_stab,y_stab,width_stab,height_stab,class_id,confidence,vehicle_length,vehicle_width
 
 Output:
-    - Statistical comparison of trajectory lengths and missing frames
-    - KL divergence measures between distributions
-    - Multi-panel visualization with violin plots, CDFs, mirrored histograms, and density differences
+    - Per-tracker statistics for trajectory lengths and missing frames
+    - Pairwise KL divergence measures between distributions
+    - Multi-panel visualization (violin plots, CDFs, histograms, and density comparison)
     - Optional PNG plot files saved to plots/ directory
 
 Notes:
     - Videos starting with 'P' are automatically skipped
-    - Requires both tracking result files to exist for comparison
+    - A video is only included when every selected tracker has a results file for it
     - Uses KDE-based density estimation for detailed distribution analysis
-    - Generates publication-ready plots with enhanced styling
 """
 
 import argparse
+import itertools
 import sys
 from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 import seaborn as sns
+from matplotlib.ticker import FuncFormatter
 from scipy import stats
 
 sys.path.append(str(Path(__file__).resolve().parents[1]))  # Add project root directory to Python path
 from utils.file_utils import detect_delimiter
 
+# Trackers geo-trax ships with, in display order. Used as the default comparison set.
+TRACKER_DISPLAY_NAMES = {
+    "botsort": "BoT-SORT",
+    "bytetrack": "ByteTrack",
+    "ocsort": "OC-SORT",
+    "deepocsort": "Deep OC-SORT",
+    "fasttrack": "FastTracker",
+    "tracktrack": "TrackTrack",
+}
+DEFAULT_TRACKERS = list(TRACKER_DISPLAY_NAMES)
+
+# Stable, high-contrast color per known tracker; unknown names fall back to the palette below.
+TRACKER_COLORS = {
+    "botsort": "#3A6DAA",  # deep blue
+    "bytetrack": "#E57200",  # deep orange
+    "ocsort": "#2CA02C",  # green
+    "deepocsort": "#9467BD",  # purple
+    "fasttrack": "#D62728",  # red
+    "tracktrack": "#17BECF",  # cyan
+}
+FALLBACK_COLORS = ["#8C564B", "#BCBD22", "#7F7F7F", "#E377C2", "#1F77B4", "#FF7F0E"]
+
+
+def display_name(tracker: str) -> str:
+    """Human-readable label for a tracker name."""
+    return TRACKER_DISPLAY_NAMES.get(tracker, tracker)
+
+
+def color_for(tracker: str, index: int) -> str:
+    """Plot color for a tracker, deterministic for known names and cycled for the rest."""
+    return TRACKER_COLORS.get(tracker, FALLBACK_COLORS[index % len(FALLBACK_COLORS)])
+
 
 def compare_tracks(args):
     """
-    Compare tracking results
+    Compare tracking results across the selected trackers.
     """
-    # Get all the files in the input folder
-    video_files = sorted(list(args.input.glob("*.MP4")))
+    # Keep only trackers that actually have a results folder, preserving the requested order
+    trackers = []
+    for tracker in args.trackers:
+        if (args.input / f"results_{tracker}").is_dir():
+            trackers.append(tracker)
+        else:
+            print(f"Warning: no 'results_{tracker}/' folder found in {args.input}; skipping {display_name(tracker)}")
+    if len(trackers) < 2:
+        sys.exit("Need at least two trackers with available results to compare.")
 
-    # Initialize lists to store the trajectory lengths for each tracking algorithm
-    botsort_trajectory_lengths = []
-    bytetrack_trajectory_lengths = []
+    print(f"Comparing trackers: {', '.join(display_name(t) for t in trackers)}\n")
 
-    # Initialize lists to store the missing frames for each tracking algorithm
-    botsort_missing_frames = []
-    bytetrack_missing_frames = []
+    # Accumulate per-tracker trajectory lengths and missing-frame counts across all videos
+    lengths = {tracker: [] for tracker in trackers}
+    missing = {tracker: [] for tracker in trackers}
 
-    # Iterate over each video file
+    video_files = sorted(args.input.glob("*.MP4"))
     for video_file in video_files:
         if video_file.stem[0] == "P":
             continue
-        print(f"Comparing tracking results for video: {video_file.stem}")
 
-        botsort_results_filepath = args.input / "results_botsort" / f"{video_file.stem}.txt"
-        bytetrack_results_filepath = args.input / "results_bytetrack" / f"{video_file.stem}.txt"
-
-        # Load the results
-        if not botsort_results_filepath.exists() or not bytetrack_results_filepath.exists():
-            print(f"Results files not found for video: {video_file.stem}")
+        result_paths = {t: args.input / f"results_{t}" / f"{video_file.stem}.txt" for t in trackers}
+        absent = [display_name(t) for t, p in result_paths.items() if not p.exists()]
+        if absent:
+            print(f"Skipping {video_file.stem}: missing results for {', '.join(absent)}")
             continue
-        delimiter = detect_delimiter(botsort_results_filepath)
-        botsort_tracks = np.loadtxt(botsort_results_filepath, delimiter=delimiter, dtype=np.float64)
-        delimiter = detect_delimiter(bytetrack_results_filepath)
-        bytetrack_tracks = np.loadtxt(bytetrack_results_filepath, delimiter=delimiter, dtype=np.float64)
 
-        # Compute the trajectory length distribution for each tracking algorithm
-        botsort_trajectory_lengths.extend(compute_trajectory_lengths(botsort_tracks))
-        bytetrack_trajectory_lengths.extend(compute_trajectory_lengths(bytetrack_tracks))
+        print(f"Comparing tracking results for video: {video_file.stem}")
+        for tracker, path in result_paths.items():
+            tracks = np.loadtxt(path, delimiter=detect_delimiter(path), dtype=np.float64, ndmin=2)
+            if tracks.size == 0:
+                continue
+            lengths[tracker].extend(compute_trajectory_lengths(tracks))
+            missing[tracker].extend(find_missing_frames(tracks))
 
-        # Determine the missing frames for each tracking algorithm
-        botsort_missing_frames.extend(find_missing_frames(botsort_tracks))
-        bytetrack_missing_frames.extend(find_missing_frames(bytetrack_tracks))
+    if any(len(v) == 0 for v in lengths.values()):
+        empty = [display_name(t) for t, v in lengths.items() if len(v) == 0]
+        sys.exit(f"No usable tracking results found for: {', '.join(empty)}.")
 
-    print("\nTrajectory Length Analysis:\n")
+    print_metric_analysis("Trajectory Length Analysis", lengths, trackers)
+    print_metric_analysis("Missing Frames Analysis", missing, trackers)
 
-    # Print the total number of vehicles tracked by each tracking algorithm
-    print(f"Total number of vehicles tracked by BoT-SORT: {len(botsort_trajectory_lengths)}")
-    print(f"Total number of vehicles tracked by ByteTrack: {len(bytetrack_trajectory_lengths)}")
-
-    # Compute the average trajectory length for each tracking algorithm
-    botsort_avg_trajectory_length = np.mean(botsort_trajectory_lengths)
-    bytetrack_avg_trajectory_length = np.mean(bytetrack_trajectory_lengths)
-
-    print(f"Average trajectory length for BoT-SORT: {botsort_avg_trajectory_length:.2f}")
-    print(f"Average trajectory length for ByteTrack: {bytetrack_avg_trajectory_length:.2f}")
-
-    # Compute the average trajectory length difference between the two tracking algorithms
-    avg_trajectory_length_diff = np.abs(botsort_avg_trajectory_length - bytetrack_avg_trajectory_length)
-    print(f"Average trajectory length difference: {avg_trajectory_length_diff:.2f}")
-
-    # Compute the standard deviation of the trajectory lengths for each tracking algorithm
-    botsort_std_dev = np.std(botsort_trajectory_lengths)
-    bytetrack_std_dev = np.std(bytetrack_trajectory_lengths)
-
-    print(f"Standard deviation of trajectory lengths for BoT-SORT: {botsort_std_dev:.2f}")
-    print(f"Standard deviation of trajectory lengths for ByteTrack: {bytetrack_std_dev:.2f}")
-
-    # Compute the standard deviation difference between the two tracking algorithms
-    std_dev_diff = np.abs(botsort_std_dev - bytetrack_std_dev)
-    print(f"Standard deviation difference: {std_dev_diff:.2f}")
-
-    # Compute the KL divergence between the two trajectory length distributions
-    kl_bs_bt = compute_kl_divergence(botsort_trajectory_lengths, bytetrack_trajectory_lengths)
-    kl_bt_bs = compute_kl_divergence(bytetrack_trajectory_lengths, botsort_trajectory_lengths)
-    kl_divergence = (kl_bs_bt + kl_bt_bs) / 2
-    print(f"KL divergence from BoT-SORT to ByteTrack: {kl_bs_bt:.4f}")
-    print(f"KL divergence from ByteTrack to BoT-SORT: {kl_bt_bs:.4f}")
-    print(f"Average KL divergence: {kl_divergence:.4f}")
-
-    print("\nMissing Frames Analysis:\n")
-
-    # Compute the average number of missing frames for each tracking algorithm
-    botsort_avg_missing_frames = np.mean(botsort_missing_frames)
-    bytetrack_avg_missing_frames = np.mean(bytetrack_missing_frames)
-
-    print(f"Average number of missing frames for BoT-SORT: {botsort_avg_missing_frames:.2f}")
-    print(f"Average number of missing frames for ByteTrack: {bytetrack_avg_missing_frames:.2f}")
-
-    # Compute the standard deviation of the missing frames for each tracking algorithm
-    botsort_missing_frames_std_dev = np.std(botsort_missing_frames)
-    bytetrack_missing_frames_std_dev = np.std(bytetrack_missing_frames)
-
-    print(f"Standard deviation of missing frames for BoT-SORT: {botsort_missing_frames_std_dev:.2f}")
-    print(f"Standard deviation of missing frames for ByteTrack: {bytetrack_missing_frames_std_dev:.2f}")
-
-    kl_bs_bt = compute_kl_divergence(botsort_missing_frames, bytetrack_missing_frames)
-    kl_bt_bs = compute_kl_divergence(bytetrack_missing_frames, botsort_missing_frames)
-    kl_divergence = (kl_bs_bt + kl_bt_bs) / 2
-
-    print(f"KL divergence from BoT-SORT to ByteTrack (missing frames): {kl_bs_bt:.4f}")
-    print(f"KL divergence from ByteTrack to BoT-SORT (missing frames): {kl_bt_bs:.4f}")
-    print(f"Average KL divergence (missing frames): {kl_divergence:.4f}")
-
-    # Plot the trajectory length distributions
     if args.show or args.save:
-        plot_trajectory_length_distributions(botsort_trajectory_lengths, bytetrack_trajectory_lengths, args)
+        plot_trajectory_length_distributions(lengths, trackers, args)
+
+
+def print_metric_analysis(title, values_by_tracker, trackers):
+    """
+    Print per-tracker summary statistics and pairwise KL divergence for one metric.
+    """
+    print(f"\n{title}:\n")
+    for tracker in trackers:
+        values = values_by_tracker[tracker]
+        print(f"{display_name(tracker)}: count={len(values)}, mean={np.mean(values):.2f}, std={np.std(values):.2f}")
+
+    print("\nPairwise KL divergence:")
+    for a, b in itertools.combinations(trackers, 2):
+        kl_ab = compute_kl_divergence(values_by_tracker[a], values_by_tracker[b])
+        kl_ba = compute_kl_divergence(values_by_tracker[b], values_by_tracker[a])
+        kl_avg = (kl_ab + kl_ba) / 2
+        print(
+            f"  {display_name(a)} ↔ {display_name(b)}: "
+            f"{display_name(a)}→{display_name(b)}={kl_ab:.4f}, "
+            f"{display_name(b)}→{display_name(a)}={kl_ba:.4f}, avg={kl_avg:.4f}"
+        )
 
 
 def find_missing_frames(tracks):
@@ -196,6 +201,8 @@ def compute_kl_divergence(p, q, epsilon=1e-10):
     # Create histograms with identical bins
     min_val = min(np.min(p), np.min(q))
     max_val = max(np.max(p), np.max(q))
+    if max_val == min_val:
+        return 0.0  # both distributions are a single shared value; no divergence
     bins = np.linspace(min_val, max_val, 50)
 
     p_hist, _ = np.histogram(p, bins=bins, density=True)
@@ -215,89 +222,54 @@ def compute_kl_divergence(p, q, epsilon=1e-10):
     return kl_divergence
 
 
-def plot_trajectory_length_distributions(botsort_trajectory_lengths, bytetrack_trajectory_lengths, args):
+def plot_trajectory_length_distributions(lengths_by_tracker, trackers, args):
     """
-    Plot the trajectory length distributions for the two tracking algorithms with enhanced
+    Plot the trajectory length distributions for the selected trackers with enhanced
     visualization techniques to highlight subtle differences between similar distributions.
-    """
 
-    # Convert the trajectory lengths from number of frames to seconds
-    # botsort_trajectory_lengths = np.array(botsort_trajectory_lengths) / 29.97
-    # bytetrack_trajectory_lengths = np.array(bytetrack_trajectory_lengths) / 29.97
+    Works for any number of trackers. When exactly two are compared, the bottom two panels
+    use the richer mirrored-histogram and signed-density-difference views; for three or more
+    they fall back to overlaid histograms and KDE curves.
+    """
+    colors = {t: color_for(t, i) for i, t in enumerate(trackers)}
+    names = {t: display_name(t) for t in trackers}
+    all_data = np.concatenate([lengths_by_tracker[t] for t in trackers])
 
     # Create a figure with a custom, modern style
     plt.style.use('seaborn-v0_8-whitegrid')
     fig = plt.figure(figsize=(14, 10), dpi=100)
-
-    # Create a custom grid layout
     gs = plt.GridSpec(3, 2, height_ratios=[1, 1.5, 1])
 
-    # Calculate statistics for annotations
-    bs_mean = np.mean(botsort_trajectory_lengths)
-    bt_mean = np.mean(bytetrack_trajectory_lengths)
-    bs_median = np.median(botsort_trajectory_lengths)
-    bt_median = np.median(bytetrack_trajectory_lengths)
-    bs_std = np.std(botsort_trajectory_lengths)
-    bt_std = np.std(bytetrack_trajectory_lengths)
-
-    # Calculate KL divergence
-    # First create histograms with identical bins
-    min_val = min(np.min(botsort_trajectory_lengths), np.min(bytetrack_trajectory_lengths))
-    max_val = max(np.max(botsort_trajectory_lengths), np.max(bytetrack_trajectory_lengths))
-    bins = np.linspace(min_val, max_val, 50)
-
-    bs_hist, _ = np.histogram(botsort_trajectory_lengths, bins=bins, density=True)
-    bt_hist, _ = np.histogram(bytetrack_trajectory_lengths, bins=bins, density=True)
-
-    # Add small epsilon to avoid division by zero
-    epsilon = 1e-10
-    bs_hist = bs_hist + epsilon
-    bt_hist = bt_hist + epsilon
-
-    # Normalize
-    bs_hist = bs_hist / np.sum(bs_hist)
-    bt_hist = bt_hist / np.sum(bt_hist)
-
-    # Calculate KL divergence both ways
-    kl_bs_bt = np.sum(bs_hist * np.log(bs_hist / bt_hist))
-    kl_bt_bs = np.sum(bt_hist * np.log(bt_hist / bs_hist))
-
-    # Colors with better contrast
-    botsort_color = '#3A6DAA'  # Deeper blue
-    bytetrack_color = '#E57200'  # Deeper orange
-
-    # Top left: Violin plot instead of Ridge view
+    # Top left: Violin plot across all trackers
     ax1 = fig.add_subplot(gs[0, 0])
-
-    # Create a DataFrame for violin plot
-    import pandas as pd
-
-    df = pd.DataFrame({'BoT-SORT': botsort_trajectory_lengths, 'ByteTrack': bytetrack_trajectory_lengths})
-    df_melted = pd.melt(df, var_name='Algorithm', value_name='Trajectory Length')
-
-    # Create violin plot
+    df = pd.DataFrame(
+        [{"Algorithm": names[t], "Trajectory Length": v} for t in trackers for v in lengths_by_tracker[t]]
+    )
+    order = [names[t] for t in trackers]
     sns.violinplot(
         x='Algorithm',
         y='Trajectory Length',
-        data=df_melted,
-        palette={'BoT-SORT': botsort_color, 'ByteTrack': bytetrack_color},
+        data=df,
+        order=order,
+        hue='Algorithm',
+        palette={names[t]: colors[t] for t in trackers},
+        legend=False,
         inner='quartile',
         cut=0,
         ax=ax1,
     )
-
-    # Add mean points
-    ax1.scatter([0, 1], [bs_mean, bt_mean], color='white', s=30, zorder=3)
-    ax1.scatter([0, 1], [bs_mean, bt_mean], color='black', s=15, zorder=4)
-
+    means = [np.mean(lengths_by_tracker[t]) for t in trackers]
+    ax1.scatter(range(len(trackers)), means, color='white', s=30, zorder=3)
+    ax1.scatter(range(len(trackers)), means, color='black', s=15, zorder=4)
     ax1.set_title("Distribution Comparison (Violin Plot)", fontsize=14, fontweight='bold')
+    ax1.tick_params(axis='x', labelrotation=15 if len(trackers) > 3 else 0)
     ax1.spines['top'].set_visible(False)
     ax1.spines['right'].set_visible(False)
 
     # Top right: Cumulative distribution function
     ax2 = fig.add_subplot(gs[0, 1])
-    sns.ecdfplot(botsort_trajectory_lengths, label="BoT-SORT", color=botsort_color, lw=2, ax=ax2)
-    sns.ecdfplot(bytetrack_trajectory_lengths, label="ByteTrack", color=bytetrack_color, lw=2, ax=ax2)
+    for tracker in trackers:
+        sns.ecdfplot(lengths_by_tracker[tracker], label=names[tracker], color=colors[tracker], lw=2, ax=ax2)
     ax2.set_title("Cumulative Distribution Function", fontsize=14, fontweight='bold')
     ax2.set_xlabel("Trajectory Length", fontsize=12)
     ax2.set_ylabel("Cumulative Probability", fontsize=12)
@@ -305,98 +277,78 @@ def plot_trajectory_length_distributions(botsort_trajectory_lengths, bytetrack_t
     ax2.spines['top'].set_visible(False)
     ax2.spines['right'].set_visible(False)
 
-    # Middle: Double-sided histogram for direct comparison
+    # Middle: histogram comparison (mirrored for two trackers, overlaid otherwise)
     ax3 = fig.add_subplot(gs[1, :])
-
-    # Create bins for the histograms
-    all_data = np.concatenate([botsort_trajectory_lengths, bytetrack_trajectory_lengths])
     bins = np.linspace(min(all_data), max(all_data), 40)
-
-    # Calculate histograms
-    bs_hist, _ = np.histogram(botsort_trajectory_lengths, bins=bins)
-    bt_hist, _ = np.histogram(bytetrack_trajectory_lengths, bins=bins)
-
-    # Normalize to get percentages
-    bs_hist = bs_hist / len(botsort_trajectory_lengths) * 100
-    bt_hist = -bt_hist / len(bytetrack_trajectory_lengths) * 100  # Negative for bottom direction
-
-    # Plot the mirrored histogram
     width = bins[1] - bins[0]
-    ax3.bar(bins[:-1], bs_hist, width=width, color=botsort_color, alpha=0.7, align='edge', label="BoT-SORT")
-    ax3.bar(bins[:-1], bt_hist, width=width, color=bytetrack_color, alpha=0.7, align='edge', label="ByteTrack")
-
-    # Add mean lines
-    ax3.axvline(bs_mean, color=botsort_color, linestyle='-', lw=2)
-    ax3.axvline(bt_mean, color=bytetrack_color, linestyle='-', lw=2)
-
-    # Add text annotations for means
-    ax3.annotate(
-        f'BoT-SORT Mean: {bs_mean:.2f}',
-        xy=(bs_mean, 5),
-        xytext=(bs_mean + 1, 5),
-        color=botsort_color,
-        fontweight='bold',
-        ha='left',
-        va='center',
-        fontsize=10,
-    )
-    ax3.annotate(
-        f'ByteTrack Mean: {bt_mean:.2f}',
-        xy=(bt_mean, -5),
-        xytext=(bt_mean + 1, -5),
-        color=bytetrack_color,
-        fontweight='bold',
-        ha='left',
-        va='center',
-        fontsize=10,
-    )
-
-    # Set the y-ticks to absolute values
-    yticks = ax3.get_yticks()
-    ax3.set_yticklabels([f'{abs(y):.0f}%' for y in yticks])
-
-    ax3.set_title("Mirrored Histogram Comparison", fontsize=16, fontweight='bold')
+    if len(trackers) == 2:
+        a, b = trackers
+        a_hist, _ = np.histogram(lengths_by_tracker[a], bins=bins)
+        b_hist, _ = np.histogram(lengths_by_tracker[b], bins=bins)
+        a_hist = a_hist / len(lengths_by_tracker[a]) * 100
+        b_hist = -b_hist / len(lengths_by_tracker[b]) * 100  # Negative for bottom direction
+        ax3.bar(bins[:-1], a_hist, width=width, color=colors[a], alpha=0.7, align='edge', label=names[a])
+        ax3.bar(bins[:-1], b_hist, width=width, color=colors[b], alpha=0.7, align='edge', label=names[b])
+        ax3.axvline(np.mean(lengths_by_tracker[a]), color=colors[a], linestyle='-', lw=2)
+        ax3.axvline(np.mean(lengths_by_tracker[b]), color=colors[b], linestyle='-', lw=2)
+        ax3.yaxis.set_major_formatter(FuncFormatter(lambda y, _: f'{abs(y):.0f}%'))
+        ax3.set_title("Mirrored Histogram Comparison", fontsize=16, fontweight='bold')
+    else:
+        for tracker in trackers:
+            hist, _ = np.histogram(lengths_by_tracker[tracker], bins=bins)
+            hist = hist / len(lengths_by_tracker[tracker]) * 100
+            ax3.step(bins[:-1], hist, where='post', color=colors[tracker], lw=2, label=names[tracker])
+            ax3.axvline(np.mean(lengths_by_tracker[tracker]), color=colors[tracker], linestyle='--', lw=1.5, alpha=0.7)
+        ax3.set_title("Histogram Comparison", fontsize=16, fontweight='bold')
     ax3.set_xlabel("Trajectory Length", fontsize=14)
     ax3.set_ylabel("Percentage (%)", fontsize=14)
     ax3.legend(loc='upper right', frameon=True, fontsize=12)
     ax3.spines['top'].set_visible(False)
     ax3.grid(True, linestyle='--', alpha=0.3)
 
-    # Bottom: Difference plot to highlight where distributions differ
+    # Bottom: density comparison (signed difference for two trackers, overlaid KDE otherwise)
     ax4 = fig.add_subplot(gs[2, :])
-
-    # Create KDEs for both distributions
-    kde_bs = stats.gaussian_kde(botsort_trajectory_lengths)
-    kde_bt = stats.gaussian_kde(bytetrack_trajectory_lengths)
-
-    # Calculate the difference between densities
     x_range = np.linspace(min(all_data), max(all_data), 1000)
-    diff = kde_bs(x_range) - kde_bt(x_range)
-
-    # Plot the difference
-    ax4.fill_between(
-        x_range, diff, 0, where=(diff > 0), color=botsort_color, alpha=0.7, label="BoT-SORT higher density"
-    )
-    ax4.fill_between(
-        x_range, diff, 0, where=(diff < 0), color=bytetrack_color, alpha=0.7, label="ByteTrack higher density"
-    )
-
-    ax4.axhline(y=0, color='black', linestyle='-', lw=1)
-    ax4.set_title("Density Difference (BoT-SORT - ByteTrack)", fontsize=14, fontweight='bold')
+    if len(trackers) == 2:
+        a, b = trackers
+        diff = stats.gaussian_kde(lengths_by_tracker[a])(x_range) - stats.gaussian_kde(lengths_by_tracker[b])(x_range)
+        ax4.fill_between(
+            x_range, diff, 0, where=(diff > 0), color=colors[a], alpha=0.7, label=f"{names[a]} higher density"
+        )
+        ax4.fill_between(
+            x_range, diff, 0, where=(diff < 0), color=colors[b], alpha=0.7, label=f"{names[b]} higher density"
+        )
+        ax4.axhline(y=0, color='black', linestyle='-', lw=1)
+        ax4.set_title(f"Density Difference ({names[a]} - {names[b]})", fontsize=14, fontweight='bold')
+        ax4.set_ylabel("Density Difference", fontsize=12)
+    else:
+        for tracker in trackers:
+            ax4.plot(
+                x_range,
+                stats.gaussian_kde(lengths_by_tracker[tracker])(x_range),
+                color=colors[tracker],
+                lw=2,
+                label=names[tracker],
+            )
+        ax4.set_title("Density Comparison (KDE)", fontsize=14, fontweight='bold')
+        ax4.set_ylabel("Density", fontsize=12)
     ax4.set_xlabel("Trajectory Length", fontsize=12)
-    ax4.set_ylabel("Density Difference", fontsize=12)
     ax4.legend(loc='best', frameon=True, fontsize=10)
     ax4.spines['top'].set_visible(False)
     ax4.spines['right'].set_visible(False)
 
-    # Add summary statistics with standard deviation and KL divergence
+    # Add per-tracker summary statistics
+    summary_lines = ["Statistics Summary (trajectory length):"]
+    for tracker in trackers:
+        values = lengths_by_tracker[tracker]
+        summary_lines.append(
+            f"{names[tracker]} - Mean: {np.mean(values):.2f}, Median: {np.median(values):.2f}, "
+            f"Std: {np.std(values):.2f}, Count: {len(values)}"
+        )
     plt.figtext(
         0.5,
         0.005,
-        f"Statistics Summary:\n"
-        f"BoT-SORT - Mean: {bs_mean:.2f}, Median: {bs_median:.2f}, Std: {bs_std:.2f}, Count: {len(botsort_trajectory_lengths)}\n"
-        f"ByteTrack - Mean: {bt_mean:.2f}, Median: {bt_median:.2f}, Std: {bt_std:.2f}, Count: {len(bytetrack_trajectory_lengths)}\n"
-        f"KL Divergence: BoT-SORT→ByteTrack: {kl_bs_bt:.4f}, ByteTrack→BoT-SORT: {kl_bt_bs:.4f}",
+        "\n".join(summary_lines),
         ha="center",
         fontsize=12,
         bbox={"facecolor": "white", "alpha": 0.8, "pad": 5, "boxstyle": "round,pad=0.5"},
@@ -411,18 +363,25 @@ def plot_trajectory_length_distributions(botsort_trajectory_lengths, bytetrack_t
 
     if args.save:
         save_path = args.input / "plots" / "trajectory_length_distribution_comparison.png"
-        if not save_path.parent.exists():
-            save_path.parent.mkdir(parents=True, exist_ok=True)
+        save_path.parent.mkdir(parents=True, exist_ok=True)
         plt.savefig(save_path, dpi=300, bbox_inches='tight')
-        print(f"Plot saved to: {save_path}")
+        print(f"\nPlot saved to: {save_path}")
 
 
 def get_cli_arguments() -> argparse.Namespace:
     """
     Parse command-line arguments
     """
-    parser = argparse.ArgumentParser(description="Compare various tracking outputs")
+    parser = argparse.ArgumentParser(description="Compare two or more tracking algorithms")
     parser.add_argument("input", type=Path, help="Path to the folder containing video files with results to compare")
+    parser.add_argument(
+        "--trackers",
+        nargs="+",
+        default=DEFAULT_TRACKERS,
+        metavar="NAME",
+        help="Tracker names to compare; each expects a 'results_<name>/' subfolder. "
+        f"Default: the geo-trax trackers ({', '.join(DEFAULT_TRACKERS)}). Any names are accepted.",
+    )
     parser.add_argument("--show", action="store_true", help="Show the plot")
     parser.add_argument("--save", action="store_true", help="Save the plot")
     return parser.parse_args()
