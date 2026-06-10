@@ -70,13 +70,9 @@ from ultralytics import RTDETR, YOLO
 from ultralytics.utils.checks import check_yolo
 from ultralytics.utils.files import increment_path
 
-from utils.utils import (
-    check_if_results_exist,
-    convert_to_serializable,
-    get_video_dimensions,
-    load_config_all,
-    setup_logger,
-)
+from utils.config_utils import load_config_all
+from utils.file_utils import check_if_results_exist, convert_to_serializable, get_video_dimensions
+from utils.logging_utils import setup_logger
 
 
 def detect_track_stabilize(args: argparse.Namespace, logger: logging.Logger) -> None:
@@ -381,7 +377,7 @@ def estimate_vehicle_dimensions(tracks: np.ndarray, config: Dict) -> np.ndarray:
         id2length[track_id] = np.percentile(id2lengths[track_id], 25) if len(id2lengths[track_id]) > 0 else np.nan
         id2width[track_id] = np.percentile(id2widths[track_id], 25) if len(id2widths[track_id]) > 0 else np.nan
 
-    # Finally: append v_length and v_width to each track, per id, as two last columns
+    # Step 5: append estimated dimensions to each track row
     tracks = np.append(tracks, np.zeros((len(tracks), 2)), axis=1)
     for i, track in enumerate(tracks):
         track_id = int(track[1])
@@ -433,7 +429,6 @@ def parse_cli_args() -> argparse.Namespace:
     """
     parser = argparse.ArgumentParser(description='Vehicle Detection, Tracking, and Stabilization Pipeline')
 
-    # Required arguments
     parser.add_argument('source', type=Path, help='Path to the video file (e.g., path/to/video/video.mp4)')
 
     optional = parser.add_argument_group('Optional arguments')

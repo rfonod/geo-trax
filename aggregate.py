@@ -67,7 +67,8 @@ from pathlib import Path
 import pandas as pd
 from tqdm import tqdm
 
-from utils.utils import determine_location_id, setup_logger
+from utils.file_utils import determine_location_id
+from utils.logging_utils import setup_logger
 
 
 def aggregate_results(args: argparse.Namespace, logger: logging.Logger) -> None:

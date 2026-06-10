@@ -51,7 +51,7 @@ import seaborn as sns
 from scipy import stats
 
 sys.path.append(str(Path(__file__).resolve().parents[1]))  # Add project root directory to Python path
-from utils.utils import detect_delimiter
+from utils.file_utils import detect_delimiter
 
 
 def compare_tracks(args):

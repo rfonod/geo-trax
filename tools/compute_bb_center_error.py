@@ -127,7 +127,6 @@ def compute_bb_center_error(args):
     else:
         # Per-class mode - dictionary of errors by class ID
         errors_by_class = defaultdict(list)
-        class_stats = {}
         for image in tqdm.tqdm(images, desc="Processing images"):
             image_id = image.stem
             image = cv2.imread(str(image))

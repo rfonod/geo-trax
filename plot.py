@@ -65,7 +65,6 @@ Examples:
    python plot.py /path/to/videos/ -of /path/to/orthophotos/ -osf /path/to/segmentations/ -seg -cf 1
 """
 
-
 import argparse
 import logging
 import shutil
@@ -79,14 +78,10 @@ import pandas as pd
 import seaborn as sns
 from tqdm import tqdm
 
-from utils.utils import (
-    PlotColors,
-    detect_delimiter,
-    determine_location_id,
-    get_ortho_folder,
-    load_config_all,
-    setup_logger,
-)
+from utils.config_utils import load_config_all
+from utils.data_utils import PlotColors
+from utils.file_utils import detect_delimiter, determine_location_id, get_ortho_folder
+from utils.logging_utils import setup_logger
 
 VIDEO_FORMATS = {'.mp4', '.mov', '.avi', '.mkv'}
 RESULTS_FORMATS = {'.txt', '.csv'}
@@ -728,7 +723,6 @@ def parse_cli_args() -> argparse.Namespace:
     """
     parser = argparse.ArgumentParser(description="Trajectory and distribution plotting tool.")
 
-    # Required arguments
     parser.add_argument("input", type=Path, help="Path to the video source or .txt/.csv file or folder with video or .csv/.txt files")
 
     optional = parser.add_argument_group('Optional arguments')

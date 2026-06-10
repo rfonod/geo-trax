@@ -48,7 +48,7 @@ import cv2
 from find_max_annotations import find_max_annotations
 
 sys.path.append(str(Path(__file__).resolve().parents[1]))  # Add project root directory to Python path
-from utils.utils import VizColors
+from utils.data_utils import VizColors
 
 
 def run_visualizer(args):

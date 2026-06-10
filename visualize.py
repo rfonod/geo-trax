@@ -66,7 +66,6 @@ Notes:
 - Press 'q' during visualization to stop (with --show).
 """
 
-
 import argparse
 import logging
 import shutil
@@ -79,14 +78,10 @@ import numpy as np
 import pandas as pd
 from tqdm import tqdm
 
-from utils.utils import (
-    VizColors,
-    check_if_results_exist,
-    detect_delimiter,
-    determine_suffix_and_fourcc,
-    load_config_all,
-    setup_logger,
-)
+from utils.config_utils import load_config_all
+from utils.data_utils import VizColors
+from utils.file_utils import check_if_results_exist, detect_delimiter, determine_suffix_and_fourcc
+from utils.logging_utils import setup_logger
 
 
 def visualize_results(args: argparse.Namespace, logger: logging.Logger) -> None:
@@ -502,7 +497,6 @@ def parse_cli_args() -> argparse.Namespace:
     """
     parser = argparse.ArgumentParser(description='Tracking Results Visualization')
 
-    # Required arguments
     parser.add_argument('source', type=Path, help='Path to video source')
 
     optional = parser.add_argument_group('Optional arguments')

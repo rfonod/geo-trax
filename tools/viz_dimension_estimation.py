@@ -69,10 +69,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 try:
-    from utils.utils import detect_delimiter
+    from utils.file_utils import detect_delimiter
 except ImportError:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-    from utils.utils import detect_delimiter
+    from utils.file_utils import detect_delimiter
 
 # Ground sampling distance constants for the Songdo experiment
 # (4K resolution, 140–150 m flight altitude)

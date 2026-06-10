@@ -82,7 +82,7 @@ from ultralytics import YOLO
 from ultralytics.utils.checks import check_yolo
 
 sys.path.append(str(Path(__file__).resolve().parents[1]))  # Add project root directory to Python path
-from utils.utils import load_config
+from utils.config_utils import load_config
 
 LOGGER_PREFIX = f'[{Path(__file__).name}]'
 

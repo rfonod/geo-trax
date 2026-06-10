@@ -88,14 +88,9 @@ from scipy.signal import savgol_filter
 from shapely.geometry import Polygon
 from tqdm import tqdm
 
-from utils.utils import (
-    check_if_results_exist,
-    detect_delimiter,
-    determine_location_id,
-    get_ortho_folder,
-    load_config_all,
-    setup_logger,
-)
+from utils.config_utils import load_config_all
+from utils.file_utils import check_if_results_exist, detect_delimiter, determine_location_id, get_ortho_folder
+from utils.logging_utils import setup_logger
 
 
 def georeference(args: argparse.Namespace, logger: logging.Logger) -> None:
@@ -897,7 +892,6 @@ def parse_cli_args() -> argparse.Namespace:
     """
     parser = argparse.ArgumentParser(description="Georeferencing the tracking data using orthophotos.")
 
-    # Required arguments
     parser.add_argument("source", type=Path, help="Path to the input video file")
 
     optional = parser.add_argument_group('Optional arguments')

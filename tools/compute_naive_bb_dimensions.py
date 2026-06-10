@@ -65,10 +65,10 @@ import numpy as np
 import pandas as pd
 
 try:
-    from utils.utils import detect_delimiter
+    from utils.file_utils import detect_delimiter
 except ImportError as e:
     print(
-        "\033[91mCould not import 'detect_delimiter' from 'utils.utils'.\n"
+        "\033[91mCould not import 'detect_delimiter' from 'utils.file_utils'.\n"
         "Make sure you have installed the geo-trax package in editable mode:\n"
         "    pip install -e .\n"
         "from the project root directory.\033[0m"

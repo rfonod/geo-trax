@@ -116,7 +116,7 @@ import tqdm
 from matplotlib.patches import Circle
 
 sys.path.append(str(Path(__file__).resolve().parents[1]))  # Add project root directory to Python path
-from utils.utils import detect_delimiter, determine_location_id
+from utils.file_utils import detect_delimiter, determine_location_id
 
 VIDEO_SUFFIX = '.MP4' # Video file format to report in the output file
 SESSION2TIME_WINDOW = {

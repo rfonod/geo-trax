@@ -176,7 +176,8 @@ from tqdm import tqdm
 from detect_track_stabilize import detect_track_stabilize
 from georeference import georeference
 from plot import generate_plots
-from utils.utils import bcolors, check_if_results_exist, determine_suffix_and_fourcc, setup_logger
+from utils.file_utils import check_if_results_exist, determine_suffix_and_fourcc
+from utils.logging_utils import bcolors, setup_logger
 from visualize import visualize_results
 
 VIDEO_FORMATS = {'.mp4', '.mov', '.avi', '.mkv'}
@@ -334,7 +335,6 @@ def parse_cli_args() -> argparse.Namespace:
     """
     parser = argparse.ArgumentParser(description='Primary entry point for the full Geo-trax pipeline. Runs detection/tracking/stabilization, georeferencing, visualization, and plotting for a single video file or an entire directory tree. Stages are skipped if their output already exists; use --overwrite to force re-execution.')
 
-    # Required arguments
     parser.add_argument('input', type=Path, help='Path to the input directory or video file (e.g., path/to/video_dir/)')
 
     batch = parser.add_argument_group('Batch processing options')

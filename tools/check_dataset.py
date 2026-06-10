@@ -56,7 +56,7 @@ import tqdm
 
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 from tools.find_source_id import find_source_id
-from utils.utils import setup_logger
+from utils.logging_utils import setup_logger
 
 
 def validate_speed_acceleration(args: argparse.Namespace, logger: logging.Logger) -> None:
