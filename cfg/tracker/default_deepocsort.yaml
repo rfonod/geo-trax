@@ -1,0 +1,27 @@
+# Ultralytics 🚀 AGPL-3.0 License - https://ultralytics.com/license
+
+# Deep OC-SORT tracker defaults for mode="track"
+# OC-SORT extended with appearance (ReID) features and global motion compensation (GMC).
+# Paper: https://arxiv.org/abs/2302.11813
+# Docs:  https://docs.ultralytics.com/modes/track/
+
+tracker_type: deepocsort  # Tracker backend; choices: [botsort, bytetrack, ocsort, deepocsort, fasttrack, tracktrack]
+track_high_thresh: 0.3    # Detection confidence threshold for first-stage (high-confidence) association; [0.0, 1.0]
+track_low_thresh: 0.1     # Detection confidence threshold for second-stage recovery; only used when use_byte=true; [0.0, 1.0]
+new_track_thresh: 0.3     # Minimum confidence to initialise a new track; higher reduces false track initiations; [0.0, 1.0]
+track_buffer: 30          # Frames to keep a lost track alive before deletion; higher tolerates longer occlusions; [1, inf)
+match_thresh: 0.8         # IoU/cost threshold for track-detection assignment; higher = stricter matching; [0.0, 1.0]
+fuse_score: true          # Fuse detection confidence with the IoU cost matrix; improves weak-detection robustness; [true, false]
+
+# OC-SORT specific (inherited)
+delta_t: 3       # Temporal window [frames] for velocity-direction estimation in the OCM module; higher smooths more; [1, inf)
+inertia: 0.2     # Weight of the velocity-consistency cost in association; higher penalises direction changes; [0.0, 1.0]
+use_byte: false  # Enable a ByteTrack-style low-confidence second association pass; [true, false]
+
+# Deep OC-SORT specific
+gmc_method: none         # Global motion compensation method; choices: [sparseOptFlow, orb, sift, ecc, none] — enable for moving-camera scenes
+with_reid: false         # Enable the ReID appearance model; requires extra weights and increases compute; [true, false]
+model: auto              # ReID model name or path; "auto" uses detector-derived features if available; string
+proximity_thresh: 0.5    # Minimum IoU for tracks to be considered proximate enough for ReID comparison; [0.0, 1.0]
+appearance_thresh: 0.9   # Minimum appearance (cosine) similarity for ReID match acceptance; higher reduces identity swaps; [0.0, 1.0]
+alpha_fixed_emb: 0.95    # Base EMA factor for updating track embeddings; higher = slower embedding update; [0.0, 1.0]

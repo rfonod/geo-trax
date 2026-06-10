@@ -15,10 +15,10 @@
 
 
 # --- Sub-configuration file paths ---
-cfg_ultralytics: cfg/ultralytics/default.yaml  # Ultralytics YOLO config (model, conf, iou, classes, etc.)
-cfg_tracker:     cfg/tracker/default_botsort.yaml  # Tracker config; choices: default_botsort.yaml, default_bytetrack.yaml
-cfg_stabilo:     cfg/stabilo/default.yaml      # Stabilo stabilizer config
-cfg_georef:      cfg/georef/default.yaml       # Georeferencing config
+cfg_ultralytics: cfg/ultralytics/default.yaml     # Ultralytics YOLO config (model, conf, iou, classes, etc.)
+cfg_tracker:     cfg/tracker/default_botsort.yaml # Tracker config; switch tracking algorithm here. Choices: default_botsort.yaml, default_bytetrack.yaml, default_ocsort.yaml, default_deepocsort.yaml, default_fasttrack.yaml, default_tracktrack.yaml
+cfg_stabilo:     cfg/stabilo/default.yaml         # Stabilo stabilizer config
+cfg_georef:      cfg/georef/default.yaml          # Georeferencing config
 
 # --- Stabilization ---
 stabilize: true   # Stabilize extracted bounding boxes; appends 4 columns (x_stab, y_stab, w_stab, h_stab) to results/video.txt

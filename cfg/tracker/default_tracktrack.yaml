@@ -1,0 +1,36 @@
+# Ultralytics 🚀 AGPL-3.0 License - https://ultralytics.com/license
+
+# TrackTrack tracker defaults for mode="track"
+# Multi-cue tracker with HMIoU, iterative assignment, and track-aware initialisation; optional ReID and GMC.
+# Paper: "Focusing on Tracks for Online Multi-Object Tracking" (CVPR 2025)
+# Docs:  https://docs.ultralytics.com/modes/track/
+
+tracker_type: tracktrack  # Tracker backend; choices: [botsort, bytetrack, ocsort, deepocsort, fasttrack, tracktrack]
+track_high_thresh: 0.6    # Detection confidence threshold for first-stage (high-confidence) association; [0.0, 1.0]
+track_low_thresh: 0.25    # Detection confidence threshold for second-stage (low-confidence) recovery; [0.0, 1.0]
+new_track_thresh: 0.7     # Minimum confidence to initialise a new track via track-aware initialisation (TAI); [0.0, 1.0]
+track_buffer: 30          # Frames to keep a lost track alive before deletion; higher tolerates longer occlusions; [1, inf)
+match_thresh: 0.7         # Initial matching threshold for iterative assignment; higher = stricter matching; [0.0, 1.0]
+lost_match_thr: 0.0       # Relaxed rebind-cost gate for still-Lost tracks; 0 disables the second pass; raise (e.g. 0.9) for long-occlusion scenes; [0.0, 1.0]
+
+# Association weights
+iou_weight: 0.5    # Weight of the HMIoU distance in the cost matrix; [0.0, 1.0]
+reid_weight: 0.5   # Weight of the cosine distance (HMIoU fallback if no ReID) in the cost matrix; [0.0, 1.0]
+conf_weight: 0.1   # Weight of the confidence distance in the cost matrix; [0.0, 1.0]
+angle_weight: 0.05 # Weight of the corner-angle distance in the cost matrix; [0.0, 1.0]
+
+# Iterative assignment
+penalty_p: 0.2     # Cost penalty applied to low-confidence detections; [0.0, 1.0]
+penalty_q: 0.4     # Cost penalty applied to deleted/recovered detections; [0.0, 1.0]
+reduce_step: 0.05  # Threshold reduction applied per iteration; [0.0, 1.0]
+
+# Track-Aware Initialisation (TAI)
+tai_thr: 0.55      # IoU threshold for TAI non-maximum suppression; [0.0, 1.0]
+min_track_len: 3   # Minimum history length before a track is confirmed; [1, inf)
+
+# Global motion compensation
+gmc_method: sparseOptFlow  # Global motion compensation method; choices: [sparseOptFlow, orb, sift, ecc, none]
+
+# ReID (appearance-based re-identification)
+with_reid: false   # Enable the ReID appearance model; requires extra weights and increases compute; [true, false]
+model: auto        # ReID model name or path; "auto" uses detector-derived features if available; string

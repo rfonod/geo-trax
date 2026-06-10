@@ -119,6 +119,30 @@ Geo-trax was validated in a large-scale urban traffic monitoring experiment cond
 
 The `train/` directory contains scripts for training and exporting custom YOLOv8 detection models using the [Ultralytics](https://github.com/ultralytics/ultralytics) framework, along with a SLURM wrapper for HPC clusters. See [train/README.md](train/README.md) for full usage instructions.
 
+## Tracking Algorithms
+
+Geo-trax supports six multi-object trackers bundled with [Ultralytics](https://github.com/ultralytics/ultralytics) (`>=8.4.63`): **BoT-SORT** (default), **ByteTrack**, **OC-SORT**, **Deep OC-SORT**, **FastTracker**, and **TrackTrack**. Selection is purely config-driven — point the `cfg_tracker` key in `cfg/default.yaml` at the matching `cfg/tracker/default_<name>.yaml` (each documented inline, parameter by parameter); no code changes are needed.
+
+<details>
+<summary><b>🚗 Tracker comparison and selection guidance</b></summary>
+
+| Tracker | Config | ReID | GMC¹ | Pros | Cons |
+|---------|--------|:----:|:----:|------|------|
+| **BoT-SORT** (default) | `default_botsort.yaml` | optional | ✅ | Strong all-round accuracy; motion-based with optional appearance (ReID) and in-tracker camera-motion compensation. | Slower than ByteTrack; ReID adds compute and weights. |
+| **ByteTrack** | `default_bytetrack.yaml` | ❌ | ❌ | Fastest and simplest; two-stage association recovers low-confidence detections. | No appearance or motion compensation → more ID switches under occlusion or camera motion. |
+| **OC-SORT** | `default_ocsort.yaml` | ❌ | ❌ | Observation-centric motion model; robust to non-linear motion and brief occlusions; lightweight, ReID-free. | No appearance cues; weaker on long occlusions and dense, visually similar targets. |
+| **Deep OC-SORT** | `default_deepocsort.yaml` | optional | optional | OC-SORT plus appearance embeddings and optional GMC; fewer ID switches in crowded scenes. | Heaviest OC-SORT variant when ReID is enabled; more tuning. |
+| **FastTracker** | `default_fasttrack.yaml` | ❌ | ❌ | Occlusion-aware ByteTrack variant with Kalman rollback and init-IoU suppression; good ID retention through brief occlusions at low cost. | Newer/less battle-tested; ReID-free; several occlusion knobs to tune. |
+| **TrackTrack** | `default_tracktrack.yaml` | optional | ✅ | Multi-cue cost (HMIoU + ReID + confidence + angle) with iterative assignment and track-aware initialisation. | Most parameters to tune; higher compute. |
+
+> ¹ **GMC** (global motion compensation) corrects for camera/drone movement *inside the tracker's association step*. It runs during tracking and is independent of Geo-trax's separate [Stabilo](https://github.com/rfonod/stabilo) stage, which stabilizes the already-extracted trajectories against a reference frame as post-processing and has no effect on tracking itself.
+
+**Guidance for drone (BEV) footage:** start with **BoT-SORT** (the default). If throughput matters more than identity consistency, try **ByteTrack** or **OC-SORT**. For dense scenes with frequent occlusions, **Deep OC-SORT** or **TrackTrack** (with ReID enabled) tend to retain identities best, at the cost of speed. To compare two trackers on your own data, see [`tools/compare_tracking.py`](tools/compare_tracking.py).
+
+</details>
+
+Tracking parameters (confidence thresholds, track buffer, matching thresholds, ReID, GMC, etc.) are documented inline in each tracker config. For full details on the underlying algorithms, see the [Ultralytics tracking docs](https://docs.ultralytics.com/modes/track/).
+
 ## Batch Processing Example
 
 The `batch_process.py` script can process multiple videos in a directory, including subdirectories, or a single video file.
