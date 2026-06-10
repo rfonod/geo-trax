@@ -50,7 +50,7 @@ visualization:
   show: false             # Open a live preview window during processing — CLI: --show / --no-show
   tail_length: 30         # Track tail length [frames]; number of past positions drawn as a fading trail; [1, inf)
   line_width: 2           # Bounding-box and track stroke width [px]; [1, inf)
-  viz_mode: 0             # Frame source for annotation: 0=original, 1=stabilized, 2=reference frame — CLI: --viz-mode
+  viz_mode: 0             # Frame source for annotation: 0=original, 1=stabilized, 2=reference frame; use a list (e.g. [0, 1, 2]) to render one video per mode — CLI: --viz-mode
   plot_trajectories: false  # Overlay all trajectory positions on the first frame before the main pass — CLI: --plot-trajectories / --no-plot-trajectories
   plot_delay: 30          # Frames to hold the trajectory overlay before starting the main pass; [1, inf) — CLI: --plot-delay
   show_conf: false        # Include detection confidence score in the bounding-box label — CLI: --show-conf / --no-show-conf

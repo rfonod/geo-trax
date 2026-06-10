@@ -26,8 +26,9 @@ Options:
 Visualization Options:
   --save / --no-save, -s  : Save the annotated output video to file. Defaults to cfg -> visualization -> save.
   --show / --no-show, -sh : Open a live preview window during processing. Defaults to cfg -> visualization -> show.
-  --viz-mode, -vm <int> : Frame source for annotation: 0=original, 1=stabilized, 2=reference frame.
-                        Defaults to cfg -> visualization -> viz_mode.
+  --viz-mode, -vm <int> [<int> ...] : Frame source(s) for annotation: 0=original, 1=stabilized,
+                        2=reference frame. Accepts multiple values (e.g. 0 1 2) to render one
+                        video per mode. Defaults to cfg -> visualization -> viz_mode.
   --plot-trajectories, -pt : Overlay trajectory positions on the first frame.
                         Defaults to cfg -> visualization -> plot_trajectories.
   --plot-delay, -pd <int> : Number of frames to display the trajectory overlay; only relevant when
@@ -111,23 +112,49 @@ def visualize_results(args: argparse.Namespace, logger: logging.Logger) -> None:
                        "Set 'save' or 'show' in the config file, or pass --save / --show on the command line.")
     class_names = config['class_names']
     viz_config = config['visualization']
-    tracks_txt_filepath, transforms_filepath, tracks_csv_filepath = get_and_verify_filepaths(args, logger)
-    tracks, tracks_plotting = read_tracks(tracks_txt_filepath, class_names, args, logger)
-    transforms = read_transforms(transforms_filepath, logger)
-    speed_lane_data = read_georeferenced_results(tracks_csv_filepath, tracks, logger)
-    vid_reader, vid_writer, pbar = initialize_streams(args, logger)
 
-    frame_num = 0
-    try:
-        for frame_num, annotated_frame in process_frames(tracks, tracks_plotting, transforms, speed_lane_data, vid_reader, pbar, class_names, viz_config, args, logger):
-            if args.show:
-                display_frame(annotated_frame, frame_num, logger)
-            if args.save:
-                save_frame(vid_writer, annotated_frame, logger)
-    except Exception as e:
-        logger.error(f"An error occurred: {e}")
-    finally:
-        finalize_video(vid_reader, vid_writer, pbar, frame_num, args.show, logger)
+    viz_modes = normalize_viz_modes(args.viz_mode, logger)
+    for viz_mode in viz_modes:
+        args.viz_mode = viz_mode
+        tracks_txt_filepath, transforms_filepath, tracks_csv_filepath = get_and_verify_filepaths(args, logger)
+        tracks, tracks_plotting = read_tracks(tracks_txt_filepath, class_names, args, logger)
+        transforms = read_transforms(transforms_filepath, logger)
+        speed_lane_data = read_georeferenced_results(tracks_csv_filepath, tracks, logger)
+        vid_reader, vid_writer, pbar = initialize_streams(args, logger)
+
+        frame_num = 0
+        try:
+            for frame_num, annotated_frame in process_frames(tracks, tracks_plotting, transforms, speed_lane_data, vid_reader, pbar, class_names, viz_config, args, logger):
+                if args.show:
+                    display_frame(annotated_frame, frame_num, logger)
+                if args.save:
+                    save_frame(vid_writer, annotated_frame, logger)
+        except Exception as e:
+            logger.error(f"An error occurred: {e}")
+        finally:
+            finalize_video(vid_reader, vid_writer, pbar, frame_num, args.show, logger)
+
+    args.viz_mode = viz_modes
+
+
+def normalize_viz_modes(viz_mode, logger: logging.Logger) -> list:
+    """
+    Coerce a single visualization mode or a list of modes into an ordered, de-duplicated list.
+    """
+    modes = list(viz_mode) if isinstance(viz_mode, (list, tuple)) else [viz_mode]
+    valid_modes = []
+    for mode in modes:
+        if mode not in (0, 1, 2):
+            logger.critical(
+                f"Invalid visualization mode '{mode}'. Valid modes are 0 (original), 1 (stabilized), 2 (reference)."
+            )
+            sys.exit(1)
+        if mode not in valid_modes:
+            valid_modes.append(mode)
+    if not valid_modes:
+        logger.critical("No visualization mode specified.")
+        sys.exit(1)
+    return valid_modes
 
 
 def process_frames(tracks: pd.DataFrame, tracks_plotting: pd.DataFrame, transforms: dict, speed_lane_data: pd.DataFrame, cap: cv2.VideoCapture, pbar: tqdm, class_names: dict, viz_config: dict, args: argparse.Namespace, logger: logging.Logger):
@@ -509,8 +536,8 @@ def parse_cli_args() -> argparse.Namespace:
                      help='Save the annotated output video to file. Defaults to cfg -> visualization -> save.')
     viz.add_argument('--show', '-sh', action=argparse.BooleanOptionalAction, default=None,
                      help='Open a live preview window during processing. Defaults to cfg -> visualization -> show.')
-    viz.add_argument('--viz-mode', '-vm', type=int, default=None, choices=[0, 1, 2],
-                     help='Frame source for annotation: 0=original, 1=stabilized, 2=reference frame. Defaults to cfg -> visualization -> viz_mode.')
+    viz.add_argument('--viz-mode', '-vm', type=int, nargs='+', default=None, choices=[0, 1, 2], metavar='MODE',
+                     help='Frame source(s) for annotation: 0=original, 1=stabilized, 2=reference frame. Defaults to cfg -> visualization -> viz_mode.')
     viz.add_argument('--plot-trajectories', '-pt', action=argparse.BooleanOptionalAction, default=None,
                      help='Overlay trajectory positions on the first frame. Defaults to cfg -> visualization -> plot_trajectories.')
     viz.add_argument('--plot-delay', '-pd', type=int, default=None,

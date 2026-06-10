@@ -85,8 +85,9 @@ Visualization Options:
                           Defaults to cfg -> visualization -> save.
     --show / --no-show, -sh : Open a live preview window during processing.
                           Defaults to cfg -> visualization -> show.
-    --viz-mode, -vm <int>   : Annotation source frame: 0=original, 1=stabilized, 2=reference
-                          frame. Defaults to cfg -> visualization -> viz_mode.
+    --viz-mode, -vm <int> [<int> ...] : Annotation source frame(s): 0=original, 1=stabilized,
+                          2=reference frame. Accepts multiple values (e.g. 0 1 2) to render one
+                          video per mode. Defaults to cfg -> visualization -> viz_mode.
     --plot-trajectories, -pt : Overlay all trajectory positions on the first frame before the
                           main annotation pass. Defaults to cfg -> visualization -> plot_trajectories.
     --plot-delay, -pd <int> : Frames to hold the trajectory overlay; only relevant with
@@ -298,7 +299,9 @@ def should_process_file(file: Path, args: argparse.Namespace, logger: logging.Lo
     suffix = determine_suffix_and_fourcc()[0]
     txt_exists = check_if_results_exist(file, "processed")[0]
     csv_exists = check_if_results_exist(file, "georeferenced")[0]
-    vid_exists = check_if_results_exist(file, "visualized", args.viz_mode if args.viz_mode is not None else 0, suffix)[0]
+    # viz_mode may be a single mode or several; results count as present only if every requested mode exists
+    viz_modes = args.viz_mode if isinstance(args.viz_mode, (list, tuple)) else [args.viz_mode if args.viz_mode is not None else 0]
+    vid_exists = all(check_if_results_exist(file, "visualized", mode, suffix)[0] for mode in viz_modes)
 
     processing_steps = "detection, tracking, and stabilization"
     if action == "Detecting, tracking, and stabilizing":
@@ -373,7 +376,7 @@ def parse_cli_args() -> argparse.Namespace:
     viz = parser.add_argument_group('Visualization options')
     viz.add_argument('--save', '-s', action=argparse.BooleanOptionalAction, default=None, help='Save the annotated output video to file. Defaults to cfg -> visualization -> save.')
     viz.add_argument('--show', '-sh', action=argparse.BooleanOptionalAction, default=None, help='Open a live preview window during processing. Defaults to cfg -> visualization -> show.')
-    viz.add_argument('--viz-mode', '-vm', type=int, default=None, choices=[0, 1, 2], help='Frame source for annotation: 0=original, 1=stabilized, 2=reference frame. Defaults to cfg -> visualization -> viz_mode.')
+    viz.add_argument('--viz-mode', '-vm', type=int, nargs='+', default=None, choices=[0, 1, 2], metavar='MODE', help='Frame source(s) for annotation: 0=original, 1=stabilized, 2=reference frame. Accepts multiple values, e.g. "--viz-mode 0 1 2" renders one video per mode. Defaults to cfg -> visualization -> viz_mode.')
     viz.add_argument("--plot-trajectories", "-pt", action=argparse.BooleanOptionalAction, default=None, help='Overlay trajectory positions on the first frame. Defaults to cfg -> visualization -> plot_trajectories.')
     viz.add_argument("--plot-delay", "-pd", type=int, default=None, help='Number of frames to display the trajectory overlay; only relevant when --plot-trajectories is enabled. Defaults to cfg -> visualization -> plot_delay.')
     viz.add_argument("--show-conf", "-sc", action=argparse.BooleanOptionalAction, default=None, help='Include detection confidence in labels. Defaults to cfg -> visualization -> show_conf.')
