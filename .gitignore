@@ -72,7 +72,7 @@ data/orthophotos/
 data/segmentations/
 data/master_frames/
 data/results/
-data/*.yaml
+data/**/*.yaml
 
 # Optional Google Drive temporary files
 .tmp.driveupload
