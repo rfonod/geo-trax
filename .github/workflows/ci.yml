@@ -1,0 +1,56 @@
+# Continuous integration: lint, test suite, and packaging smoke test.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install ruff
+      - run: ruff check --select F,E9 --output-format=github .
+
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest]
+        python-version: ['3.9', '3.11', '3.13']
+        include:
+          - os: macos-latest
+            python-version: '3.11'
+          - os: windows-latest
+            python-version: '3.11'
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+      - run: pip install -e ".[dev]"
+      - run: pytest
+
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install build twine
+      - run: python -m build
+      - run: twine check dist/*
+      # Install the built wheel and make sure the console entry point works.
+      - run: pip install dist/*.whl
+      - run: |
+          geotrax --version
+          geotrax --help
