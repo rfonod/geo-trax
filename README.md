@@ -1,6 +1,6 @@
 # Geo-trax
 
-[![GitHub Release](https://img.shields.io/github/v/release/rfonod/geo-trax?include_prereleases)](https://github.com/rfonod/geo-trax/releases) [![Python](https://img.shields.io/badge/python-3.9--3.13-blue)](https://www.python.org/) [![License](https://img.shields.io/github/license/rfonod/geo-trax)](https://github.com/rfonod/geo-trax/blob/main/LICENSE) [![Development Status](https://img.shields.io/badge/development-active-brightgreen)](https://github.com/rfonod/geo-trax) [![GitHub Issues](https://img.shields.io/github/issues/rfonod/geo-trax)](https://github.com/rfonod/geo-trax/issues) [![Open Access](https://img.shields.io/badge/Journal-10.1016%2Fj.trc.2025.105205-blue)](https://doi.org/10.1016/j.trc.2025.105205) [![arXiv](https://img.shields.io/badge/arXiv-2411.02136-b31b1b.svg)](https://arxiv.org/abs/2411.02136) [![Archived Code](https://img.shields.io/badge/Zenodo-Software%20Archive-blue)](https://zenodo.org/doi/10.5281/zenodo.12119542) [![Project Website](https://img.shields.io/badge/REAL%20Lab-Geo--trax-informational)](https://www.real-lab.ch/geo-trax) [![YouTube](https://img.shields.io/badge/YouTube-Video-red?logo=youtube&logoColor=red)](https://youtu.be/gOGivL9FFLk)
+[![GitHub Release](https://img.shields.io/github/v/release/rfonod/geo-trax?include_prereleases)](https://github.com/rfonod/geo-trax/releases) [![PyPI - Version](https://img.shields.io/pypi/v/geo-trax)](https://pypi.org/project/geo-trax/) [![PyPI - Total Downloads](https://img.shields.io/pepy/dt/geo-trax?label=total%20downloads)](https://pepy.tech/project/geo-trax) [![PyPI - Downloads per Month](https://img.shields.io/pypi/dm/geo-trax?color=%234c1)](https://pypi.org/project/geo-trax/) [![CI](https://github.com/rfonod/geo-trax/actions/workflows/ci.yml/badge.svg)](https://github.com/rfonod/geo-trax/actions/workflows/ci.yml) [![Python](https://img.shields.io/badge/python-3.9--3.13-blue)](https://www.python.org/) [![License](https://img.shields.io/github/license/rfonod/geo-trax)](https://github.com/rfonod/geo-trax/blob/main/LICENSE) [![Development Status](https://img.shields.io/badge/development-active-brightgreen)](https://github.com/rfonod/geo-trax) [![GitHub Issues](https://img.shields.io/github/issues/rfonod/geo-trax)](https://github.com/rfonod/geo-trax/issues) [![Open Access](https://img.shields.io/badge/Journal-10.1016%2Fj.trc.2025.105205-blue)](https://doi.org/10.1016/j.trc.2025.105205) [![arXiv](https://img.shields.io/badge/arXiv-2411.02136-b31b1b.svg)](https://arxiv.org/abs/2411.02136) [![Archived Code](https://img.shields.io/badge/Zenodo-Software%20Archive-blue)](https://zenodo.org/doi/10.5281/zenodo.12119542) [![Project Website](https://img.shields.io/badge/REAL%20Lab-Geo--trax-informational)](https://www.real-lab.ch/geo-trax) [![YouTube](https://img.shields.io/badge/YouTube-Video-red?logo=youtube&logoColor=red)](https://youtu.be/gOGivL9FFLk)
 
 **Geo-trax** (GEO-referenced TRAjectory eXtraction) is a comprehensive pipeline for extracting high-accuracy georeferenced vehicle trajectories from high-altitude drone imagery. Designed specifically for quasi-stationary aerial monitoring in urban traffic scenarios, Geo-trax transforms raw, bird's-eye view (BEV) video footage into precise, real-world vehicle trajectories. The framework integrates state-of-the-art computer vision and deep learning modules for vehicle detection, tracking, and trajectory stabilization, followed by a georeferencing stage that employs image registration to align the stabilized video frames with an orthophoto. This registration enables the accurate mapping of vehicle trajectories to real-world coordinates. The resulting pipeline supports large-scale traffic studies by delivering spatially and temporally consistent trajectory data suitable for traffic behavior analysis and simulation. Geo-trax is optimized for urban intersections and arterial corridors, where high-fidelity vehicle-level insights are essential for intelligent transportation systems and digital twin applications.
 
@@ -28,23 +28,13 @@
 <details>
 <summary><b>🚀 Planned Enhancements</b></summary>
 
-### Release Plan
-
-- **Version 1.0.0**
-  - Installable package via PyPI (`pip install geo-trax`) with CLI entry points and a modular package layout.
-  - Comprehensive documentation in a dedicated `docs/` folder, including tool-specific READMEs.
-  - Code cleanup: unified style, type hints, improved docstrings, and refactored utilities into focused modules.
-  - Additional data wrangling and analysis tools.
-  - Unit tests for core functions and automated testing via GitHub Actions.
-  - Detection model hosted on Hugging Face.
-
-- **Future Versions**
-  - Modularized, OOP-based pipeline with custom reference frame support and georeferencing leveraging Stabilo's image-matching backend.
-  - Rationalized single-file YAML configuration.
-  - Per-class confidence thresholds and oriented bounding box visualization (using azimuth and dimension estimates).
-  - Trajectory interpolation and SAHI-based small-object detection.
-  - Batch inference, GPU-accelerated image registration, and multi-thread processing.
-  - Real-world map visualization (e.g., MovingPandas, contextily) and interactive web app.
+- Comprehensive documentation in a dedicated `docs/` folder, including tool-specific READMEs.
+- Modularized, OOP-based pipeline with custom reference frame support and georeferencing leveraging Stabilo's image-matching backend.
+- Rationalized single-file YAML configuration.
+- Per-class confidence thresholds and oriented bounding box visualization (using azimuth and dimension estimates).
+- Trajectory interpolation and SAHI-based small-object detection.
+- Batch inference, GPU-accelerated image registration, and multi-thread processing.
+- Real-world map visualization (e.g., MovingPandas, contextily) and interactive web app.
 
 </details>
 
@@ -69,51 +59,60 @@ Geo-trax was validated in a large-scale urban traffic monitoring experiment cond
 
 ## Installation
 
-1. **Clone or fork the repository**:
+It is recommended to create and activate a **Python virtual environment** (Python >= 3.9 and <= 3.13) first:
 
-    ```bash
-    git clone https://github.com/rfonod/geo-trax.git
-    cd geo-trax
-    ```
+```bash
+python3.11 -m venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+```
 
-2. **Create and activate a Python virtual environment** (Python >= 3.9 and <= 3.13):
+<details>
+<summary>Alternatives: conda or uv</summary>
 
-    ```bash
-    python3.11 -m venv .venv
-    source .venv/bin/activate  # On Windows: .venv\Scripts\activate
-    ```
+**[Miniconda](https://www.anaconda.com/docs/getting-started/miniconda/install):**
+```bash
+conda create -n geo-trax python=3.11 -y
+conda activate geo-trax
+```
 
-    <details>
-    <summary>Alternatives: conda or uv</summary>
+**[uv](https://docs.astral.sh/uv/getting-started/installation/) (fastest; use `uv pip install` in the options below):**
+```bash
+uv venv --python 3.11
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+```
+</details>
 
-    **[Miniconda](https://www.anaconda.com/docs/getting-started/miniconda/install):**
-    ```bash
-    conda create -n geo-trax python=3.11 -y
-    conda activate geo-trax
-    ```
+Then, install geo-trax using one of the following options:
 
-    **[uv](https://docs.astral.sh/uv/getting-started/installation/) (fastest; use `uv pip install` in step 3):**
-    ```bash
-    uv venv --python 3.11
-    source .venv/bin/activate  # On Windows: .venv\Scripts\activate
-    ```
-    </details>
+### Option 1: Install from PyPI
 
-3. **Install dependencies** from `pyproject.toml`:
+```bash
+pip install geo-trax
+```
 
-    ```bash
-    pip install -e .              # pip  (-e: editable mode, reflects code changes without reinstalling)
-    # uv pip install -e .         # uv   (faster; requires uv venv from step 2)
-    # poetry install              # Poetry (auto-manages virtualenv; skip step 2)
-    ```
+This installs the `geotrax` command-line interface (see [Batch Processing Example](#batch-processing-example)) together with the bundled configuration tree (`geotrax/cfg/`).
 
-4. **[Optional] Install development dependencies** (for development, testing, or other non-core auxiliary scripts):
+> [!NOTE]
+> The default detection model (`models/yolov8s_merger8_exp1.pt`) is distributed with the repository, not the PyPI package. Download the [`models/`](models/) folder (weights + class-names YAML) into your working directory, or point the `model:` key of a custom Ultralytics config to its location.
 
-    ```bash
-    pip install -e '.[dev]'           # pip
-    # uv pip install -e '.[dev]'      # uv
-    # poetry install --extras dev     # Poetry
-    ```
+### Option 2: Install from Local Source
+
+Recommended for development or model training — the default detection model weights ship with the repository. Clone (or fork) the repository and install the package from the local source:
+
+```bash
+git clone https://github.com/rfonod/geo-trax.git
+cd geo-trax && pip install -e .   # pip  (-e: editable mode, reflects code changes without reinstalling)
+# uv pip install -e .             # uv   (faster; requires uv venv from above)
+# poetry install                  # Poetry (auto-manages virtualenv; skip the virtual environment step)
+```
+
+**[Optional] Install development dependencies** (for development, testing, or other non-core auxiliary scripts):
+
+```bash
+pip install -e '.[dev]'           # pip
+# uv pip install -e '.[dev]'      # uv
+# poetry install --extras dev     # Poetry
+```
 
 ## Model Training
 
@@ -121,7 +120,7 @@ The `train/` directory contains scripts for training and exporting custom YOLOv8
 
 ## Tracking Algorithms
 
-Geo-trax supports six multi-object trackers bundled with [Ultralytics](https://github.com/ultralytics/ultralytics) (`>=8.4.63`): **BoT-SORT** (default), **ByteTrack**, **OC-SORT**, **Deep OC-SORT**, **FastTracker**, and **TrackTrack**. Selection is purely config-driven — point the `cfg_tracker` key in `cfg/default.yaml` at the matching `cfg/tracker/default_<name>.yaml` (each documented inline, parameter by parameter); no code changes are needed.
+Geo-trax supports six multi-object trackers bundled with [Ultralytics](https://github.com/ultralytics/ultralytics) (`>=8.4.63`): **BoT-SORT** (default), **ByteTrack**, **OC-SORT**, **Deep OC-SORT**, **FastTracker**, and **TrackTrack**. Selection is purely config-driven — point the `cfg_tracker` key in `geotrax/cfg/default.yaml` at the matching `geotrax/cfg/tracker/default_<name>.yaml` (each documented inline, parameter by parameter); no code changes are needed.
 
 <details>
 <summary><b>🚗 Tracker comparison and selection guidance</b></summary>
@@ -145,12 +144,14 @@ Tracking parameters (confidence thresholds, track buffer, matching thresholds, R
 
 ## Batch Processing Example
 
-The `batch_process.py` script can process multiple videos in a directory, including subdirectories, or a single video file.
+Installing geo-trax provides a single `geotrax` command with one subcommand per pipeline stage: `batch` (primary entry point), `extract`, `georeference`, `visualize`, `plot`, and `aggregate`. Run `geotrax -h` for the overview and `geotrax <command> -h` for the per-command option reference (`python -m geotrax …` works identically).
+
+The `geotrax batch` command can process multiple videos in a directory, including subdirectories, or a single video file.
 
 To view the help message and available options, run:
 
 ```bash
-python batch_process.py -h
+geotrax batch -h
 ```
 
 Below are some example commands to demonstrate its usage.
@@ -158,31 +159,31 @@ Below are some example commands to demonstrate its usage.
 #### Example 1: Process all files in a directory without georeferencing
 
 ```bash
-python batch_process.py path/to/videos/ --no-geo
+geotrax batch path/to/videos/ --no-geo
 ```
 
 #### Example 2: Customize arguments for a specific video
 
 ```bash
-python batch_process.py video.mp4 -c cfg/custom_config.yaml
+geotrax batch video.mp4 -c path/to/custom_config.yaml
 ```
 
 #### Example 3: Save tracking results in a video without re-running extraction
 
 ```bash
-python batch_process.py video.mp4 --viz-only --save
+geotrax batch video.mp4 --viz-only --save
 ```
 
 #### Example 4: Show lane IDs and hide speeds in the visualization (requires georeferencing)
 
 ```bash
-python batch_process.py video.mp4 --viz-only --save --show-lanes --hide-speeds
+geotrax batch video.mp4 --viz-only --save --show-lanes --hide-speeds
 ```
 
 #### Example 5: Generate aggregated trajectory plots only from existing results, excluding buses and trucks
 
 ```bash
-python batch_process.py path/to/processed-data/ --plot-only --aggregate --plot-class-filter 1 2
+geotrax batch path/to/processed-data/ --plot-only --aggregate --plot-class-filter 1 2
 ```
 
 > [!TIP]
@@ -289,7 +290,7 @@ If you use **Geo-trax** in your research, software, or dataset generation, pleas
       title = {Geo-trax: A Comprehensive Framework for Georeferenced Vehicle Trajectory Extraction from Drone Imagery},
       url = {https://github.com/rfonod/geo-trax},
       doi = {10.5281/zenodo.12119542},
-      version = {0.9.0},
+      version = {1.0.0},
       year = {2026}
     }
     ```
