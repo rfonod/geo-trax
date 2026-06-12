@@ -46,15 +46,16 @@ visualization:
   tail_length: 30         # Track tail length [frames]; number of past positions drawn as a fading trail; [1, inf)
   line_width: 2           # Bounding-box and track stroke width [px]; [1, inf)
   viz_mode: 0             # Frame source for annotation: 0=original, 1=stabilized, 2=reference frame; use a list (e.g. [0, 1, 2]) to render one video per mode — CLI: --viz-mode
-  plot_trajectories: false  # Overlay all trajectory positions on the first frame before the main pass — CLI: --plot-trajectories / --no-plot-trajectories
+  plot_trajectories: false # Overlay all trajectory positions on the first frame before the main pass — CLI: --plot-trajectories / --no-plot-trajectories
   plot_delay: 30          # Frames to hold the trajectory overlay before starting the main pass; [1, inf) — CLI: --plot-delay
   show_conf: false        # Include detection confidence score in the bounding-box label — CLI: --show-conf / --no-show-conf
   show_lanes: false       # Include lane ID in the bounding-box label (requires georeferencing) — CLI: --show-lanes / --no-show-lanes
-  show_class_names: false  # Include vehicle class name in the bounding-box label — CLI: --show-class-names / --no-show-class-names
+  show_class_names: false # Include vehicle class name in the bounding-box label — CLI: --show-class-names / --no-show-class-names
   hide_labels: false      # Suppress all label text overlays — CLI: --hide-labels / --no-hide-labels
   hide_tracks: false      # Suppress track tail lines — CLI: --hide-tracks / --no-hide-tracks
   hide_speed: false       # Suppress speed values in labels (requires georeferencing) — CLI: --hide-speed / --no-hide-speed
-  speed_unit: "km/h"     # Speed display unit; choices: [km/h, mi/h] — CLI: --speed-unit
+  speed_unit: "km/h"      # Speed display unit; choices: [km/h, mi/h] — CLI: --speed-unit
+  speed_deadzone: 1       # Floor displayed speeds <= this value (in speed_unit) to 0, hiding stationary-vehicle jitter; 0 disables; [0, inf) — CLI: --speed-deadzone
   class_filter: []        # Vehicle class IDs to exclude from visualization (e.g. [1, 2] hides bus and truck) — CLI: --class-filter
 
 # --- Plotting settings (CLI override) ---

@@ -40,6 +40,7 @@ Visualization Options:
   --hide-tracks, -ht  : Suppress track tail lines. Defaults to cfg -> visualization -> hide_tracks.
   --hide-speed, -hs   : Suppress speed values in labels. Defaults to cfg -> visualization -> hide_speed.
   --speed-unit, -su <choice> : Speed display unit: km/h or mi/h. Defaults to cfg -> visualization -> speed_unit.
+  --speed-deadzone, -sdz <float> : Floor displayed speeds <= this value (in the chosen speed unit) to 0; 0 disables. Defaults to cfg -> visualization -> speed_deadzone.
   --class-filter, -cf <int> [<int> ...] : Vehicle class IDs to exclude (e.g., -cf 1 2). Defaults to cfg -> visualization -> class_filter.
   --cut-frame-left, -cfl <int> : Skip the first N frames. Defaults to cfg -> processing -> cut_frame_left.
   --cut-frame-right, -cfr <int> : Stop processing after this frame. Defaults to cfg -> processing -> cut_frame_right.
@@ -104,6 +105,7 @@ def visualize_results(args: argparse.Namespace, logger: logging.Logger) -> None:
     if args.hide_tracks is None:      args.hide_tracks      = viz['hide_tracks']
     if args.hide_speed is None:       args.hide_speed       = viz['hide_speed']
     if args.speed_unit is None:       args.speed_unit       = viz['speed_unit']
+    if args.speed_deadzone is None:   args.speed_deadzone   = viz['speed_deadzone']
     if args.class_filter is None:     args.class_filter     = viz['class_filter']
     if args.cut_frame_left is None:   args.cut_frame_left   = proc['cut_frame_left']
     if args.cut_frame_right is None:  args.cut_frame_right  = proc['cut_frame_right']
@@ -431,6 +433,8 @@ def annotate_frame(frame: np.ndarray, frame_num: int, tracks_frame: pd.DataFrame
                         speed = int(speed * 0.621371)  # Convert km/h to mi/h
                     else:
                         speed = int(speed)
+                    if speed <= args.speed_deadzone:  # Deadzone: floor near-stationary speeds to 0 (display only)
+                        speed = 0
                 else:
                     speed = None
                 lane = int(lane) if lane not in ('', None) and pd.notna(lane) else None
@@ -556,6 +560,8 @@ def parse_cli_args() -> argparse.Namespace:
                      help='Suppress speed values in labels. Defaults to cfg -> visualization -> hide_speed.')
     viz.add_argument('--speed-unit', '-su', type=str, default=None, choices=['km/h', 'mi/h'],
                      help='Speed display unit. Defaults to cfg -> visualization -> speed_unit.')
+    viz.add_argument('--speed-deadzone', '-sdz', type=float, default=None,
+                     help='Floor displayed speeds at or below this value (in the chosen speed unit) to 0, hiding stationary-vehicle jitter; 0 disables. Defaults to cfg -> visualization -> speed_deadzone.')
     viz.add_argument('--class-filter', '-cf', type=int, nargs='+', default=None,
                      help='Vehicle class IDs to exclude (e.g., -cf 1 2). Defaults to cfg -> visualization -> class_filter.')
     viz.add_argument('--cut-frame-left', '-cfl', type=int, default=None,

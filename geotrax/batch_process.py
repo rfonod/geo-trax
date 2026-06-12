@@ -106,6 +106,8 @@ Visualization Options:
                           Defaults to cfg -> visualization -> hide_speed.
     --speed-unit, -su <choice> : Speed display unit: km/h or mi/h.
                           Defaults to cfg -> visualization -> speed_unit.
+    --speed-deadzone, -sdz <float> : Floor displayed speeds <= this value (in the chosen speed unit) to 0; 0 disables.
+                          Defaults to cfg -> visualization -> speed_deadzone.
     --class-filter, -cf <int> [<int> ...] : Vehicle class IDs to exclude from visualization
                           (e.g., -cf 1 2 hides buses and trucks).
                           Defaults to cfg -> visualization -> class_filter.
@@ -386,6 +388,7 @@ def parse_cli_args() -> argparse.Namespace:
     viz.add_argument("--hide-tracks", "-ht", action=argparse.BooleanOptionalAction, default=None, help='Suppress track tail lines. Defaults to cfg -> visualization -> hide_tracks.')
     viz.add_argument("--hide-speed", "-hs", action=argparse.BooleanOptionalAction, default=None, help='Suppress speed values in labels. Defaults to cfg -> visualization -> hide_speed.')
     viz.add_argument('--speed-unit', '-su', type=str, default=None, choices=['km/h', 'mi/h'], help='Speed display unit: km/h or mi/h. Defaults to cfg -> visualization -> speed_unit.')
+    viz.add_argument('--speed-deadzone', '-sdz', type=float, default=None, help='Floor displayed speeds <= this value (in the chosen speed unit) to 0; 0 disables. Defaults to cfg -> visualization -> speed_deadzone.')
     viz.add_argument('--class-filter', '-cf', type=int, nargs='+', default=None, help='Class IDs to exclude from visualization (e.g., -cf 1 2). Defaults to cfg -> visualization -> class_filter.')
 
     plotting = parser.add_argument_group('Plotting options')
