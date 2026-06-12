@@ -35,3 +35,7 @@ jobs:
           name: dist
           path: dist/
       - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          # Tolerate a re-created release for the same version (e.g. when retrying a
+          # failed GitHub->Zenodo archive): skip files already on PyPI instead of erroring.
+          skip-existing: true
