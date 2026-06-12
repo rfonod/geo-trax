@@ -3,7 +3,7 @@
 # Author: Robert Fonod (robert.fonod@ieee.org)
 
 """
-detect_track_stabilize.py - Performs video processing for vehicle trajectory extraction in image coordinates.
+extract.py - Performs video processing for vehicle trajectory extraction in image coordinates.
 
 This script is integral to the Geo-trax pipeline, focusing on the extraction of vehicle trajectories in
 image coordinates from drone-derived video footage. Designed for quasi-stationary drone operations providing

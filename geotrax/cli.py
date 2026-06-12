@@ -44,7 +44,7 @@ from geotrax import __version__
 # Modules are imported lazily so that 'geotrax --help' stays fast.
 COMMANDS = {
     'batch': ('geotrax.batch_process', 'Run the full pipeline for a video or directory tree (primary entry point)'),
-    'extract': ('geotrax.detect_track_stabilize', 'Stage 1: vehicle detection, tracking, and stabilization'),
+    'extract': ('geotrax.extract', 'Stage 1: vehicle detection, tracking, and stabilization'),
     'georeference': ('geotrax.georeference', 'Stage 2: map stabilized trajectories to real-world coordinates'),
     'aggregate': ('geotrax.aggregate', 'Stage 3: merge georeferenced results across drones/flights'),
     'visualize': ('geotrax.visualize', 'Overlay extracted tracks on the video'),

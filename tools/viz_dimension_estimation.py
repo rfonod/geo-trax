@@ -6,7 +6,7 @@
 viz_dimension_estimation.py - Vehicle Dimension Estimation Visualizer
 
 Visualizes the step-by-step process of the azimuth-based vehicle dimension
-estimation algorithm implemented in the geo-trax pipeline (geotrax/detect_track_stabilize.py).
+estimation algorithm implemented in the geo-trax pipeline (geotrax/extract.py).
 For a selected vehicle ID, it renders two diagnostic plots:
   1. The vehicle trajectory overlaid with bounding boxes, colour-coded by their
      acceptance or rejection at each filtering stage.
@@ -54,7 +54,7 @@ Output:
 Notes:
 - GSD and tau_c constants below are tuned to the Songdo experiment (4K drone footage
   at 140–150 m altitude). Adjust them for other datasets.
-- The azimuth-based algorithm mirrors geotrax/detect_track_stabilize.py exactly; any changes
+- The azimuth-based algorithm mirrors geotrax/extract.py exactly; any changes
   to the pipeline estimator should be reflected here for consistency.
 - Stabilised coordinates (columns 6/7) are used when available; raw coordinates
   (columns 2/3) are used as fallback.

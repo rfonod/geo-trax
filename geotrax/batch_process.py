@@ -174,7 +174,7 @@ from pathlib import Path
 
 from tqdm import tqdm
 
-from geotrax.detect_track_stabilize import detect_track_stabilize
+from geotrax.extract import detect_track_stabilize
 from geotrax.georeference import georeference
 from geotrax.plot import generate_plots
 from geotrax.utils.file_utils import check_if_results_exist, determine_suffix_and_fourcc
