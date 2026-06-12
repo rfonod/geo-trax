@@ -20,7 +20,7 @@ video file or an entire directory tree of videos. Key features:
   so that every video is always processed in full.
 
 Usage:
-  python batch_process.py <input_path> [options]
+  geotrax batch <input_path> [options]
 
 Arguments:
   input_path : Path to a video file (.mp4, .mov, .avi, .mkv) or a directory that is searched
@@ -46,7 +46,7 @@ Batch Processing Options:
                           these substrings (e.g., --exclude-patterns test temp).
 
 Shared Options:
-    --cfg, -c <path>    : Path to the main geo-trax configuration file (default: cfg/default.yaml).
+    --cfg, -c <path>    : Path to the main geo-trax configuration file (default: geotrax/cfg/default.yaml).
     --log-file, -lf <str> : Filename to save detailed logs. Saved in the 'logs' folder (default: None).
     --verbose, -v       : Set print verbosity level to INFO (default: WARNING).
 
@@ -58,7 +58,7 @@ Processing Options:
     --cut-frame-right, -cfr <int> : Stop at this frame number. Applies to single-file input only;
                           silently ignored in batch-directory mode. Defaults to cfg -> processing -> cut_frame_right.
     For full detection and tracking control (model, IoU, image size, tracker settings, etc.),
-    edit cfg/ultralytics/default.yaml and the linked tracker config.
+    edit geotrax/cfg/ultralytics/default.yaml and the linked tracker config.
 
 Georeferencing Options:
     --ortho-folder, -of <path>     : Path to the folder with orthophotos (.png, .tif, .txt).
@@ -130,30 +130,30 @@ Plotting Options:
 Examples:
   1. Full pipeline on a single video — detect, track, stabilize, georeference, save annotated video with lane
      IDs, and generate plots:
-        python batch_process.py data/video.mp4 --show-lanes
+        geotrax batch data/video.mp4 --show-lanes
 
   2. Pixel-coordinate only (no georeferencing) — detect, track, stabilize, save annotated
      video with class names and confidence scores, and generate plots:
-        python batch_process.py data/U_video_cut.mp4 --no-geo --show-class-names --show-conf
+        geotrax batch data/U_video_cut.mp4 --no-geo --show-class-names --show-conf
 
   3. Dry-run on a directory to preview what would be processed without executing anything:
-        python batch_process.py path/to/PROCESSED/ --dry-run --verbose
+        geotrax batch path/to/PROCESSED/ --dry-run --verbose
 
   4. Re-run visualization only (existing .txt results) — save with lane IDs, stabilized view:
-        python batch_process.py data/video.mp4 --viz-only --save --show-lanes --viz-mode 1
+        geotrax batch data/video.mp4 --viz-only --save --show-lanes --viz-mode 1
 
   5. Re-run georeferencing only with a forced homography recompute:
-        python batch_process.py data/video.mp4 --geo-only -of --recompute
+        geotrax batch data/video.mp4 --geo-only -of --recompute
 
   6. Batch-process a directory, overwrite all existing results without prompts, save videos:
-        python batch_process.py path/to/PROCESSED/ --overwrite --yes
+        geotrax batch path/to/PROCESSED/ --overwrite --yes
 
   7. Generate aggregated trajectory plots only from existing results, excluding buses and trucks:
-        python batch_process.py path/to/PROCESSED/ --plot-only --aggregate \
+        geotrax batch path/to/PROCESSED/ --plot-only --aggregate \
             --plot-class-filter 1 2
 
   8. Use a lenient detection preset and skip videos matching 'test' or 'tmp' in their name:
-        python batch_process.py path/to/videos/ -c cfg/lenient.yaml \
+        geotrax batch path/to/videos/ -c geotrax/cfg/lenient.yaml \
             --exclude-patterns test tmp --no-geo
 
 Notes:
@@ -165,7 +165,7 @@ Notes:
     processed through to their last frame.
   - --dry-run does not create the log file; use it freely before committing to a long run.
   - For full detection, tracking, and stabilization control (model, IoU, image size, tracker
-    algorithm, stabilizer settings), edit the linked sub-configs in cfg/.
+    algorithm, stabilizer settings), edit the linked sub-configs in geotrax/cfg/.
 """
 
 import argparse
@@ -174,12 +174,12 @@ from pathlib import Path
 
 from tqdm import tqdm
 
-from detect_track_stabilize import detect_track_stabilize
-from georeference import georeference
-from plot import generate_plots
-from utils.file_utils import check_if_results_exist, determine_suffix_and_fourcc
-from utils.logging_utils import bcolors, setup_logger
-from visualize import visualize_results
+from geotrax.detect_track_stabilize import detect_track_stabilize
+from geotrax.georeference import georeference
+from geotrax.plot import generate_plots
+from geotrax.utils.file_utils import check_if_results_exist, determine_suffix_and_fourcc
+from geotrax.utils.logging_utils import bcolors, setup_logger
+from geotrax.visualize import visualize_results
 
 VIDEO_FORMATS = {'.mp4', '.mov', '.avi', '.mkv'}
 
@@ -352,13 +352,13 @@ def parse_cli_args() -> argparse.Namespace:
     batch.add_argument("--exclude-patterns", "-ep", type=str, nargs='+', default=None, help="File name patterns to exclude (e.g., --exclude-patterns car_test drone_2023)")
 
     shared = parser.add_argument_group('Shared options')
-    shared.add_argument('--cfg', '-c', type=Path, default='cfg/default.yaml', help='Path to the main geo-trax configuration file')
+    shared.add_argument('--cfg', '-c', type=Path, default='geotrax/cfg/default.yaml', help='Path to the main geo-trax configuration file')
     shared.add_argument('--log-file', '-lf', type=str, default=None, help="Filename to save detailed logs. Saved in the 'logs' folder.")
     shared.add_argument('--verbose', '-v', action='store_true', help='Set print verbosity level to INFO (default: WARNING)')
 
     processing = parser.add_argument_group('Processing options',
         'For full detection and tracking control (model, IoU, image size, tracker settings, etc.), '
-        'edit cfg/ultralytics/default.yaml and the linked tracker config.')
+        'edit geotrax/cfg/ultralytics/default.yaml and the linked tracker config.')
     processing.add_argument('--conf', '-co', type=float, default=None, help='Detection confidence threshold. Defaults to cfg -> cfg_ultralytics -> conf.')
     processing.add_argument('--classes', '-cls', nargs='+', type=int, default=None, help='Class IDs to extract (e.g., --classes 0 1 2). Defaults to cfg -> cfg_ultralytics -> classes.')
     processing.add_argument('--cut-frame-left', '-cfl', type=int, default=None, help='Skip the first N frames. Defaults to cfg -> processing -> cut_frame_left.')

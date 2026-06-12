@@ -18,7 +18,7 @@ The script:
 7. Generates zip archives for convenient distribution
 
 Usage:
-  python aggregate.py <input> [options]
+  geotrax aggregate <input> [options]
 
 Arguments:
   input : Path to the PROCESSED folder containing georeferenced tracking results.
@@ -33,13 +33,13 @@ Options:
 
 Examples:
 1. Basic aggregation with default output location:
-   python aggregate.py /path/to/PROCESSED/
+   geotrax aggregate /path/to/PROCESSED/
 
 2. Aggregate with custom output folder:
-   python aggregate.py /path/to/PROCESSED/ --output /path/to/custom/output/
+   geotrax aggregate /path/to/PROCESSED/ --output /path/to/custom/output/
 
 3. Enable verbose logging and save to custom log file:
-   python aggregate.py /path/to/PROCESSED/ --verbose --log-file custom_aggregate.log
+   geotrax aggregate /path/to/PROCESSED/ --verbose --log-file custom_aggregate.log
 
 Input:
 - Path to PROCESSED folder containing georeferenced tracking results in CSV format
@@ -67,8 +67,8 @@ from pathlib import Path
 import pandas as pd
 from tqdm import tqdm
 
-from utils.file_utils import determine_location_id
-from utils.logging_utils import setup_logger
+from geotrax.utils.file_utils import determine_location_id
+from geotrax.utils.logging_utils import setup_logger
 
 
 def aggregate_results(args: argparse.Namespace, logger: logging.Logger) -> None:
@@ -191,8 +191,13 @@ def parse_cli_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-if __name__ == '__main__':
+def main() -> None:
+    """Command-line entry point."""
     args = parse_cli_args()
     logger = setup_logger(Path(__file__).name, args.verbose, args.log_file)
 
     aggregate_results(args, logger)
+
+
+if __name__ == '__main__':
+    main()

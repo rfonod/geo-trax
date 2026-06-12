@@ -11,7 +11,7 @@ detection and tracking output. Reads pixel-space tracking results (.txt), georef
 on plain orthophotos or pre-rendered lane segmentation overlay images.
 
 Usage:
-  python plot.py <input> [options]
+  geotrax plot <input> [options]
 
 Arguments:
   input : Path to a video file, .txt (pixel-space results), .csv (georeferenced results),
@@ -19,7 +19,7 @@ Arguments:
 
 Options:
   --help, -h       : Show this help message and exit.
-  --cfg, -c        : Path to the main geo-trax configuration file (default: cfg/default.yaml).
+  --cfg, -c        : Path to the main geo-trax configuration file (default: geotrax/cfg/default.yaml).
   --log-file, -lf  : Filename to save detailed logs. Saved in the 'logs' folder (default: None).
   --verbose, -v    : Set verbosity to INFO (default: WARNING).
 
@@ -53,16 +53,16 @@ Plotting Options:
 
 Examples:
 1. Plot results for a single video file (pixel-space only):
-   python plot.py /path/to/video.mp4
+   geotrax plot /path/to/video.mp4
 
 2. Plot georeferenced trajectories from a CSV file, overlaid on the orthophoto:
-   python plot.py /path/to/results/video.csv -of /path/to/orthophotos/
+   geotrax plot /path/to/results/video.csv -of /path/to/orthophotos/
 
 3. Aggregate and plot all results from a folder:
-   python plot.py /path/to/videos/ -a
+   geotrax plot /path/to/videos/ -a
 
 4. Plot with lane segmentation overlays as backgrounds, excluding buses:
-   python plot.py /path/to/videos/ -of /path/to/orthophotos/ -osf /path/to/segmentations/ -seg -cf 1
+   geotrax plot /path/to/videos/ -of /path/to/orthophotos/ -osf /path/to/segmentations/ -seg -cf 1
 """
 
 import argparse
@@ -78,10 +78,10 @@ import pandas as pd
 import seaborn as sns
 from tqdm import tqdm
 
-from utils.config_utils import load_config_all
-from utils.data_utils import PlotColors
-from utils.file_utils import detect_delimiter, determine_location_id, get_ortho_folder
-from utils.logging_utils import setup_logger
+from geotrax.utils.config_utils import load_config_all
+from geotrax.utils.data_utils import PlotColors
+from geotrax.utils.file_utils import detect_delimiter, determine_location_id, get_ortho_folder
+from geotrax.utils.logging_utils import setup_logger
 
 VIDEO_FORMATS = {'.mp4', '.mov', '.avi', '.mkv'}
 RESULTS_FORMATS = {'.txt', '.csv'}
@@ -726,7 +726,7 @@ def parse_cli_args() -> argparse.Namespace:
     parser.add_argument("input", type=Path, help="Path to the video source or .txt/.csv file or folder with video or .csv/.txt files")
 
     optional = parser.add_argument_group('Optional arguments')
-    optional.add_argument('--cfg', '-c', type=Path, default='cfg/default.yaml', help='Path to the main geo-trax configuration file')
+    optional.add_argument('--cfg', '-c', type=Path, default='geotrax/cfg/default.yaml', help='Path to the main geo-trax configuration file')
     optional.add_argument("--log-file", "-lf", type=str, default=None, help="Filename to save detailed logs. Saved in the 'logs' folder.")
     optional.add_argument("--verbose", "-v", action='store_true', help='Set print verbosity level to INFO (default: WARNING)')
 
@@ -752,8 +752,13 @@ def parse_cli_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-if __name__ == '__main__':
+def main() -> None:
+    """Command-line entry point."""
     args = parse_cli_args()
     logger = setup_logger(Path(__file__).name, args.verbose, args.log_file)
 
     generate_plots(args, logger)
+
+
+if __name__ == '__main__':
+    main()

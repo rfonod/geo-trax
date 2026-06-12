@@ -11,7 +11,7 @@ from typing import Tuple, Union
 
 import cv2
 
-from utils.constants import MACOS, WINDOWS
+from geotrax.utils.constants import MACOS, WINDOWS
 
 
 def detect_delimiter(filepath: Path, lines_to_check: int = 5) -> str:

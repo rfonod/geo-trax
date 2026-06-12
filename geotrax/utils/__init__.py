@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 # Author: Robert Fonod (robert.fonod@ieee.org)
 
-from utils.constants import LINUX, MACOS, WINDOWS
-from utils.config_utils import load_class_names, load_config, load_config_all
-from utils.data_utils import PlotColors, VizColors
-from utils.file_utils import (
+from geotrax.utils.config_utils import load_class_names, load_config, load_config_all
+from geotrax.utils.constants import LINUX, MACOS, WINDOWS
+from geotrax.utils.data_utils import PlotColors, VizColors
+from geotrax.utils.file_utils import (
     check_if_results_exist,
     convert_to_serializable,
     detect_delimiter,
@@ -13,10 +13,10 @@ from utils.file_utils import (
     get_ortho_folder,
     get_video_dimensions,
 )
-from utils.logging_utils import (
+from geotrax.utils.logging_utils import (
+    NOTICE_LEVEL,
     ColoredFormatter,
     FileFormatter,
-    NOTICE_LEVEL,
     bcolors,
     setup_logger,
 )

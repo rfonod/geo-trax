@@ -6,10 +6,11 @@
 # - [build-system]: Build requirements and backend (setuptools).
 # - [project]: Metadata, required and optional dependencies.
 # - [project.optional-dependencies]: Optional packages for development (dev) and model export (export).
-# - [tool.poetry]: Poetry settings (package-mode = false; deps-only, not installable yet).
+# - [project.scripts]: The 'geotrax' console command (see geotrax/cli.py for subcommands).
 # - [tool.*]: Tool configurations (setuptools, ruff, pytest).
 #
 # Installation:
+#   pip install geo-trax                # from PyPI; installs the 'geotrax' CLI and bundled configs
 #   pip install -e .                    # core; -e (editable) reflects code changes without reinstalling
 #   pip install -e '.[dev]'             # core + dev (pip)
 #   pip install -e '.[export]'          # core + export (pip)
@@ -26,7 +27,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "geo-trax"
-version = "0.9.0"
+dynamic = ["version"]
 description = "A Comprehensive Framework for Georeferenced Vehicle Trajectory Extraction from Drone Imagery"
 authors = [
     { name = "Robert Fonod", email = "robert.fonod@ieee.org" },
@@ -37,7 +38,7 @@ license-files = ["LICENSE"]
 requires-python = ">=3.9"
 keywords = ["trajectory-extraction", "trajectory-analysis", "object-detection", "object-tracking", "object-stabilization", "georeferencing", "computer-vision", "deep-learning"]
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 4 - Beta",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.9",
@@ -54,7 +55,7 @@ classifiers = [
 dependencies = [
     "ultralytics[extra]>=8.4.64,<9.0",
     "lapx>=0.5.2",
-    "stabilo>=1.2.0",
+    "stabilo>=1.2.1",
     "geopandas>=1.0.0",
     "matplotlib>=3.3.0",
     "seaborn>=0.11.0",
@@ -66,14 +67,11 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "ultralytics[dev]",
+    "pytest>=6.0",
+    "ruff",
 ]
 export = [
-    "onnx>=1.12.0; platform_system != 'Darwin'",                                                          # ONNX export
-    "onnx>=1.12.0,<1.18.0; platform_system == 'Darwin' and python_version < '3.13'",                     # ONNX export (macOS, TF compat)
-    "onnx>=1.20.0; platform_system == 'Darwin' and python_version >= '3.13'",                             # ONNX export (macOS, Python 3.13+)
-    "onnxslim>=0.1.82",                                                                                    # ONNX graph optimization
-    "onnxruntime<1.20.0; python_version < '3.11' and (platform_machine != 'aarch64' or platform_system != 'Linux')",  # ONNX inference/validation
-    "onnxruntime>=1.20.0; python_version >= '3.11'",                                                      # ONNX inference/validation
+    "ultralytics[export-base]",  # ONNX export/optimization/runtime via the Ultralytics export backend (onnx, onnxslim, onnxruntime, ...)
 ]
 
 [project.urls]
@@ -82,11 +80,17 @@ Repository = "https://github.com/rfonod/geo-trax/"
 Changelog = "https://github.com/rfonod/geo-trax/releases"
 Issues = "https://github.com/rfonod/geo-trax/issues/"
 
-[tool.poetry]
-package-mode = false  # geo-trax is not yet an installable package; manage deps only
+[project.scripts]
+geotrax = "geotrax.cli:main"
 
 [tool.setuptools]
-packages = { find = { where = ["."], include = ["utils", "utils.*"] } }
+packages = { find = { where = ["."], include = ["geotrax", "geotrax.*"] } }
+
+[tool.setuptools.dynamic]
+version = { attr = "geotrax.__version__" }
+
+[tool.setuptools.package-data]
+geotrax = ["cfg/*.yaml", "cfg/**/*.yaml"]  # bundle the default configuration tree in wheels
 
 [tool.ruff]
 line-length = 120

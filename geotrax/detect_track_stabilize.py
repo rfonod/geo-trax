@@ -15,14 +15,14 @@ on bounding boxes and azimuth data. The extracted trajectories are saved to a te
 metadata.
 
 Usage:
-    python detect_track_stabilize.py <source> [options]
+    geotrax extract <source> [options]
 
 Arguments:
     source                    : Path to the video file (e.g., path/to/video/video.mp4).
 
 Options:
     --help, -h                : Show this help message and exit.
-    --cfg, -c <path>          : Path to the main geo-trax configuration file (default: cfg/default.yaml).
+    --cfg, -c <path>          : Path to the main geo-trax configuration file (default: geotrax/cfg/default.yaml).
     --log-file, -lf <str>     : Filename to save detailed logs. Saved in the 'logs' folder (default: None).
     --verbose, -v             : Set print verbosity level to INFO (default: WARNING).
 
@@ -33,24 +33,25 @@ Processing Options:
     --cut-frame-left, -cfl <int> : Skip the first N frames. Defaults to cfg -> processing -> cut_frame_left.
     --cut-frame-right, -cfr <int> : Stop processing after this frame. Defaults to cfg -> processing -> cut_frame_right.
     For full detection and tracking control (model, IoU, image size, tracker settings, etc.),
-    edit cfg/ultralytics/default.yaml and the linked tracker config.
+    edit geotrax/cfg/ultralytics/default.yaml and the linked tracker config.
 
 Examples:
   1. Process a video with default settings:
-        python detect_track_stabilize.py path/to/video.mp4
+        geotrax extract path/to/video.mp4
 
   2. Use a custom config and consider only the first two vehicle classes:
-        python detect_track_stabilize.py path/to/video.mp4 --cfg cfg/custom.yaml --classes 0 1
+        geotrax extract path/to/video.mp4 --cfg geotrax/cfg/custom.yaml --classes 0 1
 
   3. Skip the first 100 frames and stop processing after frame 500:
-        python detect_track_stabilize.py path/to/video.mp4 --cut-frame-left 100 --cut-frame-right 500
+        geotrax extract path/to/video.mp4 --cut-frame-left 100 --cut-frame-right 500
 
 Notes:
-  - Detection parameters (model, confidence, IoU, image size, etc.) are controlled via cfg/ultralytics/default.yaml.
+  - Detection parameters (model, confidence, IoU, image size, etc.) are controlled via
+    geotrax/cfg/ultralytics/default.yaml.
   - Tracking parameters (algorithm, track buffer, matching thresholds, etc.) are controlled via the tracker config
-    linked under cfg_tracker in the main config (default: cfg/tracker/default_botsort.yaml).
+    linked under cfg_tracker in the main config (default: geotrax/cfg/tracker/default_botsort.yaml).
   - Stabilization parameters are controlled via the stabilo config linked under cfg_stabilo in the main config
-    (default: cfg/stabilo/default.yaml).
+    (default: geotrax/cfg/stabilo/default.yaml).
 """
 
 import argparse
@@ -70,9 +71,9 @@ from ultralytics import RTDETR, YOLO
 from ultralytics.utils.checks import check_yolo
 from ultralytics.utils.files import increment_path
 
-from utils.config_utils import load_config_all
-from utils.file_utils import check_if_results_exist, convert_to_serializable, get_video_dimensions
-from utils.logging_utils import setup_logger
+from geotrax.utils.config_utils import load_config_all
+from geotrax.utils.file_utils import check_if_results_exist, convert_to_serializable, get_video_dimensions
+from geotrax.utils.logging_utils import setup_logger
 
 
 def detect_track_stabilize(args: argparse.Namespace, logger: logging.Logger) -> None:
@@ -432,13 +433,13 @@ def parse_cli_args() -> argparse.Namespace:
     parser.add_argument('source', type=Path, help='Path to the video file (e.g., path/to/video/video.mp4)')
 
     optional = parser.add_argument_group('Optional arguments')
-    optional.add_argument('--cfg', '-c', type=Path, default='cfg/default.yaml', help='Path to the main geo-trax configuration file')
+    optional.add_argument('--cfg', '-c', type=Path, default='geotrax/cfg/default.yaml', help='Path to the main geo-trax configuration file')
     optional.add_argument('--log-file', '-lf', type=str, default=None, help="Filename to save detailed logs. Saved in the 'logs' folder.")
     optional.add_argument('--verbose', '-v', action='store_true', help='Set print verbosity level to INFO (default: WARNING)')
 
     processing = parser.add_argument_group('Processing arguments',
         'For full detection and tracking control (model, IoU, image size, tracker settings, etc.), '
-        'edit cfg/ultralytics/default.yaml and the linked tracker config.')
+        'edit geotrax/cfg/ultralytics/default.yaml and the linked tracker config.')
     processing.add_argument('--conf', '-co', type=float, default=None, help='Detection confidence threshold. Defaults to cfg -> cfg_ultralytics -> conf.')
     processing.add_argument('--classes', '-cls', nargs='+', type=int, default=None, help='Class IDs to extract (e.g., --classes 0 1 2). Defaults to cfg -> cfg_ultralytics -> classes.')
     processing.add_argument('--cut-frame-left', '-cfl', type=int, default=None, help='Skip the first N frames. Defaults to cfg -> processing -> cut_frame_left.')
@@ -446,8 +447,13 @@ def parse_cli_args() -> argparse.Namespace:
 
     return parser.parse_args()
 
-if __name__ == '__main__':
+def main() -> None:
+    """Command-line entry point."""
     args = parse_cli_args()
     logger = setup_logger(Path(__file__).name, args.verbose, args.log_file)
 
     detect_track_stabilize(args, logger)
+
+
+if __name__ == '__main__':
+    main()

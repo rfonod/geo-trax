@@ -1,13 +1,10 @@
-# This is the default main geo-trax configuration file (default.yaml).
+# This is a preset geo-trax configuration (lenient.yaml) tuned for high-recall detection.
 #
-# It links sub-configuration files for each pipeline stage and sets shared parameters that
-# control video processing, visualization, and plotting. Parameters marked with "(CLI override)"
-# can be temporarily overridden via the matching command-line argument; the value here is the
-# persistent default. All defaults below preserve the original CLI behavior so existing
-# invocations remain unaffected.
+# Detection uses a lower confidence threshold and more permissive NMS IoU, catching more
+# vehicles including low-visibility ones at the cost of more false positives.
 #
-# Tuned for DJI Mavic 3 footage at 140–150 m altitude, 4K resolution.
-# Adjust for different hardware as needed.
+# All parameters in the visualization and plotting sections below match the defaults in
+# default.yaml; adjust them here to persist non-default preferences for this preset.
 #
 # Sub-configuration docs:
 #   - Stabilo  (stabilization): https://github.com/rfonod/stabilo
@@ -15,10 +12,10 @@
 
 
 # --- Sub-configuration file paths ---
-cfg_ultralytics: cfg/ultralytics/default.yaml     # Ultralytics YOLO config (model, conf, iou, classes, etc.)
-cfg_tracker:     cfg/tracker/default_botsort.yaml # Tracker config; switch tracking algorithm here. Choices: default_botsort.yaml, default_bytetrack.yaml, default_ocsort.yaml, default_deepocsort.yaml, default_fasttrack.yaml, default_tracktrack.yaml
-cfg_stabilo:     cfg/stabilo/default.yaml         # Stabilo stabilizer config
-cfg_georef:      cfg/georef/default.yaml          # Georeferencing config
+cfg_ultralytics: geotrax/cfg/ultralytics/lenient.yaml     # Ultralytics YOLO config with lower conf threshold
+cfg_tracker:     geotrax/cfg/tracker/default_botsort.yaml # Tracker config; switch tracking algorithm here. Choices: default_botsort.yaml, default_bytetrack.yaml, default_ocsort.yaml, default_deepocsort.yaml, default_fasttrack.yaml, default_tracktrack.yaml
+cfg_stabilo:     geotrax/cfg/stabilo/default.yaml         # Stabilo stabilizer config
+cfg_georef:      geotrax/cfg/georef/default.yaml          # Georeferencing config
 
 # --- Stabilization ---
 stabilize: true   # Stabilize extracted bounding boxes; appends 4 columns (x_stab, y_stab, w_stab, h_stab) to results/video.txt
@@ -38,13 +35,11 @@ dimension_estimation:
     -1: 1.70      # Unknown / unassigned class
 
 # --- Video processing settings (CLI override) ---
-# These control how many frames to process. Override with --cut-frame-left / --cut-frame-right.
 processing:
   cut_frame_left: 0     # Skip this many frames at the start; [0, inf) — CLI: --cut-frame-left
   cut_frame_right: null # Stop at this frame number (null = process the entire video) — CLI: --cut-frame-right
 
 # --- Visualization settings (CLI override) ---
-# These control the annotated-video output from visualize.py. Override any key via its CLI flag.
 visualization:
   save: true              # Save annotated output video to file — CLI: --save / --no-save
   show: false             # Open a live preview window during processing — CLI: --show / --no-show
@@ -63,7 +58,6 @@ visualization:
   class_filter: []        # Vehicle class IDs to exclude from visualization (e.g. [1, 2] hides bus and truck) — CLI: --class-filter
 
 # --- Plotting settings (CLI override) ---
-# These control the output from plot.py. Override any key via its CLI flag.
 plotting:
   save: true                # Save plots as PDF files — CLI: --save / --no-save
   show: false               # Show plots in an interactive window — CLI: --show / --no-show

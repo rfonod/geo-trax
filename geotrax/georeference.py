@@ -16,14 +16,14 @@ Key features include:
 The script is designed for quasi-stationary drone operations like intersection monitoring.
 
 Usage:
-    python georeference.py <source> [options]
+    geotrax georeference <source> [options]
 
 Arguments:
     source                         : Path to the video file (e.g., path/to/video/video.mp4).
 
 Options:
     --help, -h                     : Show this help message and exit.
-    --cfg, -c <path>               : Path to the main geo-trax configuration file (default: cfg/default.yaml).
+    --cfg, -c <path>               : Path to the main geo-trax configuration file (default: geotrax/cfg/default.yaml).
     --log-file, -lf <str>          : Filename to save detailed logs. Saved in the 'logs' folder.
     --verbose, -v                  : Set print verbosity level to INFO (default: WARNING).
 
@@ -46,22 +46,22 @@ Georeferencing Options:
 Examples:
 
   1. Georeference tracking data using default settings and custom orthophoto folder:
-     python georeference.py path/to/video.mp4 -of path/to/orthophotos
+     geotrax georeference path/to/video.mp4 -of path/to/orthophotos
 
   2. Use a custom master frames folder and always recompute master->ortho homography:
-     python georeference.py path/to/video.mp4 -mf path/to/master -r
+     geotrax georeference path/to/video.mp4 -mf path/to/master -r
 
   3. Provide a custom segmentation folder and use a text file as the georeferencing source:
-     python georeference.py path/to/video.mp4 -osf path/to/segmentations -gs text-file
+     geotrax georeference path/to/video.mp4 -osf path/to/segmentations -gs text-file
 
   4. Specify georeferencing source to be a .tif metadata file and disable the master frame approach:
-     python georeference.py path/to/video.mp4 -gs metadata-tif -nm
+     geotrax georeference path/to/video.mp4 -gs metadata-tif -nm
 
 Notes:
   - Orthophotos must be georeferenced; their coordinate system must match the source_crs configured
-    in cfg/georef/default.yaml (default: EPSG:4326 / WGS84).
+    in geotrax/cfg/georef/default.yaml (default: EPSG:4326 / WGS84).
   - Additional options (image matching, CRS, kinematic filtering, etc.) can be configured in
-    cfg/georef/default.yaml; no CLI overrides exist for those settings.
+    geotrax/cfg/georef/default.yaml; no CLI overrides exist for those settings.
   - The master frame approach registers reference->master and master->ortho separately, improving homography
     robustness by leveraging a stable high-quality reference image. Use --no-master only when master frames
     are unavailable.
@@ -88,9 +88,9 @@ from scipy.signal import savgol_filter
 from shapely.geometry import Polygon
 from tqdm import tqdm
 
-from utils.config_utils import load_config_all
-from utils.file_utils import check_if_results_exist, detect_delimiter, determine_location_id, get_ortho_folder
-from utils.logging_utils import setup_logger
+from geotrax.utils.config_utils import load_config_all
+from geotrax.utils.file_utils import check_if_results_exist, detect_delimiter, determine_location_id, get_ortho_folder
+from geotrax.utils.logging_utils import setup_logger
 
 
 def georeference(args: argparse.Namespace, logger: logging.Logger) -> None:
@@ -188,7 +188,7 @@ def get_tracking_data(source: Path, logger: logging.Logger) -> tuple:
     """
     tracking_data_exists, tracking_data_filepath = check_if_results_exist(source, 'processed')
     if not tracking_data_exists:
-        logger.critical(f"No tracking data found for: '{source}'. Run the 'detect_track_stabilize.py' script first.")
+        logger.critical(f"No tracking data found for: '{source}'. Run the extraction stage ('geotrax extract') first.")
         sys.exit(1)
     delimiter = detect_delimiter(tracking_data_filepath)
     try:
@@ -895,7 +895,7 @@ def parse_cli_args() -> argparse.Namespace:
     parser.add_argument("source", type=Path, help="Path to the input video file")
 
     optional = parser.add_argument_group('Optional arguments')
-    optional.add_argument('--cfg', '-c', type=Path, default='cfg/default.yaml', help='Path to the main geo-trax configuration file')
+    optional.add_argument('--cfg', '-c', type=Path, default='geotrax/cfg/default.yaml', help='Path to the main geo-trax configuration file')
     optional.add_argument('--log-file', '-lf', type=str, default=None, help="Filename to save detailed logs. Saved in the 'logs' folder.")
     optional.add_argument('--verbose', '-v', action='store_true', help='Set print verbosity level to INFO (default: WARNING)')
 
@@ -911,8 +911,13 @@ def parse_cli_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-if __name__ == "__main__":
+def main() -> None:
+    """Command-line entry point."""
     args = parse_cli_args()
     logger = setup_logger(Path(__file__).name, args.verbose, args.log_file)
 
     georeference(args, logger)
+
+
+if __name__ == "__main__":
+    main()
