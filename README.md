@@ -100,7 +100,7 @@ This installs the `geotrax` command-line interface (see [Batch Processing Exampl
 Recommended for development or model training — the default detection model weights ship with the repository. Clone (or fork) the repository and install the package from the local source:
 
 ```bash
-git clone https://github.com/rfonod/geo-trax.git
+git clone --depth 1 https://github.com/rfonod/geo-trax.git   # latest snapshot only; drop --depth 1 for full history
 cd geo-trax && pip install -e .   # pip  (-e: editable mode, reflects code changes without reinstalling)
 # uv pip install -e .             # uv   (faster; requires uv venv from above)
 # poetry install                  # Poetry (auto-manages virtualenv; skip the virtual environment step)
