@@ -10,7 +10,13 @@ from pathlib import Path
 import pytest
 
 from geotrax import CFG_DIR
-from geotrax.utils.config_utils import load_config, load_config_all, resolve_config_path
+from geotrax.utils.config_utils import (
+    load_class_names,
+    load_config,
+    load_config_all,
+    resolve_asset_path,
+    resolve_config_path,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -63,3 +69,24 @@ def test_main_configs_load_with_all_subconfigs(preset):
 def test_bundled_tracker_configs(tracker):
     config = load_config(f'tracker/default_{tracker}.yaml', logger)
     assert config['tracker_type'] == tracker
+
+
+def test_resolve_asset_path_missing_returns_unchanged():
+    assert resolve_asset_path('no/such/model.pt') == Path('no/such/model.pt')
+
+
+def test_resolve_asset_path_absolute_returns_unchanged(tmp_path):
+    absolute = tmp_path / 'model.pt'
+    assert resolve_asset_path(absolute) == absolute
+
+
+def test_load_class_names_from_file(tmp_path):
+    names_file = tmp_path / 'names.yaml'
+    names_file.write_text('0: car\n1: bus\n')
+    assert load_class_names(names_file, logger) == {0: 'car', 1: 'bus'}
+
+
+def test_load_class_names_missing_returns_defaults():
+    names = load_class_names(Path('no/such/names.yaml'), logger)
+    assert names[0] == 'class_0'
+    assert len(names) == 100
