@@ -41,7 +41,6 @@ Output:
 """
 
 import argparse
-import sys
 import time
 from pathlib import Path
 
@@ -51,8 +50,7 @@ import numpy as np
 import pandas as pd
 import yaml
 
-sys.path.append(str(Path(__file__).resolve().parents[1]))  # Add project root directory to Python path
-from utils.file_utils import detect_delimiter
+from geotrax.utils.file_utils import detect_delimiter
 
 GSD_150 = 0.0282  # meters per pixel at 3840x2160 resolution and 150m altitude
 GSD_140 = 0.0263  # meters per pixel at 3840x2160 resolution and 140m altitude

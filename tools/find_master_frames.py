@@ -85,7 +85,6 @@ Notes:
 
 import argparse
 import fnmatch
-import sys
 from pathlib import Path
 
 import cv2
@@ -96,8 +95,7 @@ import pandas as pd
 import tqdm
 from shapely.geometry import Point
 
-sys.path.append(str(Path(__file__).resolve().parents[1]))  # Add project root directory to Python path
-from utils.file_utils import detect_delimiter, determine_location_id
+from geotrax.utils.file_utils import detect_delimiter, determine_location_id
 
 VIDEO_SUFFIX = '.MP4' # video file format to report in the output file
 

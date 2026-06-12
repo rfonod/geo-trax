@@ -59,7 +59,7 @@ Notes:
 - Processes anomalies from tools/find_cut_video_issues.py output
 - Maintains file naming conventions and sequence numbers
 - Prevents conflicts with existing higher sequence numbers
-- Uses recut_video_and_csv.py and batch_process.py for processing
+- Uses tools/recut_video_and_csv.py and 'geotrax batch' for processing
 - Debug mode shows operations without modifying files
 - Automatically handles backup file creation and restoration
 """
@@ -162,7 +162,7 @@ def fix_timetamp_annomalies(args: argparse.Namespace) -> None:
             if not args.debug:
                 os.system(cmd1)
 
-            cmd2 = f"python batch_process.py {output_filepath} -y -o"
+            cmd2 = f"geotrax batch {output_filepath} -y -o"
             print(f"\033[92mRunning: {cmd2}\033[0m")
             if not args.debug:
                 os.system(cmd2)

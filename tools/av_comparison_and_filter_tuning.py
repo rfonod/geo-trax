@@ -67,7 +67,7 @@ from scipy.signal import savgol_filter
 from stabilo import Stabilizer
 
 try:
-    from utils.file_utils import detect_delimiter
+    from geotrax.utils.file_utils import detect_delimiter
 except ImportError as e:
     print(
         "\033[91mCould not import 'detect_delimiter' from 'utils.file_utils'.\n"

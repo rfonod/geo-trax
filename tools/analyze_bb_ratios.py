@@ -57,15 +57,13 @@ Notes:
 
 import argparse
 import copy
-import sys
 from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
 from compare_dimension_estimators import estimate_vehicle_dimensions_new
 
-sys.path.append(str(Path(__file__).resolve().parents[1]))  # Add project root directory to Python path
-from utils.file_utils import detect_delimiter
+from geotrax.utils.file_utils import detect_delimiter
 
 DEFAULT_CLASS_NAMES = ['Car', 'Bus', 'Truck', 'Motorcycle', 'Pedestrian', 'Bicycle']
 VIDEO_FORMATS = {'.mp4', '.mov', '.avi', '.mkv'}

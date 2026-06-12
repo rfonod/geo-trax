@@ -20,7 +20,7 @@ Options:
     -a, --annotations <path>            : Directory to save the annotation .txt files. Defaults to
                                           '<source>/../pre-labels'.
     -c, --cfg <path>                    : Path to the ultralytics configuration YAML file
-                                          (default: cfg/ultralytics/annotator/default.yaml).
+                                          (default: geotrax/cfg/ultralytics/annotator/default.yaml).
     -v, --save-viz                      : Save images with colored bounding boxes overlaid.
     -z, --viz-dir <path>                : Directory to save visualization images. Defaults to
                                           '<annotations>/visualizations' when --save-viz is set.
@@ -73,7 +73,6 @@ Notes:
 
 import argparse
 import logging
-import sys
 from pathlib import Path
 from typing import Dict, List
 
@@ -81,8 +80,7 @@ import cv2
 from ultralytics import YOLO
 from ultralytics.utils.checks import check_yolo
 
-sys.path.append(str(Path(__file__).resolve().parents[1]))  # Add project root directory to Python path
-from utils.config_utils import load_config
+from geotrax.utils.config_utils import load_config
 
 LOGGER_PREFIX = f'[{Path(__file__).name}]'
 
@@ -226,7 +224,7 @@ def get_cli_arguments():
     # Output paths
     parser.add_argument('--annotations', '-a', type=Path,
                         help='Directory to save annotation .txt files (default: <source>/../pre-labels)')
-    parser.add_argument('--cfg', '-c', type=Path, default='cfg/ultralytics/annotator/default.yaml',
+    parser.add_argument('--cfg', '-c', type=Path, default='geotrax/cfg/ultralytics/annotator/default.yaml',
                         help='Path to the ultralytics configuration YAML file')
 
     # Output modes

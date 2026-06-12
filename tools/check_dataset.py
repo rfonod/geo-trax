@@ -54,9 +54,8 @@ from pathlib import Path
 import pandas as pd
 import tqdm
 
-sys.path.append(str(Path(__file__).resolve().parents[1]))
-from tools.find_source_id import find_source_id
-from utils.logging_utils import setup_logger
+from find_source_id import find_source_id
+from geotrax.utils.logging_utils import setup_logger
 
 
 def validate_speed_acceleration(args: argparse.Namespace, logger: logging.Logger) -> None:
@@ -121,7 +120,7 @@ def report_violations(violations_df: pd.DataFrame, violation_type: str, logger: 
 
     suppress_logging_format(logger)
     with pd.option_context('display.max_colwidth', None):
-        logger.warning(f"\n%s", repr(violations_df))
+        logger.warning("\n%s", repr(violations_df))
     restore_logging_format(logger)
 
 

@@ -10,7 +10,7 @@ tracking results using a naive approach: for each tracked vehicle, the longer
 and shorter bounding box sides are averaged over all fully visible frames.
 
 This serves as a baseline for comparison against the main geo-trax pipeline's
-sophisticated azimuth-based dimension estimator (see detect_track_stabilize.py).
+sophisticated azimuth-based dimension estimator (see geotrax/detect_track_stabilize.py).
 
 Usage:
   python tools/compute_naive_bb_dimensions.py <directory> [options]
@@ -53,7 +53,7 @@ Notes:
   ID list to include only vehicles whose type is known and consistent across videos.
 - The AV mode (--av) was introduced because the AV's exact physical dimensions are known,
   making it a convenient ground-truth vehicle for validating the naive estimator against
-  the pipeline's azimuth-based method (see detect_track_stabilize.py).
+  the pipeline's azimuth-based method (see geotrax/detect_track_stabilize.py).
 - AV vehicle IDs are specific to the Songdo experiment (DOI: 10.1016/j.trc.2025.105205)
 """
 
@@ -65,7 +65,7 @@ import numpy as np
 import pandas as pd
 
 try:
-    from utils.file_utils import detect_delimiter
+    from geotrax.utils.file_utils import detect_delimiter
 except ImportError as e:
     print(
         "\033[91mCould not import 'detect_delimiter' from 'utils.file_utils'.\n"

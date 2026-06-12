@@ -58,8 +58,7 @@ import seaborn as sns
 from matplotlib.ticker import FuncFormatter
 from scipy import stats
 
-sys.path.append(str(Path(__file__).resolve().parents[1]))  # Add project root directory to Python path
-from utils.file_utils import detect_delimiter
+from geotrax.utils.file_utils import detect_delimiter
 
 # Trackers geo-trax ships with, in display order. Used as the default comparison set.
 TRACKER_DISPLAY_NAMES = {

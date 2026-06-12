@@ -6,7 +6,7 @@
 viz_dimension_estimation.py - Vehicle Dimension Estimation Visualizer
 
 Visualizes the step-by-step process of the azimuth-based vehicle dimension
-estimation algorithm implemented in the geo-trax pipeline (detect_track_stabilize.py).
+estimation algorithm implemented in the geo-trax pipeline (geotrax/detect_track_stabilize.py).
 For a selected vehicle ID, it renders two diagnostic plots:
   1. The vehicle trajectory overlaid with bounding boxes, colour-coded by their
      acceptance or rejection at each filtering stage.
@@ -22,7 +22,7 @@ Usage:
 
 Arguments:
   source : Path to the video file. Tracking results must exist in a 'results/'
-           subfolder next to the video (produced by detect_track_stabilize.py).
+           subfolder next to the video (produced by 'geotrax extract').
 
 Options:
   -h, --help        : Show this help message and exit.
@@ -43,7 +43,7 @@ Examples:
 Input:
 - Video file (any format supported by OpenCV)
 - Tracking result file: results/<video_stem>.txt  (comma-delimited, produced by
-  detect_track_stabilize.py; columns: frame, id, x, y, w, h [, x_stab, y_stab,
+  'geotrax extract'; columns: frame, id, x, y, w, h [, x_stab, y_stab,
   w_stab, h_stab, conf, class, length, width])
 
 Output:
@@ -54,7 +54,7 @@ Output:
 Notes:
 - GSD and tau_c constants below are tuned to the Songdo experiment (4K drone footage
   at 140–150 m altitude). Adjust them for other datasets.
-- The azimuth-based algorithm mirrors detect_track_stabilize.py exactly; any changes
+- The azimuth-based algorithm mirrors geotrax/detect_track_stabilize.py exactly; any changes
   to the pipeline estimator should be reflected here for consistency.
 - Stabilised coordinates (columns 6/7) are used when available; raw coordinates
   (columns 2/3) are used as fallback.
@@ -68,11 +68,7 @@ import cv2
 import matplotlib.pyplot as plt
 import numpy as np
 
-try:
-    from utils.file_utils import detect_delimiter
-except ImportError:
-    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-    from utils.file_utils import detect_delimiter
+from geotrax.utils.file_utils import detect_delimiter
 
 # Ground sampling distance constants for the Songdo experiment
 # (4K resolution, 140–150 m flight altitude)
@@ -101,7 +97,7 @@ def load_tracks(args: argparse.Namespace) -> np.ndarray:
     tracks_file = args.source.parent / 'results' / f'{args.source.stem}.txt'
     if not tracks_file.exists():
         print(f"\033[91mTracking results not found: '{tracks_file}'.\033[0m")
-        print("Run detect_track_stabilize.py on the video first.")
+        print("Run 'geotrax extract' on the video first.")
         sys.exit(1)
     delimiter = detect_delimiter(tracks_file)
     tracks = np.loadtxt(tracks_file, delimiter=delimiter)
