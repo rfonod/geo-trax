@@ -9,6 +9,7 @@
 #
 # Examples:
 #   sbatch train/wrapper.sh train/train.sh -m 8 -e 1 -s s
+#   sbatch train/wrapper.sh geotrax extract path/to/video.mp4 --cfg geotrax/cfg/default.yaml
 #
 # Notes:
 #   - Update --chdir to the absolute path of your geo-trax project root.
@@ -42,6 +43,10 @@ if [[ $1 == *.py ]]
 then
     echo "python ${@:1}"
     python -u "${@:1}"
+elif [[ $1 == geotrax ]]
+then
+    echo "python -m geotrax ${@:2}"
+    python -u -m geotrax "${@:2}"
 else
     echo "bash ${@:1}"
     bash "${@:1}"

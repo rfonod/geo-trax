@@ -112,7 +112,7 @@ Recursively searches a directory for `.pt` files and exports them to the specifi
 | `<input_path>` | Directory to search recursively for `.pt` files |
 | `<format>` | Export format: `onnx` or `engine` (TensorRT) |
 | `-o` | Overwrite already-exported files |
-| `-c <config_file>` | Path to a custom Ultralytics config (default: `cfg/ultralytics/default.yaml`) |
+| `-c <config_file>` | Path to a custom Ultralytics config (default: `geotrax/cfg/ultralytics/default.yaml`) |
 
 > **Note:** TensorRT (`engine`) export requires a CUDA-capable GPU and a separate TensorRT installation (not pip-installable). ONNX export has no GPU requirement. Additional packages (`onnx`, `onnxslim`, `onnxruntime`) are needed for ONNX export and are included in the `export` extras: `pip install -e ".[export]"`.
 
@@ -126,10 +126,10 @@ Recursively searches a directory for `.pt` files and exports them to the specifi
 ./train/export.sh models engine -o
 
 # Export to ONNX using a custom config file
-./train/export.sh models onnx -c cfg/ultralytics/custom.yaml
+./train/export.sh models onnx -c geotrax/cfg/ultralytics/custom.yaml
 
 # Export to ONNX, overwriting, with a custom config
-./train/export.sh models onnx -o -c cfg/ultralytics/custom.yaml
+./train/export.sh models onnx -o -c geotrax/cfg/ultralytics/custom.yaml
 ```
 
 ---
@@ -162,8 +162,8 @@ sbatch train/wrapper.sh <script> [ARGS...]
 # Submit a training job (merger8, experiment 1, small-scale model)
 sbatch train/wrapper.sh train/train.sh -m 8 -e 1 -s s
 
-# Submit a detection/tracking run
-sbatch train/wrapper.sh detect_track_stabilize.py --cfg cfg/default.yaml
+# Submit a detection/tracking run (geotrax CLI; requires geo-trax installed in the conda env)
+sbatch train/wrapper.sh geotrax extract path/to/video.mp4 --cfg geotrax/cfg/default.yaml
 ```
 
 ---

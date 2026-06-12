@@ -17,7 +17,7 @@
 #
 # Examples:
 # ./train/export.sh models onnx
-# ./train/export.sh models onnx -o -c cfg/ultralytics/custom.yaml
+# ./train/export.sh models onnx -o -c geotrax/cfg/ultralytics/custom.yaml
 #
 # Notes:
 # - Exported files will be saved in the same directory as the input files.
@@ -26,14 +26,14 @@
 # - TensorRT (engine) export requires a CUDA-capable GPU and a separate
 #   TensorRT installation (not pip-installable; install via NVIDIA SDK or
 #   https://docs.nvidia.com/deeplearning/tensorrt/install-guide).
-# - The default configuration file is cfg/ultralytics/default.yaml.
+# - The default configuration file is geotrax/cfg/ultralytics/default.yaml.
 
 #-------------------------------------------------------------------------------
 # Default values
 #-------------------------------------------------------------------------------
 batch_size=1                          # export batch size
 overwrite=false                       # overwrite existing exported files
-cfg_file="cfg/ultralytics/default.yaml"  # Ultralytics configuration file
+cfg_file="geotrax/cfg/ultralytics/default.yaml"  # Ultralytics configuration file
 
 #-------------------------------------------------------------------------------
 # Validate positional arguments
