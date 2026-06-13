@@ -4,7 +4,11 @@
 """Logging setup with colored terminal output and a custom NOTICE level."""
 
 import logging
+import os
 from pathlib import Path
+from typing import Union
+
+from geotrax.utils.constants import MACOS, WINDOWS
 
 
 class bcolors:
@@ -55,8 +59,24 @@ def notice(self, message, *args, **kwargs):
 logging.Logger.notice = notice
 
 
-def setup_logger(name: str, verbose: bool = False, filename: str = '', dry_run: bool = False, log_dir: str = 'logs') -> logging.Logger:
-    """Set up a logger with a given name, verbosity level, and optional log file name."""
+def default_log_dir() -> Path:
+    """Return the platform-native directory for geo-trax log files."""
+    if WINDOWS:  # %LOCALAPPDATA%\geo-trax\Logs
+        base = Path(os.environ.get('LOCALAPPDATA') or (Path.home() / 'AppData' / 'Local'))
+        return base / 'geo-trax' / 'Logs'
+    if MACOS:  # ~/Library/Logs/geo-trax
+        return Path.home() / 'Library' / 'Logs' / 'geo-trax'
+    # Linux and other Unix (XDG base directory spec): ~/.local/state/geo-trax/logs
+    base = Path(os.environ.get('XDG_STATE_HOME') or (Path.home() / '.local' / 'state'))
+    return base / 'geo-trax' / 'logs'
+
+
+def setup_logger(name: str, verbose: bool = False, log_path: Union[str, Path, None] = None, dry_run: bool = False) -> logging.Logger:
+    """Set up a logger with a given name, verbosity level, and optional log path.
+
+    ``log_path`` may be a directory (the default ``<stage>.log`` name is used inside it) or a
+    full file path. When omitted, logs go to a platform-specific directory (see default_log_dir).
+    """
     logger = logging.getLogger(name)
     logger.setLevel(logging.INFO)
 
@@ -71,13 +91,18 @@ def setup_logger(name: str, verbose: bool = False, filename: str = '', dry_run: 
     logger.addHandler(console_handler)
 
     if not dry_run:
-        log_filepath = Path(log_dir) / (filename or f"{name.split('.')[-1]}.log")
+        stage_filename = f"{name.split('.')[-1]}.log"
+        if log_path is None:
+            log_filepath = default_log_dir() / stage_filename
+        else:
+            log_path = Path(log_path)
+            log_filepath = log_path / stage_filename if (log_path.is_dir() or not log_path.suffix) else log_path
         log_filepath.parent.mkdir(parents=True, exist_ok=True)
         file_handler = logging.FileHandler(log_filepath)
         file_handler.setFormatter(file_formatter)
         file_handler.setLevel(logging.INFO)
         logger.addHandler(file_handler)
-        logger.info(f"Logging to file: {log_filepath}")
+        logger.notice(f"Saving logs to: {log_filepath}")  # NOTICE so it shows on the console even without --verbose
 
     logger._original_formatters = {h: h.formatter for h in logger.handlers}
 

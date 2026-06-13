@@ -20,7 +20,7 @@ Arguments:
 Options:
   --help, -h          : Show this help message and exit.
   --cfg, -c <path>    : Path to the main geo-trax configuration file (default: geotrax/cfg/default.yaml).
-  --log-file, -lf <str> : Filename to save detailed logs. Saved in the 'logs' folder (default: None).
+  --log-path, -lp <str> : Where to write logs: a directory or a full file path; defaults to a platform-specific log directory.
   --verbose, -v       : Set print verbosity level to INFO (default: WARNING).
 
 Visualization Options:
@@ -615,7 +615,7 @@ def main() -> None:
     Command-line entry point.
     """
     args = parse_cli_args()
-    logger = setup_logger(__name__, args.verbose, args.log_file)
+    logger = setup_logger(__name__, args.verbose, args.log_path)
 
     visualize_results(args, logger)
 

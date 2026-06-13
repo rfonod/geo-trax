@@ -18,7 +18,7 @@ Options:
   -h, --help                     : Show this help message and exit.
   -at, --acceleration-threshold <float> : Acceleration threshold in m/s² (default: 12).
   -st, --speed-threshold <float>         : Speed threshold in km/h (default: 130).
-  -lf, --log-file <str>                  : Log filename saved in logs/ folder (default: None).
+  -lp, --log-path <str>                  : Where to write logs: a directory or a full file path; defaults to a platform-specific log directory.
   -v, --verbose                          : Set verbosity to INFO level (default: WARNING).
 
 Examples:
@@ -29,7 +29,7 @@ Examples:
    python tools/check_dataset.py dataset/ --speed-threshold 100 --acceleration-threshold 10
 
 3. Verbose output with logging:
-   python tools/check_dataset.py dataset/ --verbose --log-file validation.log
+   python tools/check_dataset.py dataset/ --verbose --log-path validation.log
 
 Input:
 - CSV files with vehicle tracking data including Vehicle_Speed and Vehicle_Acceleration columns
@@ -244,7 +244,7 @@ def parse_cli_args() -> argparse.Namespace:
     parser.add_argument("input", type=Path, help="Path to CSV file or directory containing CSV files")
     parser.add_argument("--acceleration-threshold", "-at", type=float, default=12, help="Acceleration threshold in m/s² (default: 12)")
     parser.add_argument("--speed-threshold", "-st", type=float, default=130, help="Speed threshold in km/h (default: 130)")
-    parser.add_argument("--log-file", "-lf", type=str, default=None, help="Log filename saved in logs/ folder")
+    parser.add_argument("--log-path", "-lp", type=Path, default=None, help="Where to write logs: a directory or a full file path; defaults to a platform-specific log directory.")
     parser.add_argument("--verbose", "-v", action="store_true", help="Set verbosity to INFO level")
 
     return parser.parse_args()
@@ -252,6 +252,6 @@ def parse_cli_args() -> argparse.Namespace:
 
 if __name__ == '__main__':
     args = parse_cli_args()
-    logger = setup_logger(Path(__file__).stem, args.verbose, args.log_file)
+    logger = setup_logger(Path(__file__).stem, args.verbose, args.log_path)
 
     validate_speed_acceleration(args, logger)

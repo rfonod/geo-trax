@@ -47,7 +47,7 @@ Batch Processing Options:
 
 Shared Options:
     --cfg, -c <path>    : Path to the main geo-trax configuration file (default: geotrax/cfg/default.yaml).
-    --log-file, -lf <str> : Filename to save detailed logs. Saved in the 'logs' folder (default: None).
+    --log-path, -lp <str> : Where to write logs: a directory or a full file path; defaults to a platform-specific log directory.
     --verbose, -v       : Set print verbosity level to INFO (default: WARNING).
 
 Processing Options:
@@ -234,7 +234,7 @@ def run_plotting(path: Path, args: argparse.Namespace, logger: logging.Logger) -
             save=args.plot_save,
             show=args.plot_show,
             cfg=args.cfg,
-            log_file=args.log_file,
+            log_path=args.log_path,
             verbose=args.verbose,
             aggregate=args.plot_aggregate,
             ortho_folder=args.ortho_folder,
@@ -382,7 +382,7 @@ def main() -> None:
     Main function to process the input file or directory.
     """
     args = parse_cli_args()
-    logger = setup_logger(__name__, args.verbose, args.log_file, args.dry_run)
+    logger = setup_logger(__name__, args.verbose, args.log_path, args.dry_run)
 
     process_input(args, logger)
 

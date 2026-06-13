@@ -28,7 +28,7 @@ Options:
   -o, --output <path> : Path to the output folder. If not provided, the output folder will be
                         created in the same directory as the PROCESSED folder and will be
                         named 'DATASET' (default: None).
-  -lf, --log-file <str> : Filename to save detailed logs. Saved in the 'logs' folder (default: None).
+  -lp, --log-path <str> : Where to write logs: a directory or a full file path; defaults to a platform-specific log directory.
   -v, --verbose       : Set print verbosity level to INFO (default: WARNING).
 
 Examples:
@@ -39,7 +39,7 @@ Examples:
    geotrax aggregate /path/to/PROCESSED/ --output /path/to/custom/output/
 
 3. Enable verbose logging and save to custom log file:
-   geotrax aggregate /path/to/PROCESSED/ --verbose --log-file custom_aggregate.log
+   geotrax aggregate /path/to/PROCESSED/ --verbose --log-path custom_aggregate.log
 
 Input:
 - Path to PROCESSED folder containing georeferenced tracking results in CSV format
@@ -198,7 +198,7 @@ def main() -> None:
     Command-line entry point.
     """
     args = parse_cli_args()
-    logger = setup_logger(__name__, args.verbose, args.log_file)
+    logger = setup_logger(__name__, args.verbose, args.log_path)
 
     aggregate_results(args, logger)
 
