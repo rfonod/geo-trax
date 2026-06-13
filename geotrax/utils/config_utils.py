@@ -92,6 +92,14 @@ def load_config(cfg_filepath: Union[str, Path], logger: logging.Logger) -> dict:
     return kwargs
 
 
+def backfill_args_from_config(args: argparse.Namespace, mapping: dict) -> None:
+    """Set each ``args.arg_name`` from ``mapping[arg_name]`` when the arg is still ``None``
+    (i.e. not overridden on the command line)."""
+    for arg_name, config_value in mapping.items():
+        if getattr(args, arg_name) is None:
+            setattr(args, arg_name, config_value)
+
+
 def load_class_names(class_names_filepath: Path, logger: logging.Logger) -> dict:
     """Load class names from a YAML file."""
     try:

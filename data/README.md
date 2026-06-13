@@ -23,7 +23,7 @@ geotrax batch data/U_video_cut.mp4 --no-geo --show-class-names --show-conf
 To reproduce the full Geo-trax pipeline results in the `data/results-full/` directory, including georeferencing, road segmentation, kinematics, and real-world vehicle dimension estimation, run the following command from the repository root:
 
 ```bash
-geotrax batch data/U_video_cut.mp4 -of data/orthophotos -osf data/segmentations -mf data/master_frames --show-lanes --segmentations
+geotrax batch data/U_video_cut.mp4 -of data/orthophotos -osf data/segmentations -mf data/master_frames --show-lanes --plot-segmentations
 ```
 
 > **Note:** The trajectory and distribution plots generated from this 5-second sample are not statistically meaningful due to the limited sample size. Longer video clips are needed for representative results.

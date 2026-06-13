@@ -71,7 +71,7 @@ def setup_logger(name: str, verbose: bool = False, filename: str = '', dry_run: 
     logger.addHandler(console_handler)
 
     if not dry_run:
-        log_filepath = Path(log_dir) / (filename or f"{name.split('.')[0]}.log")
+        log_filepath = Path(log_dir) / (filename or f"{name.split('.')[-1]}.log")
         log_filepath.parent.mkdir(parents=True, exist_ok=True)
         file_handler = logging.FileHandler(log_filepath)
         file_handler.setFormatter(file_formatter)

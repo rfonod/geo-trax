@@ -60,13 +60,13 @@ visualization:
 
 # --- Plotting settings (CLI override) ---
 plotting:
-  save: true                # Save plots as PDF files — CLI: --save / --no-save
-  show: false               # Show plots in an interactive window — CLI: --show / --no-show
+  save: true                # Save plots as PDF files — CLI: --plot-save / --no-plot-save
+  show: false               # Show plots in an interactive window — CLI: --plot-show / --no-plot-show
   stationary_speed_cutoff: 1  # Minimum speed [km/h] for a vehicle to appear in speed/acceleration plots; [0, inf)
   savefig_font_size: 14       # Font size used in saved figures; [1, inf)
   colors: ['#76b041', '#3274d9', '#ff61b4', '#ff9d00', '#9954bb', '#ffc000']  # Per-source trajectory colors used when aggregation is enabled
   skip_filenames_with: ['bus', 'ids', 'transf']  # Skip result files whose stem contains any of these substrings
-  aggregate: false          # When the input is a folder, merge trajectories from all videos sharing the same location ID into one plot per location — CLI: --aggregate / --no-aggregate
-  plot_points: false        # Plot discrete trajectory points instead of connected lines — CLI: --points / --no-points
-  use_segmentations: false  # Produce an extra trajectory plot on the lane segmentation overlay PNG alongside the plain-orthophoto plot (pre-generate overlays with tools/viz_segmentations.py) — CLI: --segmentations / --no-segmentations
-  class_filter: []          # Vehicle class IDs to exclude from plots (e.g. [1] hides bus) — CLI: --class-filter
+  aggregate: false          # When the input is a folder, merge trajectories from all videos sharing the same location ID into one plot per location — CLI: --plot-aggregate / --no-plot-aggregate
+  plot_points: false        # Plot discrete trajectory points instead of connected lines — CLI: --plot-points / --no-plot-points
+  use_segmentations: false  # Produce an extra trajectory plot on the lane segmentation overlay PNG alongside the plain-orthophoto plot (pre-generate overlays with tools/viz_segmentations.py) — CLI: --plot-segmentations / --no-plot-segmentations
+  class_filter: []          # Vehicle class IDs to exclude from plots (e.g. [1] hides bus) — CLI: --plot-class-filter

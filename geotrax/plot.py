@@ -29,26 +29,26 @@ Plot Background Options:
                                        'ORTHOPHOTOS' at the same level as 'PROCESSED' in 'input'.
   --segmentation-folder, -osf <path> : Path to the folder containing lane segmentation CSV files
                                        (used during georeferencing for lane assignment) and,
-                                       when --segmentations is enabled, the corresponding overlay
-                                       PNG files used as plot backgrounds. Defaults to
+                                       when --plot-segmentations is enabled, the corresponding
+                                       overlay PNG files used as plot backgrounds. Defaults to
                                        '<ortho-folder>/segmentations'.
 
-Plotting Options:
-  --save / --no-save, -s             : Save plots as PDF files. Defaults to cfg -> plotting -> save.
-  --show / --no-show, -sh            : Show plots interactively. Defaults to cfg -> plotting -> show.
-  --aggregate, -a                    : When the input is a folder, merge trajectories sharing the
+Plotting Options (the --plot-* names are shared with 'geotrax batch'):
+  --plot-save / --no-plot-save, -ps  : Save plots as PDF files. Defaults to cfg -> plotting -> save.
+  --plot-show / --no-plot-show, -psh : Show plots interactively. Defaults to cfg -> plotting -> show.
+  --plot-aggregate, -pa              : When the input is a folder, merge trajectories sharing the
                                        same location ID into a single plot per location.
                                        Defaults to cfg -> plotting -> aggregate.
-  --points, -p                       : Plot discrete trajectory points instead of continuous lines.
+  --plot-points, -pp                 : Plot discrete trajectory points instead of continuous lines.
                                        Defaults to cfg -> plotting -> plot_points.
-  --segmentations, -seg              : Produce an additional trajectory plot overlaid on the lane
+  --plot-segmentations, -pseg        : Produce an additional trajectory plot overlaid on the lane
                                        segmentation overlay PNG (from --segmentation-folder),
                                        alongside the standard plain-orthophoto plot. Overlay PNGs
                                        must be pre-generated with tools/viz_segmentations.py.
                                        Defaults to cfg -> plotting -> use_segmentations.
   --id, -i                           : Vehicle ID to print/plot in detail (single-file input only)
                                        [default: 0].
-  --class-filter, -cf <int> [<int> ...] : Vehicle class IDs to exclude from plots.
+  --plot-class-filter, -pcf <int> [<int> ...] : Vehicle class IDs to exclude from plots.
                                        Defaults to cfg -> plotting -> class_filter.
 
 Examples:
@@ -59,10 +59,10 @@ Examples:
    geotrax plot /path/to/results/video.csv -of /path/to/orthophotos/
 
 3. Aggregate and plot all results from a folder:
-   geotrax plot /path/to/videos/ -a
+   geotrax plot /path/to/videos/ -pa
 
 4. Plot with lane segmentation overlays as backgrounds, excluding buses:
-   geotrax plot /path/to/videos/ -of /path/to/orthophotos/ -osf /path/to/segmentations/ -seg -cf 1
+   geotrax plot /path/to/videos/ -of /path/to/orthophotos/ -osf /path/to/segmentations/ -pseg -pcf 1
 """
 
 import argparse
@@ -78,16 +78,18 @@ import pandas as pd
 import seaborn as sns
 from tqdm import tqdm
 
-from geotrax.utils.config_utils import load_config_all
+from geotrax.utils.cli_utils import add_common_args
+from geotrax.utils.config_utils import backfill_args_from_config, load_config_all
+from geotrax.utils.constants import (
+    ACC_THRESHOLD_ALERT,
+    RESULTS_FORMATS,
+    SPEED_THRESHOLD_ALERT,
+    VIDEO_FORMATS,
+)
 from geotrax.utils.data_utils import PlotColors
 from geotrax.utils.file_utils import detect_delimiter, determine_location_id, get_ortho_folder
 from geotrax.utils.logging_utils import setup_logger
 
-VIDEO_FORMATS = {'.mp4', '.mov', '.avi', '.mkv'}
-RESULTS_FORMATS = {'.txt', '.csv'}
-
-ACC_THRESHOLD_ALERT = 5 # [m/s^2]
-SPEED_THRESHOLD_ALERT = 90 # [km/h]
 colors = PlotColors()
 
 def generate_plots(args: argparse.Namespace, logger: logging.Logger) -> None:
@@ -96,12 +98,14 @@ def generate_plots(args: argparse.Namespace, logger: logging.Logger) -> None:
     """
     config = load_config_all(args, logger)['main']
     plot_cfg = config['plotting']
-    if args.save is None:          args.save          = plot_cfg['save']
-    if args.show is None:          args.show          = plot_cfg['show']
-    if args.aggregate is None:     args.aggregate     = plot_cfg['aggregate']
-    if args.points is None:        args.points        = plot_cfg['plot_points']
-    if args.segmentations is None: args.segmentations = plot_cfg['use_segmentations']
-    if args.class_filter is None:  args.class_filter  = plot_cfg['class_filter']
+    backfill_args_from_config(args, {
+        'save': plot_cfg['save'],
+        'show': plot_cfg['show'],
+        'aggregate': plot_cfg['aggregate'],
+        'points': plot_cfg['plot_points'],
+        'segmentations': plot_cfg['use_segmentations'],
+        'class_filter': plot_cfg['class_filter'],
+    })
     colors.set_colors(plot_cfg['colors'])
     files = determine_files_to_process(args.input, config['plotting']['skip_filenames_with'], logger)
     ortho_folder = get_ortho_folder(args.input, args.ortho_folder, logger, critical=False)
@@ -717,45 +721,86 @@ def save_or_show_plot(name: str, filepath: Path, args: argparse.Namespace, logge
     plt.close()
 
 
+def default_plot_args(**overrides) -> argparse.Namespace:
+    """
+    Build an args Namespace carrying plot.py's own defaults, applying any overrides.
+
+    This keeps plot.py the single source of truth for the fields ``generate_plots`` reads
+    (including non-CLI defaults like ``id=0``), so callers such as ``geotrax batch`` don't
+    hand-maintain a parallel argument list that can silently drift.
+    """
+    defaults = {
+        'input': None,
+        'save': None,
+        'show': None,
+        'cfg': 'geotrax/cfg/default.yaml',
+        'log_file': None,
+        'verbose': False,
+        'aggregate': None,
+        'ortho_folder': None,
+        'segmentation_folder': None,
+        'segmentations': None,
+        'id': 0,
+        'points': None,
+        'class_filter': None,
+    }
+    defaults.update(overrides)
+    return argparse.Namespace(**defaults)
+
+
+def add_plotting_args(group, dest_prefix: str = '') -> None:
+    """
+    Register the shared plotting CLI flags on the given argparse group.
+
+    The flag names (``--plot-save``, ``--plot-show``, ...) and short options are identical for
+    ``geotrax plot`` and ``geotrax batch``; the ``--plot-`` prefix distinguishes them from the
+    visualization flags (``--save``, ``--show``, ...) in batch's combined parser and maps each
+    to the cfg -> plotting section. ``dest_prefix='plot_'`` is used by batch so the resulting
+    attribute names don't collide with the visualization ones. Every flag defaults to ``None``
+    and is backfilled from the config.
+    """
+    group.add_argument("--plot-save", "-ps", dest=f"{dest_prefix}save", action=argparse.BooleanOptionalAction, default=None,
+                       help="Save the plots as .pdf files. Defaults to cfg -> plotting -> save.")
+    group.add_argument("--plot-show", "-psh", dest=f"{dest_prefix}show", action=argparse.BooleanOptionalAction, default=None,
+                       help="Show plots in an interactive window. Defaults to cfg -> plotting -> show.")
+    group.add_argument("--plot-aggregate", "-pa", dest=f"{dest_prefix}aggregate", action=argparse.BooleanOptionalAction, default=None,
+                       help="When the input is a folder, merge trajectories from all videos sharing the same location ID into a single plot per location. Defaults to cfg -> plotting -> aggregate.")
+    group.add_argument("--plot-points", "-pp", dest=f"{dest_prefix}points", action=argparse.BooleanOptionalAction, default=None,
+                       help="Plot discrete trajectory points instead of connected lines. Defaults to cfg -> plotting -> plot_points.")
+    group.add_argument("--plot-segmentations", "-pseg", dest=f"{dest_prefix}segmentations", action=argparse.BooleanOptionalAction, default=None,
+                       help="Produce an additional trajectory plot overlaid on the lane segmentation overlay PNG (from --segmentation-folder), alongside the standard plain-orthophoto plot. Requires pre-generated overlays (run: python tools/viz_segmentations.py <ortho_folder>/). Defaults to cfg -> plotting -> use_segmentations.")
+    group.add_argument("--plot-class-filter", "-pcf", dest=f"{dest_prefix}class_filter", type=int, nargs="+", default=None,
+                       help="Vehicle class IDs to exclude from plots (e.g. 1 2). Defaults to cfg -> plotting -> class_filter.")
+
+
 def parse_cli_args() -> argparse.Namespace:
     """
     Parse command-line arguments
     """
     parser = argparse.ArgumentParser(description="Trajectory and distribution plotting tool.")
 
-    parser.add_argument("input", type=Path, help="Path to the video source or .txt/.csv file or folder with video or .csv/.txt files")
+    parser.add_argument("input", type=Path, help="Path to a video file, a .txt/.csv results file, or a folder containing any of these.")
 
     optional = parser.add_argument_group('Optional arguments')
-    optional.add_argument('--cfg', '-c', type=Path, default='geotrax/cfg/default.yaml', help='Path to the main geo-trax configuration file')
-    optional.add_argument("--log-file", "-lf", type=str, default=None, help="Filename to save detailed logs. Saved in the 'logs' folder.")
-    optional.add_argument("--verbose", "-v", action='store_true', help='Set print verbosity level to INFO (default: WARNING)')
+    add_common_args(optional)
 
     georef = parser.add_argument_group('Plot background arguments')
     georef.add_argument("--ortho-folder", "-of", type=Path, default=None, help="Path to the folder with orthophoto images (.png) used as plot backgrounds for georeferenced trajectories. Defaults to 'ORTHOPHOTOS' at the same level as 'PROCESSED' in 'input'.")
-    georef.add_argument("--segmentation-folder", "-osf", type=Path, default=None, help="Path to the folder containing lane segmentation CSV files (used during georeferencing for lane assignment) and, when --segmentations is enabled, the corresponding overlay PNG files used as plot backgrounds. Defaults to '<ortho-folder>/segmentations'.")
+    georef.add_argument("--segmentation-folder", "-osf", type=Path, default=None, help="Path to the folder containing lane segmentation CSV files (used during georeferencing for lane assignment) and, when --plot-segmentations is enabled, the corresponding overlay PNG files used as plot backgrounds. Defaults to '<ortho-folder>/segmentations'.")
 
     plotting = parser.add_argument_group('Plotting arguments')
-    plotting.add_argument("--save", "-s", action=argparse.BooleanOptionalAction, default=None,
-                          help="Save the plots as .pdf files. Defaults to cfg -> plotting -> save.")
-    plotting.add_argument("--show", "-sh", action=argparse.BooleanOptionalAction, default=None,
-                          help="Show plots interactively. Defaults to cfg -> plotting -> show.")
-    plotting.add_argument("--aggregate", "-a", action=argparse.BooleanOptionalAction, default=None,
-                          help="When the input is a folder, merge trajectories from all videos sharing the same location ID into a single plot per location. Defaults to cfg -> plotting -> aggregate.")
-    plotting.add_argument("--points", "-p", action=argparse.BooleanOptionalAction, default=None,
-                          help="Plot discrete trajectory points instead of lines. Defaults to cfg -> plotting -> plot_points.")
-    plotting.add_argument("--segmentations", "-seg", action=argparse.BooleanOptionalAction, default=None,
-                          help="Produce an additional trajectory plot overlaid on the lane segmentation overlay PNG (from --segmentation-folder), alongside the standard plain-orthophoto plot. Requires pre-generated overlays (run: python tools/viz_segmentations.py <ortho_folder>/). Defaults to cfg -> plotting -> use_segmentations.")
+    add_plotting_args(plotting)
     plotting.add_argument("--id", "-i", type=int, default=0, help="Vehicle ID to print/plot in detail (only for non-folder input) [default: 0]")
-    plotting.add_argument("--class-filter", "-cf", nargs="+", default=None,
-                          help="Vehicle class IDs to exclude from plots. Defaults to cfg -> plotting -> class_filter.")
 
     return parser.parse_args()
 
 
 def main() -> None:
-    """Command-line entry point."""
+    """
+    Command-line entry point.
+    """
     args = parse_cli_args()
-    logger = setup_logger(Path(__file__).name, args.verbose, args.log_file)
+    logger = setup_logger(__name__, args.verbose, args.log_file)
 
     generate_plots(args, logger)
 

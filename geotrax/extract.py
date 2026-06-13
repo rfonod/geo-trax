@@ -18,7 +18,7 @@ Usage:
     geotrax extract <source> [options]
 
 Arguments:
-    source                    : Path to the video file (e.g., path/to/video/video.mp4).
+    source                    : Path to the input video file.
 
 Options:
     --help, -h                : Show this help message and exit.
@@ -71,7 +71,8 @@ from ultralytics import RTDETR, YOLO
 from ultralytics.utils.checks import check_yolo
 from ultralytics.utils.files import increment_path
 
-from geotrax.utils.config_utils import load_config_all
+from geotrax.utils.cli_utils import add_common_args
+from geotrax.utils.config_utils import backfill_args_from_config, load_config_all
 from geotrax.utils.file_utils import check_if_results_exist, convert_to_serializable, get_video_dimensions
 from geotrax.utils.logging_utils import setup_logger
 
@@ -82,10 +83,10 @@ def detect_track_stabilize(args: argparse.Namespace, logger: logging.Logger) -> 
     """
     config = load_config_all(args, logger)
     proc = config['main']['processing']
-    if args.cut_frame_left is None:
-        args.cut_frame_left = proc['cut_frame_left']
-    if args.cut_frame_right is None:
-        args.cut_frame_right = proc['cut_frame_right']
+    backfill_args_from_config(args, {
+        'cut_frame_left': proc['cut_frame_left'],
+        'cut_frame_right': proc['cut_frame_right'],
+    })
     model = load_detector(config['ultralytics'], logger)
     tracks, transforms = track_with_model(model, config, logger)
     tracks = postprocess_tracks(tracks, config, logger)
@@ -259,7 +260,7 @@ def postprocess_tracks(tracks: np.ndarray, config: Dict, logger: logging.Logger)
     Postprocess the extracted tracks.
     """
     tracks = remove_short_tracks(tracks, logger)
-    tracks = calculate_unique_classes(tracks, config['ultralytics'])
+    tracks = calculate_unique_classes(tracks)
     tracks = estimate_vehicle_dimensions(tracks, config['main'])
     return tracks
 
@@ -282,21 +283,22 @@ def remove_short_tracks(tracks: np.ndarray, logger: logging.Logger, min_length: 
     return tracks
 
 
-def calculate_unique_classes(tracks: np.ndarray, config: Dict) -> np.ndarray:
+def calculate_unique_classes(tracks: np.ndarray) -> np.ndarray:
     """
-    Calculate the unique class labels for each track.
+    Assign each track a single class: the one with the highest confidence-weighted vote.
     """
     id2weighted_class_freq = {}
     if tracks.size != 0:
         for track in tracks:
             track_id, c, conf_score = int(track[1]), int(track[-2]), track[-1]
-            if track_id not in id2weighted_class_freq:
-                id2weighted_class_freq[track_id] = [0] * (max(config['classes']) + 1)
-            id2weighted_class_freq[track_id][c] += conf_score
+            class_freq = id2weighted_class_freq.setdefault(track_id, {})
+            class_freq[c] = class_freq.get(c, 0.0) + conf_score
 
-        id2class_max = {}
-        for track_id in id2weighted_class_freq:
-            id2class_max[track_id] = id2weighted_class_freq[track_id].index(max(id2weighted_class_freq[track_id]))
+        # highest-weighted class per track; ties resolve to the lowest class id
+        id2class_max = {
+            track_id: max(sorted(class_freq), key=class_freq.get)
+            for track_id, class_freq in id2weighted_class_freq.items()
+        }
 
         for i, track in enumerate(tracks):
             track_id = int(track[1])
@@ -424,33 +426,43 @@ def save_results(tracks: np.ndarray, transforms: np.ndarray, config: Dict, logge
     logger.info(f"Video info and configs saved to: '{info_yaml_file.resolve()}'")
 
 
+def add_processing_args(group) -> None:
+    """
+    Register the shared detection/frame-range CLI flags on the given argparse group.
+
+    Used by both ``geotrax extract`` and ``geotrax batch`` so the two expose an identical set
+    of processing options. Every flag defaults to ``None`` and is backfilled from the config.
+    """
+    group.add_argument('--conf', '-co', type=float, default=None, help='Detection confidence threshold. Defaults to cfg -> cfg_ultralytics -> conf.')
+    group.add_argument('--classes', '-cls', nargs='+', type=int, default=None, help='Class IDs to extract (e.g., --classes 0 1 2). Defaults to cfg -> cfg_ultralytics -> classes.')
+    group.add_argument('--cut-frame-left', '-cfl', type=int, default=None, help='Skip the first N frames. Defaults to cfg -> processing -> cut_frame_left.')
+    group.add_argument('--cut-frame-right', '-cfr', type=int, default=None, help='Stop processing after this frame. Defaults to cfg -> processing -> cut_frame_right.')
+
+
 def parse_cli_args() -> argparse.Namespace:
     """
     Parse command-line arguments.
     """
     parser = argparse.ArgumentParser(description='Vehicle Detection, Tracking, and Stabilization Pipeline')
 
-    parser.add_argument('source', type=Path, help='Path to the video file (e.g., path/to/video/video.mp4)')
+    parser.add_argument('source', type=Path, help='Path to the input video file.')
 
     optional = parser.add_argument_group('Optional arguments')
-    optional.add_argument('--cfg', '-c', type=Path, default='geotrax/cfg/default.yaml', help='Path to the main geo-trax configuration file')
-    optional.add_argument('--log-file', '-lf', type=str, default=None, help="Filename to save detailed logs. Saved in the 'logs' folder.")
-    optional.add_argument('--verbose', '-v', action='store_true', help='Set print verbosity level to INFO (default: WARNING)')
+    add_common_args(optional)
 
     processing = parser.add_argument_group('Processing arguments',
         'For full detection and tracking control (model, IoU, image size, tracker settings, etc.), '
         'edit geotrax/cfg/ultralytics/default.yaml and the linked tracker config.')
-    processing.add_argument('--conf', '-co', type=float, default=None, help='Detection confidence threshold. Defaults to cfg -> cfg_ultralytics -> conf.')
-    processing.add_argument('--classes', '-cls', nargs='+', type=int, default=None, help='Class IDs to extract (e.g., --classes 0 1 2). Defaults to cfg -> cfg_ultralytics -> classes.')
-    processing.add_argument('--cut-frame-left', '-cfl', type=int, default=None, help='Skip the first N frames. Defaults to cfg -> processing -> cut_frame_left.')
-    processing.add_argument('--cut-frame-right', '-cfr', type=int, default=None, help='Stop processing after this frame. Defaults to cfg -> processing -> cut_frame_right.')
+    add_processing_args(processing)
 
     return parser.parse_args()
 
 def main() -> None:
-    """Command-line entry point."""
+    """
+    Command-line entry point.
+    """
     args = parse_cli_args()
-    logger = setup_logger(Path(__file__).name, args.verbose, args.log_file)
+    logger = setup_logger(__name__, args.verbose, args.log_file)
 
     detect_track_stabilize(args, logger)
 

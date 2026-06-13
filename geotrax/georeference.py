@@ -19,7 +19,7 @@ Usage:
     geotrax georeference <source> [options]
 
 Arguments:
-    source                         : Path to the video file (e.g., path/to/video/video.mp4).
+    source                         : Path to the input video file.
 
 Options:
     --help, -h                     : Show this help message and exit.
@@ -88,7 +88,8 @@ from scipy.signal import savgol_filter
 from shapely.geometry import Polygon
 from tqdm import tqdm
 
-from geotrax.utils.config_utils import load_config_all
+from geotrax.utils.cli_utils import add_common_args
+from geotrax.utils.config_utils import backfill_args_from_config, load_config_all
 from geotrax.utils.file_utils import check_if_results_exist, detect_delimiter, determine_location_id, get_ortho_folder
 from geotrax.utils.logging_utils import setup_logger
 
@@ -100,14 +101,12 @@ def georeference(args: argparse.Namespace, logger: logging.Logger) -> None:
     full_config = load_config_all(args, logger)
     config = full_config['georef']
     gproc = config['processing']
-    if args.ref_frame is None:
-        args.ref_frame = gproc['ref_frame']
-    if args.recompute is None:
-        args.recompute = gproc['recompute']
-    if args.geo_source is None:
-        args.geo_source = gproc['geo_source']
-    if args.no_master is None:
-        args.no_master = not gproc['use_master']
+    backfill_args_from_config(args, {
+        'ref_frame': gproc['ref_frame'],
+        'recompute': gproc['recompute'],
+        'geo_source': gproc['geo_source'],
+        'no_master': not gproc['use_master'],
+    })
 
     n_steps = 8 if args.no_master else 10
     _bar_w = max(10, shutil.get_terminal_size().columns - 88)
@@ -220,7 +219,12 @@ def get_timestamps(source: Path, frame_num: np.ndarray, logger: logging.Logger) 
     """
     Get timestamps from the provided file (e.g. extracted from drone flight log).
     """
-    timestamp_filepath = source.with_suffix('.CSV' if source.suffix.isupper() else '.csv')
+    # accept either extension case for the flight-log CSV
+    timestamp_filepath = source.with_suffix('.csv')
+    if not timestamp_filepath.exists():
+        upper_filepath = source.with_suffix('.CSV')
+        if upper_filepath.exists():
+            timestamp_filepath = upper_filepath
     if timestamp_filepath.exists():
         timestamps = pd.read_csv(timestamp_filepath, index_col='frame')
         results = []
@@ -886,35 +890,45 @@ def save_homography(source: Path, homography: np.ndarray, logger: logging.Logger
     logger.info(f"Homography 'reference -> orthophoto' saved to: '{geo_transf_filepath}'.")
 
 
+def add_georeferencing_args(group) -> None:
+    """
+    Register the shared georeferencing CLI flags on the given argparse group.
+
+    Used by both ``geotrax georeference`` and ``geotrax batch`` so the two expose an identical
+    set of georeferencing options. Every flag defaults to ``None`` and is backfilled from config.
+    """
+    group.add_argument("--ortho-folder", "-of", type=Path, default=None, help="Custom path to the folder with orthophotos (.png, .tif, .txt). Defaults to 'ORTHOPHOTOS' at the same level as 'PROCESSED' in 'input'.")
+    group.add_argument("--geo-source", "-gs", choices=['metadata-tif', 'text-file', 'center-text-file'], default=None, help="Source of georeferencing parameters. If not provided, falls back to cfg -> georef -> processing -> geo_source, then auto-detect.")
+    group.add_argument("--ref-frame", "-rf", type=int, default=None, help="Reference frame number (must match stabilization setting). Defaults to cfg -> georef -> processing -> ref_frame.")
+    group.add_argument("--no-master", "-nm", action="store_const", const=True, default=None, help="Disable the master frame approach regardless of config. When not set, cfg -> georef -> processing -> use_master applies.")
+    group.add_argument("--master-folder", "-mf", type=Path, default=None, help="Custom path to the folder containing master frame files (.png). If not provided, '--ortho-folder / master_frames' will be used.")
+    group.add_argument("--recompute", "-r", action="store_const", const=True, default=None, help="Force recompute master->ortho homography even if cached. Defaults to cfg -> georef -> processing -> recompute.")
+    group.add_argument("--segmentation-folder", "-osf", type=Path, default=None, help="Path to the folder with lane segmentation CSV files (used for lane assignment during georeferencing); the corresponding overlay PNGs are also used as plot backgrounds when segmentation plotting is enabled. Defaults to '--ortho-folder / segmentations'.")
+
+
 def parse_cli_args() -> argparse.Namespace:
     """
     Parse command-line arguments.
     """
     parser = argparse.ArgumentParser(description="Georeferencing the tracking data using orthophotos.")
 
-    parser.add_argument("source", type=Path, help="Path to the input video file")
+    parser.add_argument("source", type=Path, help="Path to the input video file.")
 
     optional = parser.add_argument_group('Optional arguments')
-    optional.add_argument('--cfg', '-c', type=Path, default='geotrax/cfg/default.yaml', help='Path to the main geo-trax configuration file')
-    optional.add_argument('--log-file', '-lf', type=str, default=None, help="Filename to save detailed logs. Saved in the 'logs' folder.")
-    optional.add_argument('--verbose', '-v', action='store_true', help='Set print verbosity level to INFO (default: WARNING)')
+    add_common_args(optional)
 
     georef = parser.add_argument_group('Georeferencing arguments')
-    georef.add_argument("--ortho-folder", "-of", type=Path, default=None, help="Custom path to the folder with orthophotos (.png, .tif, .txt). Defaults to 'ORTHOPHOTOS' at the same level as 'PROCESSED' in 'input'.")
-    georef.add_argument("--geo-source", "-gs", choices=['metadata-tif', 'text-file', 'center-text-file'], default=None, help="Source of georeferencing parameters. If not provided, falls back to cfg -> georef -> processing -> geo_source, then auto-detect.")
-    georef.add_argument("--ref-frame", "-rf", type=int, default=None, help="Reference frame number (must match stabilization setting). Defaults to cfg -> georef -> processing -> ref_frame.")
-    georef.add_argument("--no-master", "-nm", action="store_const", const=True, default=None, help="Disable the master frame approach regardless of config. When not set, cfg -> georef -> processing -> use_master applies.")
-    georef.add_argument("--master-folder", "-mf", type=Path, default=None, help="Custom path to the folder containing master frame files (.png). If not provided, '--ortho-folder / master_frames' will be used.")
-    georef.add_argument("--recompute", "-r", action="store_const", const=True, default=None, help="Force recompute master->ortho homography even if cached. Defaults to cfg -> georef -> processing -> recompute.")
-    georef.add_argument("--segmentation-folder", "-osf", type=Path, default=None, help="Custom path to the folder containing orthophoto segmentation files (.csv). If not provided, '--ortho-folder / segmentations' will be used.")
+    add_georeferencing_args(georef)
 
     return parser.parse_args()
 
 
 def main() -> None:
-    """Command-line entry point."""
+    """
+    Command-line entry point.
+    """
     args = parse_cli_args()
-    logger = setup_logger(Path(__file__).name, args.verbose, args.log_file)
+    logger = setup_logger(__name__, args.verbose, args.log_file)
 
     georeference(args, logger)
 

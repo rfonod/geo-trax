@@ -15,7 +15,7 @@ Usage:
   geotrax visualize <source> [options]
 
 Arguments:
-  source : Path to video source.
+  source : Path to the input video file.
 
 Options:
   --help, -h          : Show this help message and exit.
@@ -80,7 +80,8 @@ import numpy as np
 import pandas as pd
 from tqdm import tqdm
 
-from geotrax.utils.config_utils import load_config_all
+from geotrax.utils.cli_utils import add_common_args
+from geotrax.utils.config_utils import backfill_args_from_config, load_config, load_config_all
 from geotrax.utils.data_utils import VizColors
 from geotrax.utils.file_utils import check_if_results_exist, detect_delimiter, determine_suffix_and_fourcc
 from geotrax.utils.logging_utils import setup_logger
@@ -93,22 +94,24 @@ def visualize_results(args: argparse.Namespace, logger: logging.Logger) -> None:
     config = load_config_all(args, logger)['main']
     viz = config['visualization']
     proc = config['processing']
-    if args.save is None:             args.save             = viz['save']
-    if args.show is None:             args.show             = viz['show']
-    if args.viz_mode is None:         args.viz_mode         = viz['viz_mode']
-    if args.plot_trajectories is None: args.plot_trajectories = viz['plot_trajectories']
-    if args.plot_delay is None:       args.plot_delay       = viz['plot_delay']
-    if args.show_conf is None:        args.show_conf        = viz['show_conf']
-    if args.show_lanes is None:       args.show_lanes       = viz['show_lanes']
-    if args.show_class_names is None: args.show_class_names = viz['show_class_names']
-    if args.hide_labels is None:      args.hide_labels      = viz['hide_labels']
-    if args.hide_tracks is None:      args.hide_tracks      = viz['hide_tracks']
-    if args.hide_speed is None:       args.hide_speed       = viz['hide_speed']
-    if args.speed_unit is None:       args.speed_unit       = viz['speed_unit']
-    if args.speed_deadzone is None:   args.speed_deadzone   = viz['speed_deadzone']
-    if args.class_filter is None:     args.class_filter     = viz['class_filter']
-    if args.cut_frame_left is None:   args.cut_frame_left   = proc['cut_frame_left']
-    if args.cut_frame_right is None:  args.cut_frame_right  = proc['cut_frame_right']
+    backfill_args_from_config(args, {
+        'save': viz['save'],
+        'show': viz['show'],
+        'viz_mode': viz['viz_mode'],
+        'plot_trajectories': viz['plot_trajectories'],
+        'plot_delay': viz['plot_delay'],
+        'show_conf': viz['show_conf'],
+        'show_lanes': viz['show_lanes'],
+        'show_class_names': viz['show_class_names'],
+        'hide_labels': viz['hide_labels'],
+        'hide_tracks': viz['hide_tracks'],
+        'hide_speed': viz['hide_speed'],
+        'speed_unit': viz['speed_unit'],
+        'speed_deadzone': viz['speed_deadzone'],
+        'class_filter': viz['class_filter'],
+        'cut_frame_left': proc['cut_frame_left'],
+        'cut_frame_right': proc['cut_frame_right'],
+    })
     if not args.save and not args.show:
         logger.warning("Neither --save nor --show is enabled. Visualization will run but produce no output. "
                        "Set 'save' or 'show' in the config file, or pass --save / --show on the command line.")
@@ -137,6 +140,17 @@ def visualize_results(args: argparse.Namespace, logger: logging.Logger) -> None:
             finalize_video(vid_reader, vid_writer, pbar, frame_num, args.show, logger)
 
     args.viz_mode = viz_modes
+
+
+def resolve_viz_modes(args: argparse.Namespace, logger: logging.Logger) -> list:
+    """
+    Return the normalized visualization modes, reading the config default when --viz-mode
+    was not given on the command line. Used by callers (e.g. batch_process) that need the
+    modes before the full config is otherwise loaded; the resolved value is cached on args.
+    """
+    if args.viz_mode is None:
+        args.viz_mode = load_config(args.cfg, logger)['visualization']['viz_mode']
+    return normalize_viz_modes(args.viz_mode, logger)
 
 
 def normalize_viz_modes(viz_mode, logger: logging.Logger) -> list:
@@ -169,6 +183,17 @@ def process_frames(tracks: pd.DataFrame, tracks_plotting: pd.DataFrame, transfor
     trajectory_frame = None
     ref_frame = None
 
+    # Pre-group by frame so each iteration is a dict lookup instead of a full-table scan
+    tracks_by_frame = dict(tuple(tracks.groupby(0)))
+    if speed_lane_data is not None:
+        speed_lane_by_frame = {
+            frame_id: group.drop(columns=['Frame_ID']).astype({'Vehicle_ID': int}).set_index('Vehicle_ID')
+            for frame_id, group in speed_lane_data.groupby('Frame_ID')
+        }
+    else:
+        speed_lane_by_frame = None
+    empty_tracks_frame = tracks.iloc[0:0]
+
     if viz_phase and tracks_plotting is not None:
         trajectory_frame = plot_trajectories(cap, tracks_plotting, args.cut_frame_left, args.cut_frame_right, viz_config, logger)
 
@@ -199,8 +224,8 @@ def process_frames(tracks: pd.DataFrame, tracks_plotting: pd.DataFrame, transfor
         elif args.cut_frame_right is not None and frame_num >= args.cut_frame_right:
             break
 
-        tracks_frame = tracks[tracks[0] == frame_num]
-        speed_lane_frame = speed_lane_data[speed_lane_data['Frame_ID'] == frame_num].drop(columns=['Frame_ID']) if speed_lane_data is not None else None
+        tracks_frame = tracks_by_frame.get(frame_num, empty_tracks_frame)
+        speed_lane_frame = speed_lane_by_frame.get(frame_num) if speed_lane_by_frame is not None else None
 
         if args.viz_mode == 1 and frame_num in transforms:
             h, w = frame.shape[:2]
@@ -422,22 +447,23 @@ def annotate_frame(frame: np.ndarray, frame_num: int, tracks_frame: pd.DataFrame
             continue
 
         speed, lane = None, None
-        if speed_lane_frame is not None:
-            vehicle_data = speed_lane_frame[speed_lane_frame['Vehicle_ID'] == track_id]
-            if not vehicle_data.empty:
-                speed = vehicle_data['Vehicle_Speed'].values[0]
-                lane = vehicle_data['Lane_Number'].values[0]
-                # Convert speed for visualization if mi/h is selected (data is stored in km/h)
-                if not np.isnan(speed):
-                    if args.speed_unit == 'mi/h':
-                        speed = int(speed * 0.621371)  # Convert km/h to mi/h
-                    else:
-                        speed = int(speed)
-                    if speed <= args.speed_deadzone:  # Deadzone: floor near-stationary speeds to 0 (display only)
-                        speed = 0
+        if speed_lane_frame is not None and int(track_id) in speed_lane_frame.index:
+            vehicle_data = speed_lane_frame.loc[int(track_id)]
+            if isinstance(vehicle_data, pd.DataFrame):  # duplicate Vehicle_ID in this frame
+                vehicle_data = vehicle_data.iloc[0]
+            speed = vehicle_data['Vehicle_Speed']
+            lane = vehicle_data['Lane_Number']
+            # Convert speed for visualization if mi/h is selected (data is stored in km/h)
+            if not np.isnan(speed):
+                if args.speed_unit == 'mi/h':
+                    speed = int(speed * 0.621371)  # Convert km/h to mi/h
                 else:
-                    speed = None
-                lane = int(lane) if lane not in ('', None) and pd.notna(lane) else None
+                    speed = int(speed)
+                if speed <= args.speed_deadzone:  # Deadzone: floor near-stationary speeds to 0 (display only)
+                    speed = 0
+            else:
+                speed = None
+            lane = int(lane) if lane not in ('', None) and pd.notna(lane) else None
 
         color = colors(c, True)
         x1n, y1n = int(xcn - wn / 2), int(ycn - hn / 2)
@@ -522,59 +548,74 @@ def finalize_video(vid_reader: cv2.VideoCapture, vid_writer: cv2.VideoWriter, pb
     pbar.close()
 
 
+def add_visualization_args(group, include_frame_range: bool = True) -> None:
+    """
+    Register the shared visualization CLI flags on the given argparse parser/group.
+
+    Used by both ``geotrax visualize`` and ``geotrax batch`` so the two commands expose an
+    identical set of visualization options (single source of truth, no drift). Every flag
+    defaults to ``None`` and is backfilled from the config in ``visualize_results``.
+
+    ``include_frame_range`` adds ``--cut-frame-left``/``--cut-frame-right``; batch sets it to
+    ``False`` since it registers those under its processing options instead.
+    """
+    group.add_argument('--save', '-s', action=argparse.BooleanOptionalAction, default=None,
+                       help='Save the annotated output video to file. Defaults to cfg -> visualization -> save.')
+    group.add_argument('--show', '-sh', action=argparse.BooleanOptionalAction, default=None,
+                       help='Open a live preview window during processing. Defaults to cfg -> visualization -> show.')
+    group.add_argument('--viz-mode', '-vm', type=int, nargs='+', default=None, choices=[0, 1, 2], metavar='MODE',
+                       help='Frame source(s) for annotation: 0=original, 1=stabilized, 2=reference frame. Accepts multiple values, e.g. "--viz-mode 0 1 2" renders one video per mode. Defaults to cfg -> visualization -> viz_mode.')
+    group.add_argument('--plot-trajectories', '-pt', action=argparse.BooleanOptionalAction, default=None,
+                       help='Overlay trajectory positions on the first frame. Defaults to cfg -> visualization -> plot_trajectories.')
+    group.add_argument('--plot-delay', '-pd', type=int, default=None,
+                       help='Number of frames to display the trajectory overlay; only relevant when --plot-trajectories is enabled. Defaults to cfg -> visualization -> plot_delay.')
+    group.add_argument('--show-conf', '-sc', action=argparse.BooleanOptionalAction, default=None,
+                       help='Include detection confidence in bounding-box labels. Defaults to cfg -> visualization -> show_conf.')
+    group.add_argument('--show-lanes', '-sl', action=argparse.BooleanOptionalAction, default=None,
+                       help='Include lane ID in bounding-box labels. Defaults to cfg -> visualization -> show_lanes.')
+    group.add_argument('--show-class-names', '-scn', action=argparse.BooleanOptionalAction, default=None,
+                       help='Include vehicle class name in bounding-box labels. Defaults to cfg -> visualization -> show_class_names.')
+    group.add_argument('--hide-labels', '-hl', action=argparse.BooleanOptionalAction, default=None,
+                       help='Suppress all label text overlays. Defaults to cfg -> visualization -> hide_labels.')
+    group.add_argument('--hide-tracks', '-ht', action=argparse.BooleanOptionalAction, default=None,
+                       help='Suppress track tail lines. Defaults to cfg -> visualization -> hide_tracks.')
+    group.add_argument('--hide-speed', '-hs', action=argparse.BooleanOptionalAction, default=None,
+                       help='Suppress speed values in labels. Defaults to cfg -> visualization -> hide_speed.')
+    group.add_argument('--speed-unit', '-su', type=str, default=None, choices=['km/h', 'mi/h'],
+                       help='Speed display unit: km/h or mi/h. Defaults to cfg -> visualization -> speed_unit.')
+    group.add_argument('--speed-deadzone', '-sdz', type=float, default=None,
+                       help='Floor displayed speeds at or below this value (in the chosen speed unit) to 0, hiding stationary-vehicle jitter; 0 disables. Defaults to cfg -> visualization -> speed_deadzone.')
+    group.add_argument('--class-filter', '-cf', type=int, nargs='+', default=None,
+                       help='Vehicle class IDs to exclude from visualization (e.g., -cf 1 2). Defaults to cfg -> visualization -> class_filter.')
+    if include_frame_range:
+        group.add_argument('--cut-frame-left', '-cfl', type=int, default=None,
+                           help='Skip the first N frames. Defaults to cfg -> processing -> cut_frame_left.')
+        group.add_argument('--cut-frame-right', '-cfr', type=int, default=None,
+                           help='Stop processing after this frame. Defaults to cfg -> processing -> cut_frame_right.')
+
+
 def parse_cli_args() -> argparse.Namespace:
     """
     Parse command-line arguments
     """
     parser = argparse.ArgumentParser(description='Tracking Results Visualization')
 
-    parser.add_argument('source', type=Path, help='Path to video source')
+    parser.add_argument('source', type=Path, help='Path to the input video file.')
 
     optional = parser.add_argument_group('Optional arguments')
-    optional.add_argument('--cfg', '-c', type=Path, default='geotrax/cfg/default.yaml', help='Path to the main geo-trax configuration file')
-    optional.add_argument('--log-file', '-lf', type=str, default=None, help="Filename to save detailed logs. Saved in the 'logs' folder.")
-    optional.add_argument('--verbose', '-v', action='store_true', help='Set print verbosity level to INFO (default: WARNING)')
+    add_common_args(optional)
 
     viz = parser.add_argument_group('Visualization arguments')
-    viz.add_argument('--save', '-s', action=argparse.BooleanOptionalAction, default=None,
-                     help='Save the annotated output video to file. Defaults to cfg -> visualization -> save.')
-    viz.add_argument('--show', '-sh', action=argparse.BooleanOptionalAction, default=None,
-                     help='Open a live preview window during processing. Defaults to cfg -> visualization -> show.')
-    viz.add_argument('--viz-mode', '-vm', type=int, nargs='+', default=None, choices=[0, 1, 2], metavar='MODE',
-                     help='Frame source(s) for annotation: 0=original, 1=stabilized, 2=reference frame. Defaults to cfg -> visualization -> viz_mode.')
-    viz.add_argument('--plot-trajectories', '-pt', action=argparse.BooleanOptionalAction, default=None,
-                     help='Overlay trajectory positions on the first frame. Defaults to cfg -> visualization -> plot_trajectories.')
-    viz.add_argument('--plot-delay', '-pd', type=int, default=None,
-                     help='Number of frames to display the trajectory overlay; only relevant when --plot-trajectories is enabled. Defaults to cfg -> visualization -> plot_delay.')
-    viz.add_argument('--show-conf', '-sc', action=argparse.BooleanOptionalAction, default=None,
-                     help='Include detection confidence in bounding-box labels. Defaults to cfg -> visualization -> show_conf.')
-    viz.add_argument('--show-lanes', '-sl', action=argparse.BooleanOptionalAction, default=None,
-                     help='Include lane ID in bounding-box labels. Defaults to cfg -> visualization -> show_lanes.')
-    viz.add_argument('--show-class-names', '-scn', action=argparse.BooleanOptionalAction, default=None,
-                     help='Include vehicle class name in bounding-box labels. Defaults to cfg -> visualization -> show_class_names.')
-    viz.add_argument('--hide-labels', '-hl', action=argparse.BooleanOptionalAction, default=None,
-                     help='Suppress all label text overlays. Defaults to cfg -> visualization -> hide_labels.')
-    viz.add_argument('--hide-tracks', '-ht', action=argparse.BooleanOptionalAction, default=None,
-                     help='Suppress track tail lines. Defaults to cfg -> visualization -> hide_tracks.')
-    viz.add_argument('--hide-speed', '-hs', action=argparse.BooleanOptionalAction, default=None,
-                     help='Suppress speed values in labels. Defaults to cfg -> visualization -> hide_speed.')
-    viz.add_argument('--speed-unit', '-su', type=str, default=None, choices=['km/h', 'mi/h'],
-                     help='Speed display unit. Defaults to cfg -> visualization -> speed_unit.')
-    viz.add_argument('--speed-deadzone', '-sdz', type=float, default=None,
-                     help='Floor displayed speeds at or below this value (in the chosen speed unit) to 0, hiding stationary-vehicle jitter; 0 disables. Defaults to cfg -> visualization -> speed_deadzone.')
-    viz.add_argument('--class-filter', '-cf', type=int, nargs='+', default=None,
-                     help='Vehicle class IDs to exclude (e.g., -cf 1 2). Defaults to cfg -> visualization -> class_filter.')
-    viz.add_argument('--cut-frame-left', '-cfl', type=int, default=None,
-                     help='Skip the first N frames. Defaults to cfg -> processing -> cut_frame_left.')
-    viz.add_argument('--cut-frame-right', '-cfr', type=int, default=None,
-                     help='Stop processing after this frame. Defaults to cfg -> processing -> cut_frame_right.')
+    add_visualization_args(viz)
 
     return parser.parse_args()
 
 def main() -> None:
-    """Command-line entry point."""
+    """
+    Command-line entry point.
+    """
     args = parse_cli_args()
-    logger = setup_logger(Path(__file__).name, args.verbose, args.log_file)
+    logger = setup_logger(__name__, args.verbose, args.log_file)
 
     visualize_results(args, logger)
 

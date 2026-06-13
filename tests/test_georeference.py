@@ -41,14 +41,16 @@ def test_ortho2geo_affine():
     np.testing.assert_allclose(lat, [62.0, 65.0])
 
 
-def test_ortho2local_identity_crs_returns_lng_lat():
-    # With identical source/target CRS, local coords equal (longitude, latitude).
+def test_ortho2local_reprojects_to_utm():
+    # Exercises the real geographic->projected reprojection (not an identity CRS).
+    # With identity params, ortho_x->longitude and ortho_y->latitude; reprojecting
+    # (lon=6.6, lat=46.5) into UTM 31N (EPSG:32631) yields a known easting/northing.
     params = (0.0, 0.0, 1.0, 1.0, 0.0, 0.0)
     x_local, y_local = ortho2local(
-        np.array([10.0]), np.array([20.0]), params, 'EPSG:4326', 'EPSG:4326'
+        np.array([6.6]), np.array([46.5]), params, 'EPSG:4326', 'EPSG:32631'
     )
-    np.testing.assert_allclose(x_local, [10.0])
-    np.testing.assert_allclose(y_local, [20.0])
+    np.testing.assert_allclose(x_local, [776225.4478], atol=1e-2)
+    np.testing.assert_allclose(y_local, [5155902.1301], atol=1e-2)
 
 
 def test_compute_speed():

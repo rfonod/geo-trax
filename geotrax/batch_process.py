@@ -20,11 +20,11 @@ video file or an entire directory tree of videos. Key features:
   so that every video is always processed in full.
 
 Usage:
-  geotrax batch <input_path> [options]
+  geotrax batch <input> [options]
 
 Arguments:
-  input_path : Path to a video file (.mp4, .mov, .avi, .mkv) or a directory that is searched
-               recursively for video files.
+  input : Path to a video file (.mp4, .mov, .avi, .mkv) or a directory of video files
+          (searched recursively).
 
 Batch Processing Options:
     --help, -h          : Show this help message and exit.
@@ -77,8 +77,8 @@ Georeferencing Options:
                           Defaults to cfg -> georef -> processing -> recompute.
     --segmentation-folder, -osf <path> : Path to the folder with road segmentation CSV files
                           (used for lane assignment during georeferencing) and, when
-                          --segmentations is enabled, the corresponding overlay PNG files used
-                          as plot backgrounds. Defaults to '<ortho-folder>/segmentations'.
+                          --plot-segmentations is enabled, the corresponding overlay PNG files
+                          used as plot backgrounds. Defaults to '<ortho-folder>/segmentations'.
 
 Visualization Options:
     --save / --no-save, -s  : Save the annotated output video to file.
@@ -117,12 +117,12 @@ Plotting Options:
                           Defaults to cfg -> plotting -> save.
     --plot-show / --no-plot-show, -psh : Show plots interactively.
                           Defaults to cfg -> plotting -> show.
-    --aggregate, -a     : When the input is a folder, merge trajectories from all videos
+    --plot-aggregate, -pa : When the input is a folder, merge trajectories from all videos
                           sharing the same location ID into one combined plot per location.
                           Defaults to cfg -> plotting -> aggregate.
-    --points, -p        : Plot discrete trajectory points instead of connected lines.
+    --plot-points, -pp  : Plot discrete trajectory points instead of connected lines.
                           Defaults to cfg -> plotting -> plot_points.
-    --segmentations, -seg : Produce an additional trajectory plot overlaid on the lane
+    --plot-segmentations, -pseg : Produce an additional trajectory plot overlaid on the lane
                           segmentation overlay PNG (pre-generate with tools/viz_segmentations.py).
                           Defaults to cfg -> plotting -> use_segmentations.
     --plot-class-filter, -pcf <int> [<int> ...] : Vehicle class IDs to exclude from plots
@@ -151,7 +151,7 @@ Examples:
         geotrax batch path/to/PROCESSED/ --overwrite --yes
 
   7. Generate aggregated trajectory plots only from existing results, excluding buses and trucks:
-        geotrax batch path/to/PROCESSED/ --plot-only --aggregate \
+        geotrax batch path/to/PROCESSED/ --plot-only --plot-aggregate \
             --plot-class-filter 1 2
 
   8. Use a lenient detection preset and skip videos matching 'test' or 'tmp' in their name:
@@ -176,14 +176,19 @@ from pathlib import Path
 
 from tqdm import tqdm
 
-from geotrax.extract import detect_track_stabilize
-from geotrax.georeference import georeference
-from geotrax.plot import generate_plots
+from geotrax.extract import add_processing_args, detect_track_stabilize
+from geotrax.georeference import add_georeferencing_args, georeference
+from geotrax.plot import add_plotting_args, default_plot_args, generate_plots
+from geotrax.utils.cli_utils import add_common_args
+from geotrax.utils.constants import VIDEO_FORMATS
 from geotrax.utils.file_utils import check_if_results_exist, determine_suffix_and_fourcc
 from geotrax.utils.logging_utils import bcolors, setup_logger
-from geotrax.visualize import visualize_results
+from geotrax.visualize import add_visualization_args, resolve_viz_modes, visualize_results
 
-VIDEO_FORMATS = {'.mp4', '.mov', '.avi', '.mkv'}
+# Stage labels: used both as display text and as the dispatch key in should_process_file
+ACTION_EXTRACT = "Detecting, tracking, and stabilizing"
+ACTION_GEOREF = "Georeferencing"
+ACTION_VISUALIZE = "Visualizing"
 
 
 def process_input(args: argparse.Namespace, logger: logging.Logger) -> None:
@@ -224,19 +229,18 @@ def run_plotting(path: Path, args: argparse.Namespace, logger: logging.Logger) -
     """
     logger.info(f"Generating plots for: '{path}'")
     if not args.dry_run:
-        plot_args = argparse.Namespace(
+        plot_args = default_plot_args(
             input=path,
             save=args.plot_save,
             show=args.plot_show,
             cfg=args.cfg,
             log_file=args.log_file,
             verbose=args.verbose,
-            aggregate=args.aggregate,
+            aggregate=args.plot_aggregate,
             ortho_folder=args.ortho_folder,
             segmentation_folder=args.segmentation_folder,
-            segmentations=args.segmentations,
-            id=0,
-            points=args.points,
+            segmentations=args.plot_segmentations,
+            points=args.plot_points,
             class_filter=args.plot_class_filter,
         )
         generate_plots(plot_args, logger)
@@ -249,13 +253,13 @@ def process_file(file: Path, args: argparse.Namespace, logger: logging.Logger) -
     try:
         logger.info(f"Processing: '{file}'")
         if not args.viz_only and not args.geo_only and not args.plot_only:
-            process_step(file, args, logger, "Detecting, tracking, and stabilizing", detect_track_stabilize)
+            process_step(file, args, logger, ACTION_EXTRACT, detect_track_stabilize)
 
         if not args.viz_only and not args.no_geo and not args.plot_only:
-            process_step(file, args, logger, "Georeferencing", georeference)
+            process_step(file, args, logger, ACTION_GEOREF, georeference)
 
         if (args.save is not False or args.show is not False) and not args.plot_only:
-            process_step(file, args, logger, "Visualizing", visualize_results)
+            process_step(file, args, logger, ACTION_VISUALIZE, visualize_results)
 
         if (args.plot_save is not False or args.plot_show is not False) and not args.viz_only and not args.geo_only and not args.input.is_dir():
             run_plotting(file, args, logger)
@@ -298,25 +302,25 @@ def should_process_file(file: Path, args: argparse.Namespace, logger: logging.Lo
     """
     Determine if the video should be processed, georeferenced, or visualized based on the existing results and user input.
     """
-    suffix = determine_suffix_and_fourcc()[0]
     txt_exists = check_if_results_exist(file, "processed")[0]
-    csv_exists = check_if_results_exist(file, "georeferenced")[0]
-    # viz_mode may be a single mode or several; results count as present only if every requested mode exists
-    viz_modes = args.viz_mode if isinstance(args.viz_mode, (list, tuple)) else [args.viz_mode if args.viz_mode is not None else 0]
-    vid_exists = all(check_if_results_exist(file, "visualized", mode, suffix)[0] for mode in viz_modes)
-
     processing_steps = "detection, tracking, and stabilization"
-    if action == "Detecting, tracking, and stabilizing":
+
+    if action == ACTION_EXTRACT:
         return handle_existing_results(file, args, logger, txt_exists, processing_steps)
-    elif action == "Georeferencing":
+    elif action == ACTION_GEOREF:
         if not txt_exists:
             logger.error(f"'{file}' - No {processing_steps} results found. Skipping georeferencing.")
             return False
+        csv_exists = check_if_results_exist(file, "georeferenced")[0]
         return handle_existing_results(file, args, logger, csv_exists, action)
-    elif action == "Visualizing":
+    elif action == ACTION_VISUALIZE:
         if not txt_exists:
             logger.error(f"'{file}' - No {processing_steps} results found. Skipping visualization.")
             return False
+        # Results count as present only if every mode the visualizer will render exists
+        suffix = determine_suffix_and_fourcc()[0]
+        viz_modes = resolve_viz_modes(args, logger)
+        vid_exists = all(check_if_results_exist(file, "visualized", mode, suffix)[0] for mode in viz_modes)
         return handle_existing_results(file, args, logger, vid_exists, action)
     return False
 
@@ -340,7 +344,7 @@ def parse_cli_args() -> argparse.Namespace:
     """
     parser = argparse.ArgumentParser(description='Primary entry point for the full Geo-trax pipeline. Runs detection/tracking/stabilization, georeferencing, visualization, and plotting for a single video file or an entire directory tree. Stages are skipped if their output already exists; use --overwrite to force re-execution.')
 
-    parser.add_argument('input', type=Path, help='Path to the input directory or video file (e.g., path/to/video_dir/)')
+    parser.add_argument('input', type=Path, help='Path to a video file or a directory of video files (searched recursively).')
 
     batch = parser.add_argument_group('Batch processing options')
     batch.add_argument('--yes', '-y', action='store_true', help='Automatically confirm prompts without waiting for user input')
@@ -354,50 +358,21 @@ def parse_cli_args() -> argparse.Namespace:
     batch.add_argument("--exclude-patterns", "-ep", type=str, nargs='+', default=None, help="File name patterns to exclude (e.g., --exclude-patterns car_test drone_2023)")
 
     shared = parser.add_argument_group('Shared options')
-    shared.add_argument('--cfg', '-c', type=Path, default='geotrax/cfg/default.yaml', help='Path to the main geo-trax configuration file')
-    shared.add_argument('--log-file', '-lf', type=str, default=None, help="Filename to save detailed logs. Saved in the 'logs' folder.")
-    shared.add_argument('--verbose', '-v', action='store_true', help='Set print verbosity level to INFO (default: WARNING)')
+    add_common_args(shared)
 
     processing = parser.add_argument_group('Processing options',
         'For full detection and tracking control (model, IoU, image size, tracker settings, etc.), '
         'edit geotrax/cfg/ultralytics/default.yaml and the linked tracker config.')
-    processing.add_argument('--conf', '-co', type=float, default=None, help='Detection confidence threshold. Defaults to cfg -> cfg_ultralytics -> conf.')
-    processing.add_argument('--classes', '-cls', nargs='+', type=int, default=None, help='Class IDs to extract (e.g., --classes 0 1 2). Defaults to cfg -> cfg_ultralytics -> classes.')
-    processing.add_argument('--cut-frame-left', '-cfl', type=int, default=None, help='Skip the first N frames. Defaults to cfg -> processing -> cut_frame_left.')
-    processing.add_argument('--cut-frame-right', '-cfr', type=int, default=None, help='Stop processing after this frame. Only considered if input is a single video file. Defaults to cfg -> processing -> cut_frame_right.')
+    add_processing_args(processing)
 
     georef = parser.add_argument_group('Georeferencing options')
-    georef.add_argument("--ortho-folder", "-of", type=Path, default=None, help="Custom path to the folder with orthophotos (.png, .tif, .txt). Defaults to 'ORTHOPHOTOS' at the same level as 'PROCESSED' in 'input'.")
-    georef.add_argument("--geo-source", "-gs", choices=['metadata-tif', 'text-file', 'center-text-file'], default=None, help="Source of georeferencing parameters. Defaults to cfg -> georef -> processing -> geo_source.")
-    georef.add_argument("--ref-frame", "-rf", type=int, default=None, help="Reference frame number (must match stabilization setting). Defaults to cfg -> georef -> processing -> ref_frame.")
-    georef.add_argument("--no-master", "-nm", action="store_const", const=True, default=None, help="Disable the master frame approach regardless of config. When not set, cfg -> georef -> processing -> use_master applies.")
-    georef.add_argument("--master-folder", "-mf", type=Path, default=None, help="Custom path to the folder containing master frame files (.png). If not provided, '--ortho-folder / master_frames' will be used.")
-    georef.add_argument("--recompute", "-r", action="store_const", const=True, default=None, help="Force recompute master->ortho homography even if cached. Defaults to cfg -> georef -> processing -> recompute.")
-    georef.add_argument("--segmentation-folder", "-osf", type=Path, default=None, help="Path to the folder containing lane segmentation CSV files (used for lane assignment during georeferencing) and, when --segmentations is enabled, the corresponding overlay PNG files used as plot backgrounds. Defaults to '<ortho-folder>/segmentations'.")
+    add_georeferencing_args(georef)
 
     viz = parser.add_argument_group('Visualization options')
-    viz.add_argument('--save', '-s', action=argparse.BooleanOptionalAction, default=None, help='Save the annotated output video to file. Defaults to cfg -> visualization -> save.')
-    viz.add_argument('--show', '-sh', action=argparse.BooleanOptionalAction, default=None, help='Open a live preview window during processing. Defaults to cfg -> visualization -> show.')
-    viz.add_argument('--viz-mode', '-vm', type=int, nargs='+', default=None, choices=[0, 1, 2], metavar='MODE', help='Frame source(s) for annotation: 0=original, 1=stabilized, 2=reference frame. Accepts multiple values, e.g. "--viz-mode 0 1 2" renders one video per mode. Defaults to cfg -> visualization -> viz_mode.')
-    viz.add_argument("--plot-trajectories", "-pt", action=argparse.BooleanOptionalAction, default=None, help='Overlay trajectory positions on the first frame. Defaults to cfg -> visualization -> plot_trajectories.')
-    viz.add_argument("--plot-delay", "-pd", type=int, default=None, help='Number of frames to display the trajectory overlay; only relevant when --plot-trajectories is enabled. Defaults to cfg -> visualization -> plot_delay.')
-    viz.add_argument("--show-conf", "-sc", action=argparse.BooleanOptionalAction, default=None, help='Include detection confidence in labels. Defaults to cfg -> visualization -> show_conf.')
-    viz.add_argument("--show-lanes", "-sl", action=argparse.BooleanOptionalAction, default=None, help='Include lane ID in labels. Defaults to cfg -> visualization -> show_lanes.')
-    viz.add_argument("--show-class-names", "-scn", action=argparse.BooleanOptionalAction, default=None, help='Include class name in labels. Defaults to cfg -> visualization -> show_class_names.')
-    viz.add_argument("--hide-labels", "-hl", action=argparse.BooleanOptionalAction, default=None, help='Suppress all label text. Defaults to cfg -> visualization -> hide_labels.')
-    viz.add_argument("--hide-tracks", "-ht", action=argparse.BooleanOptionalAction, default=None, help='Suppress track tail lines. Defaults to cfg -> visualization -> hide_tracks.')
-    viz.add_argument("--hide-speed", "-hs", action=argparse.BooleanOptionalAction, default=None, help='Suppress speed values in labels. Defaults to cfg -> visualization -> hide_speed.')
-    viz.add_argument('--speed-unit', '-su', type=str, default=None, choices=['km/h', 'mi/h'], help='Speed display unit: km/h or mi/h. Defaults to cfg -> visualization -> speed_unit.')
-    viz.add_argument('--speed-deadzone', '-sdz', type=float, default=None, help='Floor displayed speeds <= this value (in the chosen speed unit) to 0; 0 disables. Defaults to cfg -> visualization -> speed_deadzone.')
-    viz.add_argument('--class-filter', '-cf', type=int, nargs='+', default=None, help='Class IDs to exclude from visualization (e.g., -cf 1 2). Defaults to cfg -> visualization -> class_filter.')
+    add_visualization_args(viz, include_frame_range=False)  # cut-frame args come from the processing group above
 
     plotting = parser.add_argument_group('Plotting options')
-    plotting.add_argument('--plot-save', '-ps', action=argparse.BooleanOptionalAction, default=None, help='Save plots as PDF files. Defaults to cfg -> plotting -> save.')
-    plotting.add_argument('--plot-show', '-psh', action=argparse.BooleanOptionalAction, default=None, help='Show plots in an interactive window. Defaults to cfg -> plotting -> show.')
-    plotting.add_argument('--aggregate', '-a', action=argparse.BooleanOptionalAction, default=None, help='When the input is a folder, merge trajectories from all videos sharing the same location ID into a single plot per location. Defaults to cfg -> plotting -> aggregate.')
-    plotting.add_argument('--points', '-p', action=argparse.BooleanOptionalAction, default=None, help='Plot trajectory points instead of lines. Defaults to cfg -> plotting -> plot_points.')
-    plotting.add_argument('--segmentations', '-seg', action=argparse.BooleanOptionalAction, default=None, help='Produce an additional trajectory plot overlaid on the lane segmentation overlay PNG (from --segmentation-folder), alongside the standard plain-orthophoto plot. Requires pre-generated overlays (run: python tools/viz_segmentations.py <ortho_folder>/). Defaults to cfg -> plotting -> use_segmentations.')
-    plotting.add_argument('--plot-class-filter', '-pcf', type=int, nargs='+', default=None, help='Class IDs to exclude from plots (e.g., -pcf 1 2). Defaults to cfg -> plotting -> class_filter.')
+    add_plotting_args(plotting, dest_prefix='plot_')  # plot_* dests so they don't clash with the visualization args
 
     return parser.parse_args()
 
@@ -407,7 +382,7 @@ def main() -> None:
     Main function to process the input file or directory.
     """
     args = parse_cli_args()
-    logger = setup_logger(Path(__file__).name, args.verbose, args.log_file, args.dry_run)
+    logger = setup_logger(__name__, args.verbose, args.log_file, args.dry_run)
 
     process_input(args, logger)
 

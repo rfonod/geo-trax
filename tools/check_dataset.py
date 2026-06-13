@@ -50,12 +50,84 @@ import argparse
 import logging
 import sys
 from pathlib import Path
+from typing import Union
 
 import pandas as pd
 import tqdm
 
-from find_source_id import find_source_id
 from geotrax.utils.logging_utils import setup_logger
+
+
+def find_source_id(dataset_filepath: Path, vehicle_id: int, processed_folder: Union[Path, None] = None) -> tuple:
+    """
+    Trace an aggregated-dataset vehicle ID back to its original ID and source video, by
+    reversing the per-drone ID offset applied during aggregation. (Adapted from
+    tools/find_source_id.py.)
+    """
+    if not dataset_filepath.exists():
+        print(f"Input folder '{dataset_filepath}' does not exist.")
+        return None, None
+
+    processed_folder = get_processed_folder(dataset_filepath, processed_folder)
+
+    df = pd.read_csv(dataset_filepath, dtype={'Column14': str}, low_memory=False)
+    if df[df['Vehicle_ID'] == vehicle_id].empty:
+        print(f"Vehicle ID {vehicle_id} not found in the dataset.")
+        return None, None
+
+    date, location_id, flight_session = dataset_filepath.stem.split('_')[0:3]
+    search_space = f"{date}/D*/{flight_session}/results/{location_id}*.csv"
+    csv_files = list(processed_folder.rglob(search_space))
+    if not csv_files:
+        print(f"No CSV files found in '{processed_folder}'.")
+        return None, None
+
+    files = []
+    for source_results in csv_files:
+        try:
+            drone_id = source_results.parents[2].name
+            files.append((source_results, drone_id))
+        except Exception as e:
+            print(f"Skipping invalid file path: {source_results} ({str(e)})")
+    files = sorted(files, key=lambda x: (int(x[1][1:]), x[0]))
+
+    source_id, source_video = None, None
+    vehicle_id_offset = 0
+    for source_results, _drone_id in files:
+        try:
+            df = pd.read_csv(source_results)
+            df['Vehicle_ID'] = df['Vehicle_ID'] + vehicle_id_offset
+            if vehicle_id in df['Vehicle_ID'].values:
+                source_id = vehicle_id - vehicle_id_offset
+                source_video = source_results.parents[1] / (source_results.stem + '.MP4')
+                break
+            vehicle_id_offset = df['Vehicle_ID'].max()
+        except Exception as e:
+            print(f"Error processing file {source_results}: {str(e)}")
+
+    return source_id, source_video
+
+
+def get_processed_folder(source: Path, processed_folder: Union[Path, None]) -> Path:
+    """
+    Resolve the PROCESSED folder from the provided path or the default folder structure.
+    """
+    if processed_folder is None:
+        processed_folder = source.parent
+        while processed_folder != processed_folder.parent:
+            if processed_folder.name == 'DATASET':
+                break
+            processed_folder = processed_folder.parent
+
+        if processed_folder.name != 'DATASET':
+            print(f"Failed to find the processed folder for source {source}. "
+                  f"Use the --processed-folder argument to provide a custom path or "
+                  f"ensure the default folder structure.")
+            sys.exit(1)
+
+        processed_folder = processed_folder.parent / 'PROCESSED'
+
+    return processed_folder
 
 
 def validate_speed_acceleration(args: argparse.Namespace, logger: logging.Logger) -> None:
@@ -180,6 +252,6 @@ def parse_cli_args() -> argparse.Namespace:
 
 if __name__ == '__main__':
     args = parse_cli_args()
-    logger = setup_logger(Path(__file__).name, args.verbose, args.log_file)
+    logger = setup_logger(Path(__file__).stem, args.verbose, args.log_file)
 
     validate_speed_acceleration(args, logger)

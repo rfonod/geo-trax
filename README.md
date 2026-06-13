@@ -183,7 +183,7 @@ geotrax batch video.mp4 --viz-only --save --show-lanes --hide-speeds
 #### Example 5: Generate aggregated trajectory plots only from existing results, excluding buses and trucks
 
 ```bash
-geotrax batch path/to/processed-data/ --plot-only --aggregate --plot-class-filter 1 2
+geotrax batch path/to/processed-data/ --plot-only --plot-aggregate --plot-class-filter 1 2
 ```
 
 > [!TIP]

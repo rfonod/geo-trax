@@ -21,7 +21,7 @@ Usage:
   geotrax aggregate <input> [options]
 
 Arguments:
-  input : Path to the PROCESSED folder containing georeferenced tracking results.
+  input : Path to the PROCESSED folder of georeferenced results.
 
 Options:
   -h, --help          : Show this help message and exit.
@@ -67,6 +67,7 @@ from pathlib import Path
 import pandas as pd
 from tqdm import tqdm
 
+from geotrax.utils.cli_utils import add_common_args
 from geotrax.utils.file_utils import determine_location_id
 from geotrax.utils.logging_utils import setup_logger
 
@@ -183,18 +184,21 @@ def parse_cli_args() -> argparse.Namespace:
     Parse command-line arguments.
     """
     parser = argparse.ArgumentParser(description='Aggregate georeferenced tracking results')
-    parser.add_argument('input', type=Path, help='Path to the PROCESSED folder')
-    parser.add_argument('--output', '-o', type=Path, default=None, help="Path to the output folder. If not provided, the output folder will be created in the same directory as the PROCESSED folder and will be named 'DATASET'")
-    parser.add_argument('--log-file', '-lf', type=str, default=None, help="Filename to save detailed logs. Saved in the 'logs' folder.")
-    parser.add_argument('--verbose', '-v', action='store_true', help="Set print verbosity level to INFO (default: WARNING)")
+    parser.add_argument('input', type=Path, help='Path to the PROCESSED folder of georeferenced results.')
+
+    optional = parser.add_argument_group('Optional arguments')
+    optional.add_argument('--output', '-o', type=Path, default=None, help="Path to the output folder. If not provided, the output folder will be created in the same directory as the PROCESSED folder and will be named 'DATASET'")
+    add_common_args(optional, cfg=False)
 
     return parser.parse_args()
 
 
 def main() -> None:
-    """Command-line entry point."""
+    """
+    Command-line entry point.
+    """
     args = parse_cli_args()
-    logger = setup_logger(Path(__file__).name, args.verbose, args.log_file)
+    logger = setup_logger(__name__, args.verbose, args.log_file)
 
     aggregate_results(args, logger)
 
