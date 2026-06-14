@@ -29,7 +29,8 @@ Options:
 
 Georeferencing Options:
     --ortho-folder, -of <path>     : Custom path to the folder with orthophotos (.png, .tif, .txt).
-                                     Defaults to 'ORTHOPHOTOS' at the same level as 'PROCESSED' in 'input'.
+                                     Defaults to cfg -> folders -> ortho_folder, then 'ORTHOPHOTOS' at the
+                                     same level as 'PROCESSED' in 'input'.
     --geo-source, -gs <str>        : Source of georeferencing parameters (metadata-tif, text-file, center-text-file).
                                      If not provided, the system will auto-detect. Defaults to cfg -> georef -> processing -> geo_source.
     --ref-frame, -rf <int>         : Use custom reference frame number. Should be the same as the one
@@ -37,11 +38,11 @@ Georeferencing Options:
     --no-master, -nm               : Disable the master frame approach regardless of config.
                                      When not set, cfg -> georef -> processing -> use_master applies.
     --master-folder, -mf <path>    : Custom path to the folder containing master frame files (.png).
-                                     If not provided, '--ortho-folder / master_frames' will be used.
+                                     Defaults to cfg -> folders -> master_folder, then '<ortho-folder>/master_frames'.
     --recompute, -r                : Force recompute master->ortho homography even if cached.
                                      Defaults to cfg -> georef -> processing -> recompute.
     --segmentation-folder, -osf <path> : Custom path to the folder containing orthophoto segmentation files (.csv).
-                                         If not provided, '--ortho-folder / segmentations' will be used.
+                                         Defaults to cfg -> folders -> segmentation_folder, then '<ortho-folder>/segmentations'.
 
 Examples:
 
@@ -101,11 +102,15 @@ def georeference(args: argparse.Namespace, logger: logging.Logger) -> None:
     full_config = load_config_all(args, logger)
     config = full_config['georef']
     gproc = config['processing']
+    folders = full_config['main']['folders']
     backfill_args_from_config(args, {
         'ref_frame': gproc['ref_frame'],
         'recompute': gproc['recompute'],
         'geo_source': gproc['geo_source'],
         'no_master': not gproc['use_master'],
+        'ortho_folder': Path(folders['ortho_folder']) if folders['ortho_folder'] else None,
+        'master_folder': Path(folders['master_folder']) if folders['master_folder'] else None,
+        'segmentation_folder': Path(folders['segmentation_folder']) if folders['segmentation_folder'] else None,
     })
 
     n_steps = 8 if args.no_master else 10
@@ -897,13 +902,13 @@ def add_georeferencing_args(group) -> None:
     Used by both ``geotrax georeference`` and ``geotrax batch`` so the two expose an identical
     set of georeferencing options. Every flag defaults to ``None`` and is backfilled from config.
     """
-    group.add_argument("--ortho-folder", "-of", type=Path, default=None, help="Custom path to the folder with orthophotos (.png, .tif, .txt). Defaults to 'ORTHOPHOTOS' at the same level as 'PROCESSED' in 'input'.")
+    group.add_argument("--ortho-folder", "-of", type=Path, default=None, help="Custom path to the folder with orthophotos (.png, .tif, .txt). Defaults to cfg -> folders -> ortho_folder, then 'ORTHOPHOTOS' at the same level as 'PROCESSED' in 'input'.")
     group.add_argument("--geo-source", "-gs", choices=['metadata-tif', 'text-file', 'center-text-file'], default=None, help="Source of georeferencing parameters. If not provided, falls back to cfg -> georef -> processing -> geo_source, then auto-detect.")
     group.add_argument("--ref-frame", "-rf", type=int, default=None, help="Reference frame number (must match stabilization setting). Defaults to cfg -> georef -> processing -> ref_frame.")
     group.add_argument("--no-master", "-nm", action="store_const", const=True, default=None, help="Disable the master frame approach regardless of config. When not set, cfg -> georef -> processing -> use_master applies.")
-    group.add_argument("--master-folder", "-mf", type=Path, default=None, help="Custom path to the folder containing master frame files (.png). If not provided, '--ortho-folder / master_frames' will be used.")
+    group.add_argument("--master-folder", "-mf", type=Path, default=None, help="Custom path to the folder containing master frame files (.png). Defaults to cfg -> folders -> master_folder, then '<ortho-folder>/master_frames'.")
     group.add_argument("--recompute", "-r", action="store_const", const=True, default=None, help="Force recompute master->ortho homography even if cached. Defaults to cfg -> georef -> processing -> recompute.")
-    group.add_argument("--segmentation-folder", "-osf", type=Path, default=None, help="Path to the folder with lane segmentation CSV files (used for lane assignment during georeferencing); the corresponding overlay PNGs are also used as plot backgrounds when segmentation plotting is enabled. Defaults to '--ortho-folder / segmentations'.")
+    group.add_argument("--segmentation-folder", "-osf", type=Path, default=None, help="Path to the folder with lane segmentation CSV files (used for lane assignment during georeferencing); the corresponding overlay PNGs are also used as plot backgrounds when segmentation plotting is enabled. Defaults to cfg -> folders -> segmentation_folder, then '<ortho-folder>/segmentations'.")
 
 
 def parse_cli_args() -> argparse.Namespace:

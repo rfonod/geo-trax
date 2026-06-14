@@ -20,28 +20,37 @@ cfg_tracker:     geotrax/cfg/tracker/default_botsort.yaml # Tracker config; swit
 cfg_stabilo:     geotrax/cfg/stabilo/default.yaml         # Stabilo stabilizer config
 cfg_georef:      geotrax/cfg/georef/default.yaml          # Georeferencing config
 
-# --- Stabilization ---
-stabilize: true   # Stabilize extracted bounding boxes; appends 4 columns (x_stab, y_stab, w_stab, h_stab) to results/video.txt
-save_stab: true   # Save per-frame stabilization homographies to results/video_vid_transf.txt
+# --- Shared data folders (CLI override) ---
+# Persistent defaults for the orthophoto / master-frame / segmentation folders; null keeps the
+# existing auto-detection (relative to the input). Used by georeferencing and plotting.
+folders:
+  ortho_folder: null         # Folder with orthophotos (.png, .tif, .txt); null = auto-detect 'ORTHOPHOTOS' next to 'PROCESSED' — CLI: --ortho-folder
+  master_folder: null        # Folder with master frame files (.png); null = '<ortho_folder>/master_frames' — CLI: --master-folder
+  segmentation_folder: null  # Folder with lane segmentation CSVs (and overlay PNGs); null = '<ortho_folder>/segmentations' — CLI: --segmentation-folder
 
-# --- Vehicle dimension estimation ---
-dimension_estimation:
-  gsd: 0.02725    # Ground sample distance [m/px]; tuned for DJI Mavic 3 at 140–150 m altitude, 4K resolution
-  eps: 4          # Visibility margin [px]; bounding boxes closer than this to any frame edge are excluded; [0, inf)
-  r0: 1.25        # Minimum vehicle displacement [m] required before computing travel azimuth; (0, inf)
-  theta_bar: 15   # Maximum azimuth deviation [deg] from cardinal directions to classify a pass as parallel; [0, 90]
-  tau_c:          # Per-class minimum length/width ratio used to reject stationary vehicles as non-elongated
-    0: 1.83       # Car (includes vans, SUVs)
-    1: 2.85       # Bus
-    2: 1.70       # Truck
-    3: 1.80       # Motorcycle
-    -1: 1.70      # Unknown / unassigned class
-
-# --- Video processing settings (CLI override) ---
+# --- Frame range; shared by extraction and visualization (CLI override) ---
 # These control how many frames to process. Override with --cut-frame-left / --cut-frame-right.
 processing:
   cut_frame_left: 0     # Skip this many frames at the start; [0, inf) — CLI: --cut-frame-left
   cut_frame_right: null # Stop at this frame number (null = process the entire video) — CLI: --cut-frame-right
+
+# --- Extraction stage ---
+# Stabilization, short-track removal, and vehicle dimension estimation for 'geotrax extract'.
+extraction:
+  stabilize: true       # Stabilize extracted bounding boxes; appends 4 columns (x_stab, y_stab, w_stab, h_stab) to results/video.txt
+  save_stab: true       # Save per-frame stabilization homographies to results/video_vid_transf.txt
+  min_track_length: 3   # Discard tracks shorter than this many frames; [1, inf)
+  dimension_estimation:
+    gsd: 0.02725    # Ground sample distance [m/px]; tuned for DJI Mavic 3 at 140–150 m altitude, 4K resolution
+    eps: 4          # Visibility margin [px]; bounding boxes closer than this to any frame edge are excluded; [0, inf)
+    r0: 1.25        # Minimum vehicle displacement [m] required before computing travel azimuth; (0, inf)
+    theta_bar: 15   # Maximum azimuth deviation [deg] from cardinal directions to classify a pass as parallel; [0, 90]
+    tau_c:          # Per-class minimum length/width ratio used to reject stationary vehicles as non-elongated
+      0: 1.83       # Car (includes vans, SUVs)
+      1: 2.85       # Bus
+      2: 1.70       # Truck
+      3: 1.80       # Motorcycle
+      -1: 1.70      # Unknown / unassigned class
 
 # --- Visualization settings (CLI override) ---
 # These control the annotated-video output from 'geotrax visualize'. Override any key via its CLI flag.
@@ -76,3 +85,9 @@ plotting:
   plot_points: false        # Plot discrete trajectory points instead of connected lines — CLI: --plot-points / --no-plot-points
   use_segmentations: false  # Produce an extra trajectory plot on the lane segmentation overlay PNG alongside the plain-orthophoto plot (pre-generate overlays with tools/viz_segmentations.py) — CLI: --plot-segmentations / --no-plot-segmentations
   class_filter: []          # Vehicle class IDs to exclude from plots (e.g. [1] hides bus) — CLI: --plot-class-filter
+
+# --- Batch processing (CLI override) ---
+# Defaults for the batch orchestrator's directory scan ('geotrax batch' on a folder).
+batch:
+  folders_exclude: ['results']  # Sub-folder names to skip when scanning for videos; 'results' holds pipeline output (e.g. annotated mode videos) that must not be re-ingested as input — CLI: --folders-exclude
+  exclude_patterns: null        # Skip videos whose filename contains any of these substrings (null = none) — CLI: --exclude-patterns

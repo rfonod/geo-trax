@@ -32,8 +32,8 @@ Processing Options:
                               Defaults to cfg -> cfg_ultralytics -> classes.
     --cut-frame-left, -cfl <int> : Skip the first N frames. Defaults to cfg -> processing -> cut_frame_left.
     --cut-frame-right, -cfr <int> : Stop processing after this frame. Defaults to cfg -> processing -> cut_frame_right.
-    For full detection and tracking control (model, IoU, image size, tracker settings, etc.),
-    edit geotrax/cfg/ultralytics/default.yaml and the linked tracker config.
+    For full detection, tracking, and stabilization control (model, IoU, image size, tracker settings,
+    stabilo settings, etc.), edit geotrax/cfg/ultralytics/default.yaml, the linked tracker config, and the linked stabilo config.
 
 Examples:
   1. Process a video with default settings:
@@ -52,6 +52,8 @@ Notes:
     linked under cfg_tracker in the main config (default: geotrax/cfg/tracker/default_botsort.yaml).
   - Stabilization parameters are controlled via the stabilo config linked under cfg_stabilo in the main config
     (default: geotrax/cfg/stabilo/default.yaml).
+  - Extraction-stage settings (stabilize/save_stab toggles, min_track_length, and the dimension_estimation
+    block) live under the 'extraction:' section of the main config; min_track_length has no CLI flag.
 """
 
 import argparse
@@ -133,7 +135,7 @@ def track_with_model(model: Union[YOLO, RTDETR], config: Dict, logger: logging.L
                         unique, counts = np.unique(class_id[-1], return_counts=True)
                         class_freq.update(dict(zip(unique, counts)))
 
-                if config['main']['stabilize']:
+                if config['main']['extraction']['stabilize']:
                     start_time = time.time()
                     if frame_num == config['main']['args'].cut_frame_left:
                         stabilizer.set_ref_frame(frame, bbox[-1] if len(boxes) > 0 else None)
@@ -259,7 +261,7 @@ def postprocess_tracks(tracks: np.ndarray, config: Dict, logger: logging.Logger)
     """
     Postprocess the extracted tracks.
     """
-    tracks = remove_short_tracks(tracks, logger)
+    tracks = remove_short_tracks(tracks, logger, config['main']['extraction']['min_track_length'])
     tracks = calculate_unique_classes(tracks)
     tracks = estimate_vehicle_dimensions(tracks, config['main'])
     return tracks
@@ -315,7 +317,7 @@ def estimate_vehicle_dimensions(tracks: np.ndarray, config: Dict) -> np.ndarray:
     w_I, h_I = get_video_dimensions(config['args'].source)
 
     # Step 1: visibility filtering
-    eps = config['dimension_estimation']['eps']
+    eps = config['extraction']['dimension_estimation']['eps']
     mask = (tracks[:, 2] - tracks[:, 4]/2 > eps) & (tracks[:, 3] - tracks[:, 5]/2 > eps)
     mask &= (tracks[:, 2] + tracks[:, 4]/2 < w_I - 1 - eps) & (tracks[:, 3] + tracks[:, 5]/2 < h_I - 1 - eps)
     valid_tracks = tracks[mask]
@@ -344,11 +346,11 @@ def estimate_vehicle_dimensions(tracks: np.ndarray, config: Dict) -> np.ndarray:
             id2class[track_id] = v_class
 
     # Step 3: azimuth-based filtering
-    r0 = config['dimension_estimation']['r0']
-    gsd = config['dimension_estimation']['gsd']
-    theta_bar = config['dimension_estimation']['theta_bar']
+    r0 = config['extraction']['dimension_estimation']['r0']
+    gsd = config['extraction']['dimension_estimation']['gsd']
+    theta_bar = config['extraction']['dimension_estimation']['theta_bar']
     theta_bar_rad = np.deg2rad(theta_bar)
-    tau_c = config['dimension_estimation']['tau_c']
+    tau_c = config['extraction']['dimension_estimation']['tau_c']
     radius_threshold = r0 / gsd
 
     for track_id in unique_ids:
@@ -407,7 +409,7 @@ def save_results(tracks: np.ndarray, transforms: np.ndarray, config: Dict, logge
         logger.error(f"Failed to save the tracking results to: '{tracks_txt_file.resolve()}' due to: {e}")
 
     try:
-        if transforms.size != 0 and config['main']['save_stab']:
+        if transforms.size != 0 and config['main']['extraction']['save_stab']:
             frame_nums = transforms[:, 0].astype(int)
             matrices = transforms[:, 1:].reshape((-1, 3, 3))
             if not np.all(np.diff(frame_nums) == 1):

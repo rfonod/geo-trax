@@ -41,9 +41,10 @@ Batch Processing Options:
     --no-geo, -ng       : Skip georeferencing; run detection/tracking/stabilization and
                           visualization only (pixel-coordinate output).
     --folders-exclude, -fe <str> [<str> ...] : Sub-folder names to skip when scanning for
-                          videos (default: ['results']).
+                          videos. Defaults to cfg -> batch -> folders_exclude (['results']).
     --exclude-patterns, -ep <str> [<str> ...] : Skip videos whose filename contains any of
                           these substrings (e.g., --exclude-patterns test temp).
+                          Defaults to cfg -> batch -> exclude_patterns.
 
 Shared Options:
     --cfg, -c <path>    : Path to the main geo-trax configuration file (default: geotrax/cfg/default.yaml).
@@ -62,7 +63,8 @@ Processing Options:
 
 Georeferencing Options:
     --ortho-folder, -of <path>     : Path to the folder with orthophotos (.png, .tif, .txt).
-                          Defaults to 'ORTHOPHOTOS' at the same level as 'PROCESSED' in input.
+                          Defaults to cfg -> folders -> ortho_folder, then 'ORTHOPHOTOS' at the
+                          same level as 'PROCESSED' in input.
     --geo-source, -gs <choice>     : Georeferencing parameter source: metadata-tif, text-file, or
                           center-text-file. Auto-detected if omitted.
                           Defaults to cfg -> georef -> processing -> geo_source.
@@ -71,14 +73,15 @@ Georeferencing Options:
     --no-master, -nm               : Disable the master-frame approach regardless of config.
                           When not set, cfg -> georef -> processing -> use_master applies.
     --master-folder, -mf <path>    : Path to the folder containing master frame files (.png).
-                          Defaults to '<ortho-folder>/master_frames'.
+                          Defaults to cfg -> folders -> master_folder, then '<ortho-folder>/master_frames'.
     --recompute, -r                : Force recomputation of the master→orthophoto homography
                           even if a cached result exists.
                           Defaults to cfg -> georef -> processing -> recompute.
     --segmentation-folder, -osf <path> : Path to the folder with road segmentation CSV files
                           (used for lane assignment during georeferencing) and, when
                           --plot-segmentations is enabled, the corresponding overlay PNG files
-                          used as plot backgrounds. Defaults to '<ortho-folder>/segmentations'.
+                          used as plot backgrounds. Defaults to cfg -> folders -> segmentation_folder,
+                          then '<ortho-folder>/segmentations'.
 
 Visualization Options:
     --save / --no-save, -s  : Save the annotated output video to file.
@@ -180,6 +183,7 @@ from geotrax.extract import add_processing_args, detect_track_stabilize
 from geotrax.georeference import add_georeferencing_args, georeference
 from geotrax.plot import add_plotting_args, default_plot_args, generate_plots
 from geotrax.utils.cli_utils import add_common_args
+from geotrax.utils.config_utils import backfill_args_from_config, load_config
 from geotrax.utils.constants import VIDEO_FORMATS
 from geotrax.utils.file_utils import check_if_results_exist, determine_suffix_and_fourcc
 from geotrax.utils.logging_utils import bcolors, setup_logger
@@ -199,6 +203,12 @@ def process_input(args: argparse.Namespace, logger: logging.Logger) -> None:
     if not input_path.exists():
         logger.critical(f"File or directory '{input_path}' not found.")
         return
+
+    batch_cfg = load_config(args.cfg, logger)['batch']
+    backfill_args_from_config(args, {
+        'folders_exclude': batch_cfg['folders_exclude'],
+        'exclude_patterns': batch_cfg['exclude_patterns'],
+    })
 
     try:
         if input_path.is_file() and input_path.suffix.lower() in VIDEO_FORMATS:
@@ -354,8 +364,8 @@ def parse_cli_args() -> argparse.Namespace:
     batch.add_argument('--geo-only', '-go', action='store_true', help='Only run georeferencing; skip detection, tracking, and stabilization')
     batch.add_argument('--plot-only', '-po', action='store_true', help='Only generate plots; skip processing, georeferencing, and visualization')
     batch.add_argument('--no-geo', '-ng', action='store_true', help='Do not georeference the tracking data')
-    batch.add_argument("--folders-exclude", "-fe", type=str, nargs='+', default=['results'], help="Folders to exclude from the batch processing")
-    batch.add_argument("--exclude-patterns", "-ep", type=str, nargs='+', default=None, help="File name patterns to exclude (e.g., --exclude-patterns car_test drone_2023)")
+    batch.add_argument("--folders-exclude", "-fe", type=str, nargs='+', default=None, help="Folders to exclude from the batch processing. Defaults to cfg -> batch -> folders_exclude.")
+    batch.add_argument("--exclude-patterns", "-ep", type=str, nargs='+', default=None, help="File name patterns to exclude (e.g., --exclude-patterns car_test drone_2023). Defaults to cfg -> batch -> exclude_patterns.")
 
     shared = parser.add_argument_group('Shared options')
     add_common_args(shared)
