@@ -3,17 +3,26 @@
 # Author: Robert Fonod (robert.fonod@ieee.org)
 
 """
-cut_merged_videos.py - Merged Video and Flight Log Cutting Tool
+cut_merged_videos_and_logs.py - Merged Video and Flight Log Cutting Tool
 
 Recursively searches a directory for video files whose stem contains a
 configurable keyword (default: 'merged') and cuts them according to a cut
 specification file with the same stem (e.g. '0_merged.mp4' → '0_merged.txt').
 A DJI SRT flight log with the same stem ('0_merged.srt') is optional: when
-present it is parsed and saved as a CSV alongside the cut video; when absent
-only the video is cut. All companion files must reside in the same directory as
-the merged video. Cut start frames are snapped to the nearest I-frame to avoid
-re-encoding. Output filenames are derived from an optional location label
-(nearest point in a user-supplied JSON map) and a per-label sequential counter
+present it is parsed and the relevant frames saved as a CSV alongside the cut
+video; when absent only the video is cut. All companion files must reside in the
+same directory as the merged video.
+
+Prior to this tool, raw per-flight videos and their DJI SRT flight logs are
+merged per session using tools/create_merged_videos.py. DJI drones automatically
+split continuous recordings into multiple files (typically capped at ~4 GB to
+stay within FAT32 file-system limits), so a single hover session may span
+several .mp4/.srt file pairs. create_merged_videos.py concatenates the video
+files into one merged .mp4 and concatenates the SRT files into one merged .srt.
+
+Cut start frames are snapped to the nearest I-frame to avoid re-encoding.
+Output filenames are derived from an optional location label (nearest point in
+a user-supplied JSON map) and a per-label sequential counter
 (e.g. A1.mp4/A1.csv, A2.mp4/A2.csv, ...).
 
 This tool was developed for the Songdo UAV dataset accompanying:
@@ -22,7 +31,7 @@ This tool was developed for the Songdo UAV dataset accompanying:
   https://doi.org/10.1016/j.trc.2025.105205
 
 Usage:
-  python tools/cut_merged_videos.py <data_dir> [options]
+  python tools/cut_merged_videos_and_logs.py <data_dir> [options]
 
 Arguments:
   data_dir : Root directory to search recursively for merged video files.
@@ -33,24 +42,27 @@ Options:
                                If omitted, all cuts are labeled 'unknown'.
   -nf, --name-filter <str>   : Keyword in the video filename used to identify merged sessions
                                (default: 'merged'). Case-insensitive substring match.
-  --cleanup                  : Delete each merged video after processing (default: off).
+  --cleanup                  : Delete all merged source files (video + SRT flight log) after all
+                               cuts are complete; prompts for confirmation before deleting (default: off).
+  -dr, --dry-run             : Simulate the full pipeline without writing any files or running
+                               ffmpeg; logs all actions that would be taken (default: off).
   -d, --debug                : Verbose ffmpeg output and OpenCV frame-level verification (default: off).
   -lp, --log-path <str>      : Where to write logs: a directory or a full file path; defaults to a platform-specific log directory.
   -q, --quiet                : Reduce console verbosity to important messages only (default: show INFO-level detail).
 
 Examples:
 1. Cut all merged videos found under a PROCESSED directory:
-   python tools/cut_merged_videos.py /path/to/PROCESSED
+   python tools/cut_merged_videos_and_logs.py /path/to/PROCESSED
 
 2. Cut with a location map and delete merged files after processing:
-   python tools/cut_merged_videos.py /path/to/PROCESSED --location-map /path/to/locations.json --cleanup
+   python tools/cut_merged_videos_and_logs.py /path/to/PROCESSED --location-map /path/to/locations.json --cleanup
 
 3. Songdo dataset (see paper above), single session with intersection labels:
-   python tools/cut_merged_videos.py /path/to/PROCESSED/2022-10-04/D1/AM1 \\
+   python tools/cut_merged_videos_and_logs.py /path/to/PROCESSED/2022-10-04/D1/AM1 \\
      --location-map /path/to/songdo_intersections.json
 
 4. Custom name filter (e.g. files named 'combined_flight.mp4'):
-   python tools/cut_merged_videos.py /path/to/PROCESSED --name-filter combined
+   python tools/cut_merged_videos_and_logs.py /path/to/PROCESSED --name-filter combined
 
 Input:
 - Video files (any format: .mp4, .mov, .avi, .mkv) whose stem contains the
@@ -61,7 +73,8 @@ Input:
                     cut_start_frame, cut_end_frame[, rotation]
                   where:
                     cut_start_frame : 1-indexed frame where the cut starts.
-                    cut_end_frame   : 1-indexed frame where the cut ends (inclusive).
+                    cut_end_frame   : 1-indexed frame where the cut ends (inclusive);
+                                     use -1 to cut to the end of the merged video.
                     rotation        : Optional CCW rotation in degrees (0, ±90, ±180, ±270).
                   Note: cut_start_frame may be adjusted forward to the nearest
                   I-frame to avoid re-encoding.
@@ -212,8 +225,8 @@ def load_location_map(path: Path, logger: logging.Logger) -> dict[str, tuple[flo
 def process_session(
     filepaths: dict[str, Path],
     location_map: dict[str, tuple[float, float]],
-    cleanup: bool,
     debug: bool,
+    dry_run: bool,
     logger: logging.Logger,
 ) -> None:
     intersections: dict[str, int] = {}
@@ -228,17 +241,13 @@ def process_session(
         logger.error(str(e))
         return
 
-    all_cuts_adjusted = get_and_save_adjusted_cuts(all_cuts, filepaths, logger, debug)
+    all_cuts_adjusted = get_and_save_adjusted_cuts(all_cuts, filepaths, logger, debug, dry_run)
 
     for cut_num in all_cuts_adjusted:
         cut_video_path = cut_and_save_srt(
-            filepaths, all_cuts_adjusted[cut_num], location_map, intersections, logger
+            filepaths, all_cuts_adjusted[cut_num], location_map, intersections, dry_run, logger
         )
-        cut_and_save_video(filepaths, all_cuts_adjusted[cut_num], cut_video_path, debug, logger)
-
-    if cleanup:
-        filepaths['merged_video'].unlink(missing_ok=True)
-        logger.info(f"Deleted merged video '{filepaths['merged_video']}'.")
+        cut_and_save_video(filepaths, all_cuts_adjusted[cut_num], cut_video_path, debug, dry_run, logger)
 
 
 def cut_and_save_srt(
@@ -246,6 +255,7 @@ def cut_and_save_srt(
     cut: tuple[int, int, int],
     location_map: dict[str, tuple[float, float]],
     intersections: dict[str, int],
+    dry_run: bool,
     logger: logging.Logger,
 ) -> Path:
     cut_start, cut_end, _ = cut
@@ -303,11 +313,14 @@ def cut_and_save_srt(
     video_path = get_cut_filepath(session_dir, label, intersections, '.mp4')
     csv_path = video_path.with_suffix('.csv')
 
-    try:
-        pd.DataFrame(cut_flight_log).to_csv(csv_path, index=False)
-        logger.info(f"Cut flight log saved to '{csv_path}'.")
-    except Exception as e:
-        logger.error(f"Problem saving '{csv_path}': {e}")
+    if dry_run:
+        logger.info(f"[DRY RUN] Would save cut flight log to '{csv_path}'.")
+    else:
+        try:
+            pd.DataFrame(cut_flight_log).to_csv(csv_path, index=False)
+            logger.info(f"Cut flight log saved to '{csv_path}'.")
+        except Exception as e:
+            logger.error(f"Problem saving '{csv_path}': {e}")
 
     return video_path
 
@@ -317,6 +330,7 @@ def cut_and_save_video(
     cut: tuple[int, int, int],
     cut_video_path: Path,
     debug: bool,
+    dry_run: bool,
     logger: logging.Logger,
 ) -> None:
     cut_start_adjusted, cut_end, rotation = cut
@@ -334,25 +348,29 @@ def cut_and_save_video(
     if not debug:
         cmd += ' -v quiet'
 
-    logger.info(f"Running: {cmd}")
-    result = subprocess.run(cmd, shell=True)
-    if result.returncode == 0:
-        logger.notice(f"Cut video saved to '{cut_video_path}'.")
+    if dry_run:
+        logger.info(f"[DRY RUN] Would run: {cmd}")
     else:
-        logger.error(f"ffmpeg exited with code {result.returncode} for '{filepaths['merged_video']}'.")
+        logger.info(f"Running: {cmd}")
+        result = subprocess.run(cmd, shell=True)
+        if result.returncode == 0:
+            logger.info(f"Cut video saved to '{cut_video_path}'.")
+        else:
+            logger.error(f"ffmpeg exited with code {result.returncode} for '{filepaths['merged_video']}'.")
 
-    if debug:
-        verify_cut(filepaths, cut_video_path, cut_start_adjusted, cut_end, logger)
+        if debug:
+            verify_cut(filepaths, cut_video_path, cut_start_adjusted, cut_end, logger)
 
     if int(rotation) != 0 and not debug:
         temp_path = cut_video_path.with_name(cut_video_path.stem + '_temp' + cut_video_path.suffix)
         temp_q = shlex.quote(str(temp_path))
-        cut_video_path.rename(temp_path)
-        subprocess.run(
-            f'ffmpeg -i {temp_q} -c copy -map_metadata 0 -metadata:s:v rotate="{rotation}" {out_q} -v quiet',
-            shell=True,
-        )
-        temp_path.unlink(missing_ok=True)
+        rotation_cmd = f'ffmpeg -i {temp_q} -c copy -map_metadata 0 -metadata:s:v rotate="{rotation}" {out_q} -v quiet'
+        if dry_run:
+            logger.info(f"[DRY RUN] Would apply rotation {rotation}°: {rotation_cmd}")
+        else:
+            cut_video_path.rename(temp_path)
+            subprocess.run(rotation_cmd, shell=True)
+            temp_path.unlink(missing_ok=True)
 
 
 def verify_cut(
@@ -457,11 +475,10 @@ def parse_srt(timestamp_line: str, log_line: str) -> dict:
 
     Field names are normalised via _FIELD_ALIASES so that variant spellings
     across DJI drone families all map to the same canonical CSV column names.
-    Missing fields are filled with safe defaults (0 / '' ) rather than raising.
+    Missing fields are filled with safe defaults (0 / '') rather than raising.
     """
     raw = _parse_srt_line(log_line)
 
-    # Resolve each canonical field from the first matching alias
     resolved: dict[str, str] = {}
     for canonical, aliases in _FIELD_ALIASES.items():
         for alias in aliases:
@@ -540,13 +557,14 @@ def perform_sanity_checks(
     cap.release()
 
     for cut_num, (cut_start, cut_end, rotation) in all_cuts.items():
-        assert cut_start > 0 and cut_end > 0, (
-            f"Cut {cut_num}: 'cut_start' and 'cut_end' must be positive in '{filepaths['cuts_txt']}'"
+        effective_end = frame_count if cut_end == -1 else cut_end
+        assert cut_start > 0 and effective_end > 0, (
+            f"Cut {cut_num}: 'cut_start' must be positive and 'cut_end' must be positive or -1 in '{filepaths['cuts_txt']}'"
         )
-        assert cut_start < cut_end, (
+        assert cut_start < effective_end, (
             f"Cut {cut_num}: 'cut_start' >= 'cut_end' in '{filepaths['cuts_txt']}'"
         )
-        assert cut_end - 1 <= frame_count, (
+        assert effective_end - 1 <= frame_count, (
             f"Cut {cut_num}: 'cut_end' exceeds total frame count ({frame_count}) in '{filepaths['cuts_txt']}'"
         )
         assert rotation in {0, 90, 180, 270, -90, -180, -270}, (
@@ -559,11 +577,13 @@ def get_and_save_adjusted_cuts(
     filepaths: dict[str, Path],
     logger: logging.Logger,
     debug: bool = False,
+    dry_run: bool = False,
 ) -> dict[int, tuple[int, int, int]]:
     video_q = shlex.quote(str(filepaths['merged_video']))
 
     cap = cv2.VideoCapture(str(filepaths['merged_video']))
     fps = cap.get(cv2.CAP_PROP_FPS)
+    frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     cap.release()
 
     if platform.system() in ('Windows', 'Darwin'):
@@ -587,6 +607,7 @@ def get_and_save_adjusted_cuts(
 
     all_cuts_adjusted: dict[int, tuple[int, int, int]] = {}
     for cut_num, (cut_start, cut_end, rotation) in all_cuts.items():
+        resolved_end = frame_count if cut_end == -1 else cut_end
         # SRT is 1-indexed; convert to 0-indexed for keyframe comparison
         cut_start_0 = cut_start - 1
         diffs = key_frames_arr - cut_start_0 / fps
@@ -594,20 +615,62 @@ def get_and_save_adjusted_cuts(
         closest_kf = float(key_frames[i_closest])
         cut_start_adjusted = round(closest_kf * fps) + 1  # back to 1-indexed
 
-        all_cuts_adjusted[cut_num] = (cut_start_adjusted, cut_end, rotation)
-        if debug:
+        all_cuts_adjusted[cut_num] = (cut_start_adjusted, resolved_end, rotation)
+        if debug or dry_run:
             logger.info(
                 f"Cut {cut_num}: start adjusted from {cut_start} to {cut_start_adjusted} "
                 f"(keyframe at {closest_kf:.4f}s)."
             )
 
     adjusted_txt = filepaths['cuts_txt'].with_stem(filepaths['cuts_txt'].stem + '_adjusted')
-    with open(adjusted_txt, 'w') as f:
-        for cut in all_cuts_adjusted.values():
-            f.write("{},{},{}\n".format(*cut))
-    logger.info(f"Adjusted cuts saved to '{adjusted_txt}'.")
+    if dry_run:
+        logger.info(f"[DRY RUN] Would save adjusted cuts to '{adjusted_txt}'.")
+    else:
+        with open(adjusted_txt, 'w') as f:
+            for cut in all_cuts_adjusted.values():
+                f.write("{},{},{}\n".format(*cut))
+        logger.info(f"Adjusted cuts saved to '{adjusted_txt}'.")
 
     return all_cuts_adjusted
+
+
+_SRT_EXTS = {'.srt'}
+
+
+def _cleanup_merged_files(merged_videos: list[Path], dry_run: bool, logger: logging.Logger) -> None:
+    to_delete: list[Path] = []
+    for video_path in merged_videos:
+        to_delete.append(video_path)
+        for p in video_path.parent.iterdir():
+            if p.stem == video_path.stem and p.suffix.lower() in _SRT_EXTS:
+                to_delete.append(p)
+
+    if not to_delete:
+        return
+
+    if dry_run:
+        logger.info("[DRY RUN] Would permanently delete the following merged source files:")
+        for p in to_delete:
+            logger.info(f"  {p}")
+        return
+
+    logger.warning("The following merged source files will be permanently deleted:")
+    for p in to_delete:
+        logger.warning(f"  {p}")
+
+    try:
+        answer = input("\nProceed with deletion? [y/N] ").strip().lower()
+    except EOFError:
+        answer = ''
+
+    if answer not in ('y', 'yes'):
+        logger.info("Cleanup cancelled.")
+        return
+
+    for p in to_delete:
+        p.unlink(missing_ok=True)
+        logger.info(f"Deleted '{p}'.")
+    logger.info(f"Cleanup complete: {len(to_delete)} file(s) deleted.")
 
 
 def parse_cli_args() -> argparse.Namespace:
@@ -622,7 +685,9 @@ def parse_cli_args() -> argparse.Namespace:
     parser.add_argument('--name-filter', '-nf', type=str, default='merged',
                         help="Keyword in the video filename used to identify merged sessions (default: 'merged').")
     parser.add_argument('--cleanup', action='store_true',
-                        help="Delete each merged .mp4 after processing (default: off).")
+                        help="Delete all merged source files (video + SRT flight log) after all cuts are complete; prompts for confirmation before deleting (default: off).")
+    parser.add_argument('--dry-run', '-dr', action='store_true',
+                        help="Simulate the full pipeline without writing any files or running ffmpeg; logs all actions that would be taken (default: off).")
     parser.add_argument('--debug', '-d', action='store_true',
                         help="Enable verbose ffmpeg output and OpenCV frame-level verification (default: off).")
     parser.add_argument('--log-path', '-lp', type=Path, default=None,
@@ -651,7 +716,10 @@ def main() -> None:
         if filepaths is None:
             continue
         logger.info(f"Processing '{video_path}'.")
-        process_session(filepaths, location_map, args.cleanup, args.debug, logger)
+        process_session(filepaths, location_map, args.debug, args.dry_run, logger)
+
+    if args.cleanup:
+        _cleanup_merged_files(merged_videos, args.dry_run, logger)
 
 
 if __name__ == "__main__":
