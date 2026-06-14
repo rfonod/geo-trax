@@ -25,10 +25,12 @@ Arguments:
            subfolder next to the video (produced by 'geotrax extract').
 
 Options:
-  -h, --help        : Show this help message and exit.
-  --id, -i <int>    : Vehicle ID to visualize. Prompted interactively if omitted or 0 (default: 0).
-  --show            : Display plots interactively (default: False).
-  --save, -s        : Save plots as PDF files to <video_dir>/results/plots/ (default: False).
+  -h, --help            : Show this help message and exit.
+  --id, -i <int>        : Vehicle ID to visualize. Prompted interactively if omitted or 0 (default: 0).
+  --show                : Display plots interactively (default: False).
+  --save, -s            : Save plots as PDF files to <video_dir>/results/plots/ (default: False).
+  -lp, --log-path <str> : Where to write logs: a directory or a full file path; defaults to a platform-specific log directory.
+  -q, --quiet           : Reduce console verbosity to important messages only (default: show INFO-level detail).
 
 Examples:
 1. Visualize vehicle ID 42 and show plots interactively:
@@ -61,6 +63,7 @@ Notes:
 """
 
 import argparse
+import logging
 import sys
 from pathlib import Path
 
@@ -69,6 +72,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from geotrax.utils.file_utils import detect_delimiter
+from geotrax.utils.logging_utils import setup_logger
 
 # Ground sampling distance constants for the Songdo experiment
 # (4K resolution, 140–150 m flight altitude)
@@ -87,17 +91,17 @@ TAU_C = {
 }
 
 
-def visualize_dimension_estimation(args: argparse.Namespace) -> None:
-    tracks = load_tracks(args)
-    args = resolve_vehicle_id(tracks, args)
-    visualize_id(tracks, args)
+def visualize_dimension_estimation(args: argparse.Namespace, logger: logging.Logger) -> None:
+    """Visualize the azimuth-based vehicle dimension estimation step by step."""
+    tracks = load_tracks(args, logger)
+    args = resolve_vehicle_id(tracks, args, logger)
+    visualize_id(tracks, args, logger)
 
 
-def load_tracks(args: argparse.Namespace) -> np.ndarray:
+def load_tracks(args: argparse.Namespace, logger: logging.Logger) -> np.ndarray:
     tracks_file = args.source.parent / 'results' / f'{args.source.stem}.txt'
     if not tracks_file.exists():
-        print(f"\033[91mTracking results not found: '{tracks_file}'.\033[0m")
-        print("Run 'geotrax extract' on the video first.")
+        logger.critical(f"Tracking results not found: '{tracks_file}'. Run 'geotrax extract' on the video first.")
         sys.exit(1)
     delimiter = detect_delimiter(tracks_file)
     tracks = np.loadtxt(tracks_file, delimiter=delimiter)
@@ -106,7 +110,7 @@ def load_tracks(args: argparse.Namespace) -> np.ndarray:
     return tracks
 
 
-def resolve_vehicle_id(tracks: np.ndarray, args: argparse.Namespace) -> argparse.Namespace:
+def resolve_vehicle_id(tracks: np.ndarray, args: argparse.Namespace, logger: logging.Logger) -> argparse.Namespace:
     unique_ids = np.unique(tracks[:, 1]).astype(int)
     vehicle_id = args.id
     if vehicle_id == 0:
@@ -116,10 +120,10 @@ def resolve_vehicle_id(tracks: np.ndarray, args: argparse.Namespace) -> argparse
             except ValueError:
                 pass
             if vehicle_id not in unique_ids:
-                print(f"ID {vehicle_id} not found in the tracks. Available IDs: {unique_ids.tolist()}")
+                logger.warning(f"ID {vehicle_id} not found in the tracks. Available IDs: {unique_ids.tolist()}")
         args.id = vehicle_id
     elif vehicle_id not in unique_ids:
-        print(f"\033[91mID {vehicle_id} not found in the tracks. Available IDs: {unique_ids.tolist()}\033[0m")
+        logger.critical(f"ID {vehicle_id} not found in the tracks. Available IDs: {unique_ids.tolist()}")
         sys.exit(1)
     return args
 
@@ -176,6 +180,7 @@ def plot_dimensions(
 def visualize_id(
     tracks: np.ndarray,
     args: argparse.Namespace,
+    logger: logging.Logger,
     eps: int = 4,
     r0: float = 1.25,
     gsd: float = GSD,
@@ -188,7 +193,7 @@ def visualize_id(
     # Get video frame dimensions
     cap = cv2.VideoCapture(str(args.source))
     if not cap.isOpened():
-        print(f"\033[91mCould not open video: '{args.source}'.\033[0m")
+        logger.critical(f"Could not open video: '{args.source}'.")
         sys.exit(1)
     w_I = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     h_I = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
@@ -197,7 +202,7 @@ def visualize_id(
     # Step 0: isolate the chosen vehicle's tracks
     valid_tracks = tracks[tracks[:, 1] == args.id]
     if len(valid_tracks) == 0:
-        print(f"\033[91mNo tracks found for ID {args.id}.\033[0m")
+        logger.critical(f"No tracks found for ID {args.id}.")
         sys.exit(1)
 
     # Choose stabilised or raw coordinate columns
@@ -280,15 +285,15 @@ def visualize_id(
         id2length[vid] = np.percentile(id2lengths[vid], 25) if len(id2lengths[vid]) > 0 else np.nan
         id2width[vid]  = np.percentile(id2widths[vid],  25) if len(id2widths[vid])  > 0 else np.nan
 
-    print(f"\nID {int(args.id)} | Length: {id2length[args.id]:.2f} px | Width: {id2width[args.id]:.2f} px\n")
+    logger.notice(f"ID {int(args.id)} | Length: {id2length[args.id]:.2f} px | Width: {id2width[args.id]:.2f} px")
 
-    save_or_show_plot(args, 'trajectory_with_dimensions')
+    save_or_show_plot(args, 'trajectory_with_dimensions', logger)
 
     plot_dimensions(valid_tracks, id2lengths, id2widths, id2length, id2width, args, idx_x, idx_y)
-    save_or_show_plot(args, 'dimensions_distribution')
+    save_or_show_plot(args, 'dimensions_distribution', logger)
 
 
-def save_or_show_plot(args: argparse.Namespace, filename: str) -> None:
+def save_or_show_plot(args: argparse.Namespace, filename: str, logger: logging.Logger) -> None:
     plt.gca().invert_yaxis()
     plt.axis('equal')
     plt.axis('off')
@@ -297,13 +302,14 @@ def save_or_show_plot(args: argparse.Namespace, filename: str) -> None:
         img_dir.mkdir(parents=True, exist_ok=True)
         img_filepath = img_dir / f"{args.source.stem}_{filename}_ID-{args.id}.pdf"
         plt.savefig(str(img_filepath), bbox_inches='tight', pad_inches=0, transparent=False)
-        print(f"Plot saved to '{img_filepath}'")
+        logger.info(f"Plot saved to '{img_filepath}'")
     if args.show:
         plt.show()
     plt.close()
 
 
-def get_cli_arguments() -> argparse.Namespace:
+def parse_cli_args() -> argparse.Namespace:
+    """Parse command-line arguments."""
     parser = argparse.ArgumentParser(
         description="Visualize the azimuth-based vehicle dimension estimation algorithm step-by-step."
     )
@@ -323,11 +329,27 @@ def get_cli_arguments() -> argparse.Namespace:
         '--save', '-s', action='store_true',
         help="Save plots as PDF files to <video_dir>/results/plots/."
     )
+    parser.add_argument(
+        '--log-path', '-lp', type=Path, default=None,
+        help="Where to write logs: a directory or a full file path; defaults to a platform-specific log directory."
+    )
+    parser.add_argument(
+        '--quiet', '-q', action='store_true',
+        help="Reduce console verbosity to important messages only (default: show INFO-level detail)."
+    )
     return parser.parse_args()
 
 
-if __name__ == '__main__':
-    args = get_cli_arguments()
+def main() -> None:
+    """Command-line entry point."""
+    args = parse_cli_args()
+    logger = setup_logger(Path(__file__).stem, verbose=not args.quiet, log_path=args.log_path)
+
     if not args.show and not args.save:
-        print("Warning: neither --show nor --save specified. Plots will not be displayed or saved.")
-    visualize_dimension_estimation(args)
+        logger.warning("Neither --show nor --save specified. Plots will not be displayed or saved.")
+
+    visualize_dimension_estimation(args, logger)
+
+
+if __name__ == '__main__':
+    main()

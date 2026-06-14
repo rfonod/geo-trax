@@ -18,19 +18,16 @@ Usage:
   python tools/compute_bb_center_error.py <source> [options]
 
 Arguments:
-  source : str
-           Path to directory containing images to be analyzed.
+  source : Path to directory containing images to be analyzed.
 
 Options:
-  -h, --help            : Show this help message and exit.
-  -ha, --human-annotations <path> : str, optional
-                        Relative path to human annotations directory (default: '../labels').
-  -pa, --predicted-annotations <path> : str, optional
-                        Relative path to predicted annotations directory (default: '../pre-labels').
-  -s, --save            : bool, optional
-                        Save error distribution plots as figures (default: False).
-  -ca, --class-agnostic : bool, optional
-                        Compute class-agnostic statistics instead of per-class breakdown (default: False).
+  -h, --help                          : Show this help message and exit.
+  -ha, --human-annotations <path>     : Relative path to human annotations directory (default: '../labels').
+  -pa, --predicted-annotations <path> : Relative path to predicted annotations directory (default: '../pre-labels').
+  -s, --save                          : Save error distribution plots as figures (default: False).
+  -ca, --class-agnostic               : Compute class-agnostic statistics instead of per-class breakdown (default: False).
+  -lp, --log-path <str>               : Where to write logs: a directory or a full file path; defaults to a platform-specific log directory.
+  -q, --quiet                         : Reduce console verbosity to important messages only (default: show INFO-level detail).
 
 Examples:
 1. Basic analysis with default annotation paths:
@@ -86,6 +83,7 @@ Notes:
 """
 
 import argparse
+import logging
 from collections import defaultdict
 from pathlib import Path
 
@@ -94,16 +92,19 @@ import matplotlib.pyplot as plt
 import numpy as np
 import tqdm
 
+from geotrax.utils.logging_utils import setup_logger
 
-def compute_bb_center_error(args):
+
+def compute_bb_center_error(args: argparse.Namespace, logger: logging.Logger) -> None:
+    """Compute bounding-box center error statistics between human and predicted annotations."""
     human_annotation_path = args.source / args.human_annotations
     predicted_annotation_path = args.source / args.predicted_annotations
 
     if not human_annotation_path.is_dir():
-        print(f"Error: {human_annotation_path} is not a valid directory.")
+        logger.error(f"{human_annotation_path} is not a valid directory.")
         return
     if not predicted_annotation_path.is_dir():
-        print(f"Error: {predicted_annotation_path} is not a valid directory.")
+        logger.error(f"{predicted_annotation_path} is not a valid directory.")
         return
 
     images = list(args.source.glob("*.jpg"))
@@ -116,13 +117,13 @@ def compute_bb_center_error(args):
             image = cv2.imread(str(image))
             image_height, image_width = image.shape[:2]
 
-            human_annotations = load_annotations(image_id, human_annotation_path)
-            predicted_annotations = load_annotations(image_id, predicted_annotation_path)
+            human_annotations = load_annotations(image_id, human_annotation_path, logger)
+            predicted_annotations = load_annotations(image_id, predicted_annotation_path, logger)
             image_errors = compute_error(human_annotations, predicted_annotations, image_width, image_height)
             errors.extend(image_errors)
 
         errors = np.array(errors)
-        report_results(errors, args)
+        report_results(errors, logger)
         plot_error_distribution(errors, args.source, args.save)
     else:
         # Per-class mode - dictionary of errors by class ID
@@ -132,8 +133,8 @@ def compute_bb_center_error(args):
             image = cv2.imread(str(image))
             image_height, image_width = image.shape[:2]
 
-            human_annotations = load_annotations(image_id, human_annotation_path)
-            predicted_annotations = load_annotations(image_id, predicted_annotation_path)
+            human_annotations = load_annotations(image_id, human_annotation_path, logger)
+            predicted_annotations = load_annotations(image_id, predicted_annotation_path, logger)
             image_errors_by_class = compute_error_by_class(human_annotations, predicted_annotations, image_width, image_height)
 
             # Aggregate errors by class ID
@@ -145,14 +146,14 @@ def compute_bb_center_error(args):
             errors_by_class[class_id] = np.array(errors_by_class[class_id])
 
         # Report and plot per-class results
-        report_results_by_class(errors_by_class, args)
+        report_results_by_class(errors_by_class, logger)
         plot_error_distribution_by_class(errors_by_class, args.source, args.save)
 
 
-def load_annotations(image_id, annotation_path):
+def load_annotations(image_id, annotation_path, logger):
     annotation_file = annotation_path / f"{image_id}.txt"
     if not annotation_file.exists():
-        print(f"\033[93mError: {annotation_file} does not exist.\033[0m")
+        logger.warning(f"{annotation_file} does not exist.")
         return None
     with open(annotation_file, "r") as f:
         lines = f.readlines()
@@ -229,25 +230,30 @@ def compute_error_by_class(human_annotations, predicted_annotations, image_width
     return errors_by_class
 
 
-def report_results(errors, args):
+def report_results(errors, logger):
     mean_error = np.nanmean(errors)
     median_error = np.nanmedian(errors)
     std_error = np.nanstd(errors)
     nan_count = np.sum(np.isnan(errors))
-    print("\nClass-agnostic error statistics:")
-    print(f"Mean error: {mean_error:.2f}")
-    print(f"Median error: {median_error:.2f}")
-    print(f"Standard deviation: {std_error:.2f}")
-    print(f"Number of valid errors: {len(errors) - nan_count}")
-    print(f"Number of NaN errors: {nan_count}")
+    logger.notice(
+        "Class-agnostic error statistics:\n"
+        f"Mean error: {mean_error:.2f}\n"
+        f"Median error: {median_error:.2f}\n"
+        f"Standard deviation: {std_error:.2f}\n"
+        f"Number of valid errors: {len(errors) - nan_count}\n"
+        f"Number of NaN errors: {nan_count}"
+    )
 
 
-def report_results_by_class(errors_by_class, args):
+def report_results_by_class(errors_by_class, logger):
     """Report error statistics broken down by class ID."""
-    print("\nClass-specific error statistics:")
-    print("-" * 80)
-    print(f"{'Class ID':^10} | {'Mean':^10} | {'Median':^10} | {'Std Dev':^10} | {'Valid Errors':^15} | {'NaN Errors':^10}")
-    print("-" * 80)
+    sep = "-" * 80
+    lines = [
+        "Class-specific error statistics:",
+        sep,
+        f"{'Class ID':^10} | {'Mean':^10} | {'Median':^10} | {'Std Dev':^10} | {'Valid Errors':^15} | {'NaN Errors':^10}",
+        sep,
+    ]
 
     # Sort class IDs for consistent reporting
     for class_id in sorted(errors_by_class.keys()):
@@ -256,10 +262,9 @@ def report_results_by_class(errors_by_class, args):
         median_error = np.nanmedian(errors)
         std_error = np.nanstd(errors)
         nan_count = np.sum(np.isnan(errors))
+        lines.append(f"{class_id:^10} | {mean_error:^10.2f} | {median_error:^10.2f} | {std_error:^10.2f} | {len(errors) - nan_count:^15} | {nan_count:^10}")
 
-        print(f"{class_id:^10} | {mean_error:^10.2f} | {median_error:^10.2f} | {std_error:^10.2f} | {len(errors) - nan_count:^15} | {nan_count:^10}")
-
-    print("-" * 80)
+    lines.append(sep)
 
     # Calculate and report overall statistics
     all_errors = np.concatenate(list(errors_by_class.values()))
@@ -268,8 +273,9 @@ def report_results_by_class(errors_by_class, args):
     std_error = np.nanstd(all_errors)
     nan_count = np.sum(np.isnan(all_errors))
 
-    print(f"{'All':^10} | {mean_error:^10.2f} | {median_error:^10.2f} | {std_error:^10.2f} | {len(all_errors) - nan_count:^15} | {nan_count:^10}")
-    print("-" * 80)
+    lines.append(f"{'All':^10} | {mean_error:^10.2f} | {median_error:^10.2f} | {std_error:^10.2f} | {len(all_errors) - nan_count:^15} | {nan_count:^10}")
+    lines.append(sep)
+    logger.notice("\n".join(lines))
 
 
 def plot_error_distribution(errors, source, save=False):
@@ -464,16 +470,26 @@ def plot_single_distribution(ax, errors, title_prefix):
     ax.legend(loc='upper right', frameon=True, fancybox=True, framealpha=0.9, fontsize=10)
 
 
-def get_cli_arguments():
+def parse_cli_args() -> argparse.Namespace:
+    """Parse command-line arguments."""
     parser = argparse.ArgumentParser(description='Compute bounding box center error statistics.')
     parser.add_argument('source', type=Path, help='Path to the images to be analyzed')
     parser.add_argument('--human-annotations', '-ha', type=Path, default="../labels", help='Relative path to the human annotations with respect to the source')
     parser.add_argument('--predicted-annotations', '-pa', type=Path, default="../pre-labels", help='Relative path to the predicted annotations with respect to the source')
     parser.add_argument('--save', '-s', action='store_true', help='Save the error distribution as a figure')
     parser.add_argument('--class-agnostic', '-ca', action='store_true', help='Compute class-agnostic statistics instead of per-class breakdown')
+    parser.add_argument('--log-path', '-lp', type=Path, default=None, help='Where to write logs: a directory or a full file path; defaults to a platform-specific log directory.')
+    parser.add_argument('--quiet', '-q', action='store_true', help='Reduce console verbosity to important messages only (default: show INFO-level detail).')
     return parser.parse_args()
 
 
+def main() -> None:
+    """Command-line entry point."""
+    args = parse_cli_args()
+    logger = setup_logger(Path(__file__).stem, verbose=not args.quiet, log_path=args.log_path)
+
+    compute_bb_center_error(args, logger)
+
+
 if __name__ == '__main__':
-    args = get_cli_arguments()
-    compute_bb_center_error(args)
+    main()

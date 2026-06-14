@@ -41,6 +41,8 @@ Options:
     -hl, --hide-labels                  : Hide class labels on visualizations.
     -w, --line-width <int>              : Line thickness for bounding boxes in visualizations
                                           (default: auto-scaled).
+    -lp, --log-path <str>               : Where to write logs: a directory or a full file path; defaults to a platform-specific log directory.
+    -q, --quiet                         : Reduce console verbosity to important messages only (default: show INFO-level detail).
 
 Examples:
   1. Generate annotations for images in a directory:
@@ -81,8 +83,7 @@ from ultralytics import YOLO
 from ultralytics.utils.checks import check_yolo
 
 from geotrax.utils.config_utils import load_config
-
-LOGGER_PREFIX = f'[{Path(__file__).name}]'
+from geotrax.utils.logging_utils import setup_logger
 
 
 def parse_class_conf(pairs: List[str]) -> Dict[int, float]:
@@ -99,15 +100,12 @@ def parse_class_conf(pairs: List[str]) -> Dict[int, float]:
     return class_conf
 
 
-def run_annotator(args, logger=None) -> None:
+def run_annotator(args: argparse.Namespace, logger: logging.Logger) -> None:
     """Run the annotator."""
-    if logger is None:
-        logger = logging.getLogger(__name__)
-
     if args.cfg:
         config = load_config(args.cfg, logger)
     else:
-        logger.error(f"{LOGGER_PREFIX} Error loading the configuration.")
+        logger.error("Error loading the configuration.")
         return
 
     # Apply CLI overrides to config
@@ -137,7 +135,7 @@ def run_annotator(args, logger=None) -> None:
 
     det_results = model(args.source, **config, stream=True)
 
-    logger.info(f"{LOGGER_PREFIX} Annotating images in '{args.source}'...")
+    logger.info(f"Annotating images in '{args.source}'...")
     for result in det_results:
         all_class_ids = result.boxes.cls.int().tolist()  # noqa
         if not all_class_ids:
@@ -192,11 +190,11 @@ def run_annotator(args, logger=None) -> None:
                 cv2.rectangle(img, (x, y), (x + w, y + h), (0, 0, 0), -1)
             cv2.imwrite(str(masked_dir / Path(result.path).name), img)
 
-    logger.info(f"{LOGGER_PREFIX} Annotations saved to '{output_dir}'.")
+    logger.notice(f"Annotations saved to '{output_dir}'.")
     if args.save_viz:
-        logger.info(f"{LOGGER_PREFIX} Visualizations saved to '{viz_dir}'.")
+        logger.notice(f"Visualizations saved to '{viz_dir}'.")
     if args.save_masked:
-        logger.info(f"{LOGGER_PREFIX} Masked images saved to '{masked_dir}'.")
+        logger.notice(f"Masked images saved to '{masked_dir}'.")
 
 
 def load_detector(config: Dict, logger: logging.Logger) -> YOLO:
@@ -204,17 +202,18 @@ def load_detector(config: Dict, logger: logging.Logger) -> YOLO:
     try:
         model = YOLO(model=config['model'], task=config['task'])
     except Exception as e:
-        logger.error(f"{LOGGER_PREFIX} Error loading detection model: {e}")
+        logger.error(f"Error loading detection model: {e}")
         return
     else:
-        logger.info(f"{LOGGER_PREFIX} Detection model '{config['model']}' loaded successfully.")
+        logger.info(f"Detection model '{config['model']}' loaded successfully.")
 
     check_yolo(device=config['device'])
 
     return model
 
 
-def get_cli_arguments():
+def parse_cli_args() -> argparse.Namespace:
+    """Parse command-line arguments."""
     parser = argparse.ArgumentParser(description='Annotate images with vehicle bounding boxes using a YOLOv8 model.')
 
     # Required
@@ -258,9 +257,22 @@ def get_cli_arguments():
     parser.add_argument('--line-width', '-w', type=int, default=None,
                         help='Line thickness for bounding boxes in visualizations (default: auto-scaled)')
 
+    # Logging
+    parser.add_argument('--log-path', '-lp', type=Path, default=None,
+                        help='Where to write logs: a directory or a full file path; defaults to a platform-specific log directory.')
+    parser.add_argument('--quiet', '-q', action='store_true',
+                        help='Reduce console verbosity to important messages only (default: show INFO-level detail).')
+
     return parser.parse_args()
 
 
+def main() -> None:
+    """Command-line entry point."""
+    args = parse_cli_args()
+    logger = setup_logger(Path(__file__).stem, verbose=not args.quiet, log_path=args.log_path)
+
+    run_annotator(args, logger)
+
+
 if __name__ == '__main__':
-    args = get_cli_arguments()
-    run_annotator(args)
+    main()

@@ -17,23 +17,18 @@ Usage:
   python tools/ortho_matching_benchmark.py <data> [options]
 
 Arguments:
-  data : str
-         Path to benchmark data folder containing images, orthos, and ground truth labels.
+  data : Path to benchmark data folder containing images, orthos, and ground truth labels.
 
 Options:
-  -h, --help            : Show this help message and exit.
-  -sb, --skip-benchmark : bool, optional
-                        Skip benchmark execution and only visualize ground truths (default: False).
-  -o, --overwrite       : bool, optional
-                        Overwrite existing results.txt file and visualizations (default: False).
-  -v, --visualize       : bool, optional
-                        Visualize ground truths for input data (default: False).
-  -mr, --min-resolution <int> : int, optional
-                        Minimum orthophoto resolution to consider (default: 2000).
-  -xr, --max-resolution <int> : int, optional
-                        Maximum orthophoto resolution to consider (default: 15000).
-  -rs, --resolution-step <int> : int, optional
-                        Step size for orthophoto resolution (default: 1000).
+  -h, --help                   : Show this help message and exit.
+  -sb, --skip-benchmark        : Skip benchmark execution and only visualize ground truths (default: False).
+  -o, --overwrite              : Overwrite existing results.txt file and visualizations (default: False).
+  -v, --visualize              : Visualize ground truths for input data (default: False).
+  -mr, --min-resolution <int>  : Minimum orthophoto resolution to consider (default: 2000).
+  -xr, --max-resolution <int>  : Maximum orthophoto resolution to consider (default: 15000).
+  -rs, --resolution-step <int> : Step size for orthophoto resolution (default: 1000).
+  -lp, --log-path <str>        : Where to write logs: a directory or a full file path; defaults to a platform-specific log directory.
+  -q, --quiet                  : Reduce console verbosity to important messages only (default: show INFO-level detail).
 
 Examples:
 1. Run benchmark and visualize ground truths:
@@ -82,6 +77,7 @@ Notes:
 """
 
 import argparse
+import logging
 import time
 from pathlib import Path
 
@@ -89,10 +85,12 @@ import cv2
 import numpy as np
 import pandas as pd
 
+from geotrax.utils.logging_utils import setup_logger
 
-def main(args: argparse.Namespace) -> None:
+
+def run_benchmark(args: argparse.Namespace, logger: logging.Logger) -> None:
     """
-    Main function to run the orthophoto matching benchmark.
+    Run the orthophoto matching benchmark and/or ground-truth visualizations.
     """
 
     images_dir = args.data / 'images'
@@ -101,12 +99,12 @@ def main(args: argparse.Namespace) -> None:
     visual_dir = args.data / 'visualizations'
 
     if not args.skip_benchmark:
-        execute_ortho_benchmark(images_dir, orthos_dir, labels_dir, args)
+        execute_ortho_benchmark(images_dir, orthos_dir, labels_dir, args, logger)
     if args.visualize:
-        generate_and_save_visualizations(images_dir, orthos_dir, labels_dir, visual_dir, args)
+        generate_and_save_visualizations(images_dir, orthos_dir, labels_dir, visual_dir, args, logger)
 
 
-def execute_ortho_benchmark(images_dir, orthos_dir, labels_dir, args):
+def execute_ortho_benchmark(images_dir, orthos_dir, labels_dir, args, logger):
     """
     Run the orthophoto matching benchmark.
     """
@@ -117,7 +115,7 @@ def execute_ortho_benchmark(images_dir, orthos_dir, labels_dir, args):
     results_all = {}
     for ortho_filepath in orthos_filepaths:
         location_id = ortho_filepath.stem
-        print(f"Processing location_ID: {location_id}")
+        logger.info(f"Processing location_ID: {location_id}")
 
         ortho_labels = pd.read_csv(labels_dir / f"{location_id}.csv")
         ortho = cv2.imread(str(ortho_filepath))
@@ -127,7 +125,7 @@ def execute_ortho_benchmark(images_dir, orthos_dir, labels_dir, args):
         ortho_w_resolutions = range(args.min_resolution, args.max_resolution + 1, args.resolution_step)
         for ortho_w_new in ortho_w_resolutions:
             if ortho_w_new > ortho_w_original:
-                print(f"\033[93mOrthophoto width {ortho_w_new} is larger than the original width {ortho_w_original}. Skipping.\033[0m")
+                logger.warning(f"Orthophoto width {ortho_w_new} is larger than the original width {ortho_w_original}. Skipping.")
                 continue
 
             ortho_labels_resized = ortho_labels.copy()
@@ -148,7 +146,7 @@ def execute_ortho_benchmark(images_dir, orthos_dir, labels_dir, args):
                 image_labels = pd.read_csv(labels_dir / (image_filepath.stem + '.csv'))
 
                 start_time = time.time()
-                H, inliers = compute_homography(image, ortho_resized)
+                H, inliers = compute_homography(image, ortho_resized, logger)
                 comp_times_list.append(time.time() - start_time)
                 inliers_list.append(inliers.sum())
 
@@ -159,8 +157,12 @@ def execute_ortho_benchmark(images_dir, orthos_dir, labels_dir, args):
                     pixel_error = np.sqrt((image_x - image_x_label) ** 2 + (image_y - image_y_label) ** 2)
                     pixel_error_image_list.append(pixel_error)
 
-                print(f"{ortho_filepath.stem}({ortho_w_new})/{image_filepath.stem}:", f"{np.mean(pixel_error_image_list):.3f}±{np.std(pixel_error_image_list):.3f},",
-                      f"Inliers/total: {inliers.sum():3}/{len(inliers):<4} |", ' '.join(f'{i+1})={pixel_error:.2f}' for i, pixel_error in enumerate(pixel_error_image_list)))
+                logger.info(
+                    f"{ortho_filepath.stem}({ortho_w_new})/{image_filepath.stem}: "
+                    f"{np.mean(pixel_error_image_list):.3f}±{np.std(pixel_error_image_list):.3f}, "
+                    f"Inliers/total: {inliers.sum():3}/{len(inliers):<4} | "
+                    + ' '.join(f'{i+1})={pixel_error:.2f}' for i, pixel_error in enumerate(pixel_error_image_list))
+                )
                 pixel_error_list.extend(pixel_error_image_list)
 
             results_location_id[ortho_w_new] = {
@@ -188,7 +190,7 @@ def execute_ortho_benchmark(images_dir, orthos_dir, labels_dir, args):
             inliers.extend(results_location_id[ortho_w_new]['Inliers'])
         formatted_resolution = format_with_apostrophe(ortho_w_new)
         to_latex.append(f"{formatted_resolution:<6} & {np.mean(comp_times):>6.3f} & {np.mean(errors):>6.3f} $\pm$ {np.std(errors):.3f} & {np.mean(inliers)} & {np.min(inliers)} \\\\")
-    print('\n'.join(to_latex))
+    logger.notice("\n%s", '\n'.join(to_latex))
 
     results_filepath = args.data / 'results.txt'
     if args.overwrite or not results_filepath.exists():
@@ -200,7 +202,7 @@ def format_with_apostrophe(number):
     return f"{number:,}".replace(",", "'")
 
 
-def compute_homography(img_src: np.ndarray, img_dst: np.ndarray, max_features: int = 250000,
+def compute_homography(img_src: np.ndarray, img_dst: np.ndarray, logger: logging.Logger, max_features: int = 250000,
                        filter_ratio: float = 0.55, ransac_epipolar_threshold: float = 3.0,
                        ransac_confidence: float = 0.999999, ransac_max_iters: int = 10000) -> tuple:
     """
@@ -256,13 +258,13 @@ def compute_homography(img_src: np.ndarray, img_dst: np.ndarray, max_features: i
         if homography is not None:
             return homography, inliers
         max_features_to_try //= 2
-        print(f"\033[93mSIFT detection or matching failed with {max_features_to_try*2} max_features. Trying with {max_features_to_try} max_features.\033[0m")
+        logger.warning(f"SIFT detection or matching failed with {max_features_to_try*2} max_features. Trying with {max_features_to_try} max_features.")
 
-    print("SIFT detection failed with all attempted feature counts.")
+    logger.error("SIFT detection failed with all attempted feature counts.")
     return None, None
 
 
-def generate_and_save_visualizations(images_dir: Path, orthos_dir: Path, labels_dir: Path, visual_dir: Path, args: argparse.Namespace) -> None:
+def generate_and_save_visualizations(images_dir: Path, orthos_dir: Path, labels_dir: Path, visual_dir: Path, args: argparse.Namespace, logger: logging.Logger) -> None:
     """
     Generate and save visualizations for the ground truths.
     """
@@ -274,7 +276,7 @@ def generate_and_save_visualizations(images_dir: Path, orthos_dir: Path, labels_
         for filepath in filepaths:
             save_filename = filepath.stem
             if not (visual_dir / f'{save_filename}.png').exists() or overwrite:
-                print(f'Saving visualization for {filepath}')
+                logger.info(f'Saving visualization for {filepath}')
                 labels = pd.read_csv(labels_dir / f'{save_filename}.csv')
                 image = cv2.imread(str(filepath))
                 image_paper = cv2.addWeighted(image, 0.4, 255 * np.ones_like(image), 0.6, 0)
@@ -318,7 +320,7 @@ def render_image_labels(image: np.ndarray, labels: pd.DataFrame) -> np.ndarray:
     return image
 
 
-def get_cli_arguments() -> argparse.Namespace:
+def parse_cli_args() -> argparse.Namespace:
     """
     Parse the command line arguments.
     """
@@ -330,10 +332,22 @@ def get_cli_arguments() -> argparse.Namespace:
     parser.add_argument('--min-resolution', '-mr', type=int, default=2000, help='Minimum orthophoto resolution to consider')
     parser.add_argument('--max-resolution', '-xr', type=int, default=15000, help='Maximum orthophoto resolution to consider')
     parser.add_argument('--resolution-step', '-rs', type=int, default=1000, help='Step size for the orthophoto resolution')
+    parser.add_argument('--log-path', '-lp', type=Path, default=None, help='Where to write logs: a directory or a full file path; defaults to a platform-specific log directory.')
+    parser.add_argument('--quiet', '-q', action='store_true', help='Reduce console verbosity to important messages only (default: show INFO-level detail).')
     return parser.parse_args()
 
 
+def main() -> None:
+    """
+    Command-line entry point.
+    """
+    args = parse_cli_args()
+    logger = setup_logger(Path(__file__).stem, verbose=not args.quiet, log_path=args.log_path)
+
+    run_benchmark(args, logger)
+
+
 if __name__ == "__main__":
-    main(get_cli_arguments())
+    main()
 
 

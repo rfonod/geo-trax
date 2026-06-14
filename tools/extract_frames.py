@@ -14,7 +14,7 @@ certain directories from processing. Output files are named with a structured co
 the source path and frame number.
 
 Usage:
-  python extract_frames.py <input> <output> [options]
+  python tools/extract_frames.py <input> <output> [options]
 
 Arguments:
   input  : Path to the input directory or specific video file.
@@ -26,6 +26,8 @@ Options:
   -s, --step <int>       : Step size in frames for fixed-step frame extraction (default: 1000).
   -r, --random           : Randomly extract frames instead of fixed-step extraction (default: False).
   -d, --dry-run          : Dry run mode, do not save frames (default: False).
+  -lp, --log-path <str>  : Where to write logs: a directory or a full file path; defaults to a platform-specific log directory.
+  -q, --quiet            : Reduce console verbosity to important messages only (default: show INFO-level detail).
 
 Extraction Methods (mutually exclusive):
   --step    : Extract frames at regular intervals (every N frames)
@@ -33,16 +35,16 @@ Extraction Methods (mutually exclusive):
 
 Examples:
 1. Extract 10 frames at regular intervals from a single video:
-   python extract_frames.py video.mp4 output_dir/
+   python tools/extract_frames.py video.mp4 output_dir/
 
 2. Extract 20 frames randomly from all videos in a directory:
-   python extract_frames.py video_dir/ output_dir/ --num-frames 20 --random
+   python tools/extract_frames.py video_dir/ output_dir/ --num-frames 20 --random
 
 3. Extract frames every 500 frames without saving (dry run):
-   python extract_frames.py video.mp4 output_dir/ --step 500 --dry-run
+   python tools/extract_frames.py video.mp4 output_dir/ --step 500 --dry-run
 
 4. Extract 50 random frames from videos in a directory:
-   python extract_frames.py /path/to/videos/ /path/to/output/ -n 50 -r
+   python tools/extract_frames.py /path/to/videos/ /path/to/output/ -n 50 -r
 
 Input:
 - Video files in supported formats: .mp4, .mov, .avi
@@ -63,12 +65,15 @@ Notes:
 """
 
 import argparse
+import logging
 import random
 import re
 from pathlib import Path
 
 import cv2
 from tqdm import tqdm
+
+from geotrax.utils.logging_utils import setup_logger
 
 VIDEO_FORMATS = {'.mp4', '.mov', '.avi'}
 IGNORE_START_FRAMES = 100 # 100 for HBB, 0 for OBB
@@ -77,14 +82,16 @@ DELIMITERS = r'[\s\[\],]'
 DIR_SKIP = 3
 EXCLUDED_DIRS = {'track', 'results'}
 
-def process_input(args: argparse.Namespace) -> None:
+
+def process_input(args: argparse.Namespace, logger: logging.Logger) -> None:
+    """Extract frames from each video resolved from the input path."""
     video_files = get_video_files(args.input)
     if not video_files:
-        print(f"No valid video files found at '{args.input}'.")
+        logger.error(f"No valid video files found at '{args.input}'.")
         return
 
     for video_file in video_files:
-        extract_frames(video_file, args.output, args.num_frames, args.step, args.random, args.dry_run)
+        extract_frames(video_file, args.output, args.num_frames, args.step, args.random, args.dry_run, logger)
 
 def get_video_files(input_path: Path) -> list:
     """Get a list of video files in the specified directory or the file itself if it is a video."""
@@ -95,11 +102,11 @@ def get_video_files(input_path: Path) -> list:
     else:
         return []
 
-def extract_frames(video_file: Path, output_dir: Path, num_frames: int, step: int, randomize: bool, dry_run: bool):
+def extract_frames(video_file: Path, output_dir: Path, num_frames: int, step: int, randomize: bool, dry_run: bool, logger: logging.Logger) -> None:
     """Extract frames from the specified video file."""
     cap = cv2.VideoCapture(str(video_file))
     if not cap.isOpened():
-        print(f"Error: Could not open video file '{video_file}'.")
+        logger.error(f"Could not open video file '{video_file}'.")
         return
 
     try:
@@ -111,7 +118,7 @@ def extract_frames(video_file: Path, output_dir: Path, num_frames: int, step: in
         else:
             frames_to_extract = valid_frames[::step][:num_frames]
 
-        print(f"Processing video '{video_file.stem}' with {total_frames} frames.")
+        logger.info(f"Processing video '{video_file.stem}' with {total_frames} frames.")
 
         for frame_num in tqdm(sorted(frames_to_extract), desc=f"Extracting frames from '{video_file.stem}'"):
             cap.set(cv2.CAP_PROP_POS_FRAMES, frame_num)
@@ -125,13 +132,13 @@ def extract_frames(video_file: Path, output_dir: Path, num_frames: int, step: in
             if not dry_run:
                 output_dir.mkdir(parents=True, exist_ok=True)
                 cv2.imwrite(str(frame_path), frame)
-            print(f"Saved frame to '{frame_path}'.")
+            logger.info(f"Saved frame to '{frame_path}'.")
 
     finally:
         cap.release()
 
 
-def get_cli_args() -> argparse.Namespace:
+def parse_cli_args() -> argparse.Namespace:
     """Parse command-line arguments for the frame extraction tool."""
     parser = argparse.ArgumentParser(description="Extract frames from video files.")
     parser.add_argument("input", type=Path, help="Path to the input directory or specific video file.")
@@ -141,11 +148,20 @@ def get_cli_args() -> argparse.Namespace:
     group.add_argument("--step", "-s", type=int, default=1000, help="Step size in frames for fixed-step frame extraction.")
     group.add_argument("--random", "-r", action="store_true", help="Randomly extract frames.")
     parser.add_argument("--dry-run", "-d", action="store_true", help="Dry run, do not save frames.")
+    parser.add_argument("--log-path", "-lp", type=Path, default=None, help="Where to write logs: a directory or a full file path; defaults to a platform-specific log directory.")
+    parser.add_argument("--quiet", "-q", action="store_true", help="Reduce console verbosity to important messages only (default: show INFO-level detail).")
     return parser.parse_args()
 
 
+def main() -> None:
+    """Command-line entry point."""
+    args = parse_cli_args()
+    logger = setup_logger(Path(__file__).stem, verbose=not args.quiet, log_path=args.log_path)
+
+    process_input(args, logger)
+
+
 if __name__ == "__main__":
-    args = get_cli_args()
-    process_input(args)
+    main()
 
 

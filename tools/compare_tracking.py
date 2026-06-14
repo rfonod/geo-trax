@@ -3,6 +3,8 @@
 # Author: Robert Fonod (robert.fonod@ieee.org)
 
 """
+compare_tracking.py - Tracking Algorithm Comparison Tool
+
 Compare tracking results across two or more vehicle tracking algorithms.
 
 This script analyzes and compares the performance of any number of tracking algorithms
@@ -21,11 +23,14 @@ Arguments:
     INPUT                    Path to folder containing video files and per-tracker results
 
 Options:
-    --trackers NAME ...      Tracker names to compare (default: the six geo-trax trackers).
-                             Each name must have a matching `results_<name>/` subfolder;
-                             names without one are skipped. At least two must remain.
-    --show                   Display the generated plots interactively
-    --save                   Save plots to 'plots/' subdirectory as PNG files
+    -h, --help               : Show this help message and exit.
+    --trackers NAME ...      : Tracker names to compare (default: the six geo-trax trackers).
+                               Each name must have a matching `results_<name>/` subfolder;
+                               names without one are skipped. At least two must remain.
+    --show                   : Display the generated plots interactively.
+    --save                   : Save plots to 'plots/' subdirectory as PNG files.
+    -lp, --log-path <str>    : Where to write logs: a directory or a full file path; defaults to a platform-specific log directory.
+    -q, --quiet              : Reduce console verbosity to important messages only (default: show INFO-level detail).
 
 Input Format:
     For each tracker NAME, results live in a sibling folder of the input videos:
@@ -48,6 +53,7 @@ Notes:
 
 import argparse
 import itertools
+import logging
 import sys
 from pathlib import Path
 
@@ -59,6 +65,7 @@ from matplotlib.ticker import FuncFormatter
 from scipy import stats
 
 from geotrax.utils.file_utils import detect_delimiter
+from geotrax.utils.logging_utils import setup_logger
 
 # Trackers geo-trax ships with, in display order. Used as the default comparison set.
 TRACKER_DISPLAY_NAMES = {
@@ -93,7 +100,7 @@ def color_for(tracker: str, index: int) -> str:
     return TRACKER_COLORS.get(tracker, FALLBACK_COLORS[index % len(FALLBACK_COLORS)])
 
 
-def compare_tracks(args):
+def compare_tracks(args: argparse.Namespace, logger: logging.Logger) -> None:
     """
     Compare tracking results across the selected trackers.
     """
@@ -103,11 +110,12 @@ def compare_tracks(args):
         if (args.input / f"results_{tracker}").is_dir():
             trackers.append(tracker)
         else:
-            print(f"Warning: no 'results_{tracker}/' folder found in {args.input}; skipping {display_name(tracker)}")
+            logger.warning(f"No 'results_{tracker}/' folder found in {args.input}; skipping {display_name(tracker)}")
     if len(trackers) < 2:
-        sys.exit("Need at least two trackers with available results to compare.")
+        logger.critical("Need at least two trackers with available results to compare.")
+        sys.exit(1)
 
-    print(f"Comparing trackers: {', '.join(display_name(t) for t in trackers)}\n")
+    logger.notice(f"Comparing trackers: {', '.join(display_name(t) for t in trackers)}")
 
     # Accumulate per-tracker trajectory lengths and missing-frame counts across all videos
     lengths = {tracker: [] for tracker in trackers}
@@ -121,10 +129,10 @@ def compare_tracks(args):
         result_paths = {t: args.input / f"results_{t}" / f"{video_file.stem}.txt" for t in trackers}
         absent = [display_name(t) for t, p in result_paths.items() if not p.exists()]
         if absent:
-            print(f"Skipping {video_file.stem}: missing results for {', '.join(absent)}")
+            logger.warning(f"Skipping {video_file.stem}: missing results for {', '.join(absent)}")
             continue
 
-        print(f"Comparing tracking results for video: {video_file.stem}")
+        logger.info(f"Comparing tracking results for video: {video_file.stem}")
         for tracker, path in result_paths.items():
             tracks = np.loadtxt(path, delimiter=detect_delimiter(path), dtype=np.float64, ndmin=2)
             if tracks.size == 0:
@@ -134,34 +142,36 @@ def compare_tracks(args):
 
     if any(len(v) == 0 for v in lengths.values()):
         empty = [display_name(t) for t, v in lengths.items() if len(v) == 0]
-        sys.exit(f"No usable tracking results found for: {', '.join(empty)}.")
+        logger.critical(f"No usable tracking results found for: {', '.join(empty)}.")
+        sys.exit(1)
 
-    print_metric_analysis("Trajectory Length Analysis", lengths, trackers)
-    print_metric_analysis("Missing Frames Analysis", missing, trackers)
+    print_metric_analysis("Trajectory Length Analysis", lengths, trackers, logger)
+    print_metric_analysis("Missing Frames Analysis", missing, trackers, logger)
 
     if args.show or args.save:
-        plot_trajectory_length_distributions(lengths, trackers, args)
+        plot_trajectory_length_distributions(lengths, trackers, args, logger)
 
 
-def print_metric_analysis(title, values_by_tracker, trackers):
+def print_metric_analysis(title, values_by_tracker, trackers, logger):
     """
-    Print per-tracker summary statistics and pairwise KL divergence for one metric.
+    Report per-tracker summary statistics and pairwise KL divergence for one metric.
     """
-    print(f"\n{title}:\n")
+    lines = [f"{title}:", ""]
     for tracker in trackers:
         values = values_by_tracker[tracker]
-        print(f"{display_name(tracker)}: count={len(values)}, mean={np.mean(values):.2f}, std={np.std(values):.2f}")
+        lines.append(f"{display_name(tracker)}: count={len(values)}, mean={np.mean(values):.2f}, std={np.std(values):.2f}")
 
-    print("\nPairwise KL divergence:")
+    lines.append("\nPairwise KL divergence:")
     for a, b in itertools.combinations(trackers, 2):
         kl_ab = compute_kl_divergence(values_by_tracker[a], values_by_tracker[b])
         kl_ba = compute_kl_divergence(values_by_tracker[b], values_by_tracker[a])
         kl_avg = (kl_ab + kl_ba) / 2
-        print(
+        lines.append(
             f"  {display_name(a)} ↔ {display_name(b)}: "
             f"{display_name(a)}→{display_name(b)}={kl_ab:.4f}, "
             f"{display_name(b)}→{display_name(a)}={kl_ba:.4f}, avg={kl_avg:.4f}"
         )
+    logger.notice("\n".join(lines))
 
 
 def find_missing_frames(tracks):
@@ -221,7 +231,7 @@ def compute_kl_divergence(p, q, epsilon=1e-10):
     return kl_divergence
 
 
-def plot_trajectory_length_distributions(lengths_by_tracker, trackers, args):
+def plot_trajectory_length_distributions(lengths_by_tracker, trackers, args, logger):
     """
     Plot the trajectory length distributions for the selected trackers with enhanced
     visualization techniques to highlight subtle differences between similar distributions.
@@ -364,10 +374,10 @@ def plot_trajectory_length_distributions(lengths_by_tracker, trackers, args):
         save_path = args.input / "plots" / "trajectory_length_distribution_comparison.png"
         save_path.parent.mkdir(parents=True, exist_ok=True)
         plt.savefig(save_path, dpi=300, bbox_inches='tight')
-        print(f"\nPlot saved to: {save_path}")
+        logger.notice(f"Plot saved to: {save_path}")
 
 
-def get_cli_arguments() -> argparse.Namespace:
+def parse_cli_args() -> argparse.Namespace:
     """
     Parse command-line arguments
     """
@@ -383,9 +393,20 @@ def get_cli_arguments() -> argparse.Namespace:
     )
     parser.add_argument("--show", action="store_true", help="Show the plot")
     parser.add_argument("--save", action="store_true", help="Save the plot")
+    parser.add_argument("--log-path", "-lp", type=Path, default=None, help="Where to write logs: a directory or a full file path; defaults to a platform-specific log directory.")
+    parser.add_argument("--quiet", "-q", action="store_true", help="Reduce console verbosity to important messages only (default: show INFO-level detail).")
     return parser.parse_args()
 
 
+def main() -> None:
+    """
+    Command-line entry point.
+    """
+    args = parse_cli_args()
+    logger = setup_logger(Path(__file__).stem, verbose=not args.quiet, log_path=args.log_path)
+
+    compare_tracks(args, logger)
+
+
 if __name__ == '__main__':
-    args = get_cli_arguments()
-    compare_tracks(args)
+    main()

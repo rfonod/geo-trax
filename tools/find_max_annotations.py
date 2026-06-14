@@ -17,15 +17,14 @@ Usage:
   python tools/find_max_annotations.py <source> [options]
 
 Arguments:
-  source : str
-           Path to directory containing annotations in YOLO format.
+  source : Path to directory containing annotations in YOLO format.
 
 Options:
-  -h, --help            : Show this help message and exit.
-  -N, -n <int>          : int, optional
-                        Number of top annotation files to find (default: 10).
-  -t, --type <int> [<int> ...] : list of int, optional
-                        Specific vehicle type IDs to count (default: all types).
+  -h, --help                   : Show this help message and exit.
+  --N, -n <int>                : Number of top annotation files to find (default: 10).
+  -t, --type <int> [<int> ...] : Specific vehicle class IDs to count (default: all types).
+  -lp, --log-path <str>        : Where to write logs: a directory or a full file path; defaults to a platform-specific log directory.
+  -q, --quiet                  : Reduce console verbosity to important messages only (default: show INFO-level detail).
 
 Examples:
 1. Find top 10 annotation files with most annotations:
@@ -55,13 +54,17 @@ Notes:
 """
 
 import argparse
+import logging
 from pathlib import Path
 
+from geotrax.utils.logging_utils import setup_logger
 
-def show_top_annotations(args):
+
+def show_top_annotations(args: argparse.Namespace, logger: logging.Logger) -> None:
+    """Find and report the top annotation files by annotation count."""
     top_N_annotations = find_max_annotations(args.source, args.N, args.type)
     for i, (annotation_file, count) in enumerate(top_N_annotations):
-        print(f'Annotation {i+1:<2} :: {annotation_file} ({count} annotations)')
+        logger.notice(f'Annotation {i+1:<2} :: {annotation_file} ({count} annotations)')
 
 
 def load_annotations(annotation_path):
@@ -93,15 +96,24 @@ def find_max_annotations(source, N, veh_type):
     return annotation_counts[:N]
 
 
-def get_cli_arguments():
+def parse_cli_args() -> argparse.Namespace:
     """Parse command-line arguments."""
     parser = argparse.ArgumentParser(description='Find the first N image annotations that contain the most vehicle annotations.')
     parser.add_argument('source', type=Path, help='Path to a directory containing the annotations in YOLO format')
     parser.add_argument('--N', '-n', type=int, default=10, help='Number of top image frames to find (default: 10)')
     parser.add_argument('--type', '-t', nargs="+", type=int, help='Type of vehicle to find (default: all)')
+    parser.add_argument('--log-path', '-lp', type=Path, default=None, help='Where to write logs: a directory or a full file path; defaults to a platform-specific log directory.')
+    parser.add_argument('--quiet', '-q', action='store_true', help='Reduce console verbosity to important messages only (default: show INFO-level detail).')
     return parser.parse_args()
 
 
+def main() -> None:
+    """Command-line entry point."""
+    args = parse_cli_args()
+    logger = setup_logger(Path(__file__).stem, verbose=not args.quiet, log_path=args.log_path)
+
+    show_top_annotations(args, logger)
+
+
 if __name__ == '__main__':
-    args = get_cli_arguments()
-    show_top_annotations(args)
+    main()

@@ -17,16 +17,14 @@ Usage:
   python tools/find_source_id.py <dataset_filepath> <vehicle_id> [options]
 
 Arguments:
-  dataset_filepath : str
-                     Path to aggregated dataset CSV file (e.g., 2022-10-04_A/2022-10-04_A_AM1.csv).
-  vehicle_id : int
-                     Vehicle ID from aggregated dataset to trace back.
+  dataset_filepath : Path to aggregated dataset CSV file (e.g., 2022-10-04_A/2022-10-04_A_AM1.csv).
+  vehicle_id       : Vehicle ID from the aggregated dataset to trace back.
 
 Options:
-  -h, --help            : Show this help message and exit.
-  -p, --processed-folder <path> : str, optional
-                        Custom path to PROCESSED directory. If not provided,
-                        automatically detected from dataset file location.
+  -h, --help                    : Show this help message and exit.
+  -p, --processed-folder <path> : Custom path to the PROCESSED directory. If not provided, auto-detected from the dataset file location.
+  -lp, --log-path <str>         : Where to write logs: a directory or a full file path; defaults to a platform-specific log directory.
+  -q, --quiet                   : Reduce console verbosity to important messages only (default: show INFO-level detail).
 
 Examples:
 1. Find source information for vehicle ID 5 from aggregated dataset:
@@ -60,30 +58,33 @@ Notes:
 """
 
 import argparse
+import logging
 import sys
 from pathlib import Path
 from typing import Union
 
 import pandas as pd
 
+from geotrax.utils.logging_utils import setup_logger
 
-def find_source_id(dataset_filepath: Path, vehicle_id: int,
-                   processed_folder: Union[Path, None] = None, verbose: bool = False) -> tuple:
+
+def find_source_id(dataset_filepath: Path, vehicle_id: int, logger: logging.Logger,
+                   processed_folder: Union[Path, None] = None) -> tuple:
     """
     Find the original vehicle ID extracted from the source video from the dataset ID.
     """
     if not dataset_filepath.exists():
-        print(f"Input folder '{dataset_filepath}' does not exist.")
+        logger.error(f"Input folder '{dataset_filepath}' does not exist.")
         return None, None
 
     # Get the PROCESSED folder
-    processed_folder = get_processed_folder(dataset_filepath, processed_folder)
+    processed_folder = get_processed_folder(dataset_filepath, processed_folder, logger)
 
     # Load the dataset and find the vehicle ID
     df = pd.read_csv(dataset_filepath, dtype={'Column14': str}, low_memory=False)
     vehicle_df = df[df['Vehicle_ID'] == vehicle_id]
     if vehicle_df.empty:
-        print(f"Vehicle ID {vehicle_id} not found in the dataset.")
+        logger.warning(f"Vehicle ID {vehicle_id} not found in the dataset.")
         return None, None
 
     # Get the drone ID
@@ -96,7 +97,7 @@ def find_source_id(dataset_filepath: Path, vehicle_id: int,
     # Find all relevant georeferenced results (.csv files) in the PROCESSED directory
     csv_files = list(processed_folder.rglob(search_space))
     if not csv_files:
-        print(f"No CSV files found in '{processed_folder}'.")
+        logger.warning(f"No CSV files found in '{processed_folder}'.")
         return None, None
 
     # Group files by date, flight session, and location id
@@ -106,7 +107,7 @@ def find_source_id(dataset_filepath: Path, vehicle_id: int,
             drone_id = source_results.parents[2].name
             files.append((source_results, drone_id))
         except Exception as e:
-            print(f"Skipping invalid file path: {source_results} ({str(e)})")
+            logger.warning(f"Skipping invalid file path: {source_results} ({str(e)})")
 
     # Sort values for each key based on drone ID and file name
     files = sorted(files, key=lambda x: (int(x[1][1:]), x[0]))
@@ -121,25 +122,26 @@ def find_source_id(dataset_filepath: Path, vehicle_id: int,
             if vehicle_id in df['Vehicle_ID'].values:
                 source_id = vehicle_id - vehicle_id_offset
                 source_video = source_results.parents[1] / (source_results.stem + '.MP4')
-                if verbose:
-                    print(f"Date     : {date}")
-                    print(f"Drone ID : {drone_id}")
-                    print(f"Session  : {flight_session}")
-                    print(f"Video ID : {source_results.stem}")
-                    print(f"Vehicle ID (dataset) : {vehicle_id}")
-                    print(f"Vehicle ID (video)   : {source_id}")
-                    print(source_video)
-                    print(source_results)
+                logger.notice(
+                    f"Date     : {date}\n"
+                    f"Drone ID : {drone_id}\n"
+                    f"Session  : {flight_session}\n"
+                    f"Video ID : {source_results.stem}\n"
+                    f"Vehicle ID (dataset) : {vehicle_id}\n"
+                    f"Vehicle ID (video)   : {source_id}\n"
+                    f"{source_video}\n"
+                    f"{source_results}"
+                )
                 break
             vehicle_id_offset = df['Vehicle_ID'].max()
         except Exception as e:
-            print(f"Error processing file {source_results}: {str(e)}")
+            logger.error(f"Error processing file {source_results}: {str(e)}")
 
     return source_id, source_video
 
 
 
-def get_processed_folder(source: Path, processed_folder: Union[Path, None]) -> Path:
+def get_processed_folder(source: Path, processed_folder: Union[Path, None], logger: logging.Logger) -> Path:
     """
     Get the processed folder from the provided path or use the default folder structure.
     """
@@ -152,9 +154,9 @@ def get_processed_folder(source: Path, processed_folder: Union[Path, None]) -> P
             processed_folder = processed_folder.parent
 
         if processed_folder.name != 'DATASET':
-            print(f"Failed to find the processed folder for source {source}. "
-                  f"Use the --processed-folder argument to provide a custom path or "
-                  f"ensure the default folder structure.")
+            logger.critical(f"Failed to find the processed folder for source {source}. "
+                            f"Use the --processed-folder argument to provide a custom path or "
+                            f"ensure the default folder structure.")
             sys.exit(1)
 
         processed_folder = processed_folder.parent / 'PROCESSED'
@@ -162,7 +164,7 @@ def get_processed_folder(source: Path, processed_folder: Union[Path, None]) -> P
     return processed_folder
 
 
-def get_cli_args() -> argparse.Namespace:
+def parse_cli_args() -> argparse.Namespace:
     """
     Parse command-line arguments.
     """
@@ -170,10 +172,21 @@ def get_cli_args() -> argparse.Namespace:
     parser.add_argument('dataset_filepath', type=Path, help='Filepath to the source dataset (.csv) file (e.g. 2022-10-04_A/2022-10-04_A_AM1.csv)')
     parser.add_argument('vehicle_id', type=int, help='Vehicle ID of interest from the dataset (e.g. 1)')
     parser.add_argument('--processed-folder', '-p', type=Path, help='Custom path to the PROCESSED directory containing the georeferenced results')
+    parser.add_argument('--log-path', '-lp', type=Path, default=None, help='Where to write logs: a directory or a full file path; defaults to a platform-specific log directory.')
+    parser.add_argument('--quiet', '-q', action='store_true', help='Reduce console verbosity to important messages only (default: show INFO-level detail).')
 
     return parser.parse_args()
 
 
+def main() -> None:
+    """
+    Command-line entry point.
+    """
+    args = parse_cli_args()
+    logger = setup_logger(Path(__file__).stem, verbose=not args.quiet, log_path=args.log_path)
+
+    find_source_id(args.dataset_filepath, args.vehicle_id, logger, processed_folder=args.processed_folder)
+
+
 if __name__ == '__main__':
-    args = get_cli_args()
-    find_source_id(args.dataset_filepath, args.vehicle_id, processed_folder = args.processed_folder, verbose=True)
+    main()

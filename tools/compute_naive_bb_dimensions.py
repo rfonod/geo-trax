@@ -24,6 +24,8 @@ Options:
   --frame-size <height> <width>  : Frame dimensions in pixels (default: 2160 3840).
   --visibility-margin <px>       : Pixel margin from each frame edge to consider a bounding box
                                    fully visible (default: 4).
+  -lp, --log-path <str>          : Where to write logs: a directory or a full file path; defaults to a platform-specific log directory.
+  -q, --quiet                    : Reduce console verbosity to important messages only (default: show INFO-level detail).
 
 Examples:
 1. Estimate AV vehicle dimensions from Songdo experiment results:
@@ -58,11 +60,14 @@ Notes:
 """
 
 import argparse
+import logging
 import sys
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
+
+from geotrax.utils.logging_utils import setup_logger
 
 try:
     from geotrax.utils.file_utils import detect_delimiter
@@ -70,7 +75,7 @@ except ImportError as e:
     print(
         "\033[91mCould not import 'detect_delimiter' from 'utils.file_utils'.\n"
         "Make sure you have installed the geo-trax package in editable mode:\n"
-        "    pip install -e .\n"
+        "    python -m pip install -e .\n"
         "from the project root directory.\033[0m"
     )
     raise e
@@ -127,22 +132,21 @@ def filter_by_visibility(df: pd.DataFrame, frame_size: tuple = (2160, 3840), eps
     return visible_x & visible_y
 
 
-def estimate_dimensions(args: argparse.Namespace) -> None:
+def estimate_dimensions(args: argparse.Namespace, logger: logging.Logger) -> None:
     directory = args.directory
     if not directory.is_dir():
-        print(f"Error: '{directory}' is not a valid directory.")
+        logger.critical(f"'{directory}' is not a valid directory.")
         sys.exit(1)
 
     files = sorted(directory.glob("*_AV.txt" if args.av else "*_bus_ids.txt"))
     if not files:
         pattern = "*_AV.txt" if args.av else "*_bus_ids.txt"
-        print(f"No files matching '{pattern}' found in '{directory}'.")
+        logger.critical(f"No files matching '{pattern}' found in '{directory}'.")
         sys.exit(1)
 
     all_lengths, all_widths = [], []
 
-    print(f"\n{'Video':<8} {'ID':<5} {'Avg Length (px)':>15} {'Avg Width (px)':>14}")
-    print("-" * 45)
+    logger.info(f"\n{'Video':<8} {'ID':<5} {'Avg Length (px)':>15} {'Avg Width (px)':>14}\n{'-' * 45}")
 
     for file in files:
         file_stem = file.stem
@@ -150,21 +154,21 @@ def estimate_dimensions(args: argparse.Namespace) -> None:
         results_file = file.parent / f"{results_filename}.txt"
 
         if not results_file.exists():
-            print(f"\033[93mWarning: Results file '{results_file}' does not exist, skipping.\033[0m")
+            logger.warning(f"Results file '{results_file}' does not exist, skipping.")
             continue
 
         # Resolve vehicle IDs
         if args.av:
             video_name = results_file.stem
             if video_name not in video2id:
-                print(f"\033[93mWarning: '{video_name}' not found in video2id mapping, skipping.\033[0m")
+                logger.warning(f"'{video_name}' not found in video2id mapping, skipping.")
                 continue
             vehicle_ids = [video2id[video_name]]
         else:
             with open(file, 'r') as f:
                 lines = [line.strip() for line in f if line.strip()]
             if not lines:
-                print(f"\033[93mWarning: Vehicle ID file '{file}' is empty, skipping.\033[0m")
+                logger.warning(f"Vehicle ID file '{file}' is empty, skipping.")
                 continue
             vehicle_ids = [int(v) for v in lines]
 
@@ -181,14 +185,14 @@ def estimate_dimensions(args: argparse.Namespace) -> None:
             vehicle_df = tracking_df[tracking_df['id'] == vehicle_id].copy()
 
             if vehicle_df.empty:
-                print(f"\033[93mWarning: No tracking data for vehicle ID {vehicle_id} in '{results_filename}'.\033[0m")
+                logger.warning(f"No tracking data for vehicle ID {vehicle_id} in '{results_filename}'.")
                 continue
 
             visibility_mask = filter_by_visibility(vehicle_df, frame_size=args.frame_size, eps=args.visibility_margin)
             vehicle_df = vehicle_df[visibility_mask]
 
             if vehicle_df.empty:
-                print(f"\033[93mWarning: No fully visible detections for vehicle ID {vehicle_id} in '{results_filename}'.\033[0m")
+                logger.warning(f"No fully visible detections for vehicle ID {vehicle_id} in '{results_filename}'.")
                 continue
 
             vehicle_df['longer_side']  = vehicle_df[['width', 'height']].max(axis=1)
@@ -200,19 +204,21 @@ def estimate_dimensions(args: argparse.Namespace) -> None:
             all_lengths.append(avg_length)
             all_widths.append(avg_width)
 
-            print(f"{results_filename:<8} {vehicle_id:<5} {avg_length:>15.4f} {avg_width:>14.4f}")
+            logger.info(f"{results_filename:<8} {vehicle_id:<5} {avg_length:>15.4f} {avg_width:>14.4f}")
 
     # Summary statistics
     if all_lengths:
-        print("-" * 45)
-        print(f"\nSummary ({len(all_lengths)} vehicle(s) processed)")
-        print(f"  Avg length (px) : {np.mean(all_lengths):.4f} ± {np.std(all_lengths):.4f}")
-        print(f"  Avg width  (px) : {np.mean(all_widths):.4f} ± {np.std(all_widths):.4f}")
+        logger.notice(
+            f"Summary ({len(all_lengths)} vehicle(s) processed)\n"
+            f"  Avg length (px) : {np.mean(all_lengths):.4f} ± {np.std(all_lengths):.4f}\n"
+            f"  Avg width  (px) : {np.mean(all_widths):.4f} ± {np.std(all_widths):.4f}"
+        )
     else:
-        print("\nNo valid results found.")
+        logger.warning("No valid results found.")
 
 
-def get_cli_arguments() -> argparse.Namespace:
+def parse_cli_args() -> argparse.Namespace:
+    """Parse command-line arguments."""
     parser = argparse.ArgumentParser(
         description="Estimate vehicle pixel-space dimensions from bounding box tracking results."
     )
@@ -232,10 +238,25 @@ def get_cli_arguments() -> argparse.Namespace:
         "--visibility-margin", type=int, default=4,
         help="Pixel margin from each frame edge to consider a bounding box fully visible (default: 4)."
     )
+    parser.add_argument(
+        "--log-path", "-lp", type=Path, default=None,
+        help="Where to write logs: a directory or a full file path; defaults to a platform-specific log directory."
+    )
+    parser.add_argument(
+        "--quiet", "-q", action="store_true",
+        help="Reduce console verbosity to important messages only (default: show INFO-level detail)."
+    )
     return parser.parse_args()
 
 
-if __name__ == "__main__":
-    args = get_cli_arguments()
+def main() -> None:
+    """Command-line entry point."""
+    args = parse_cli_args()
     args.frame_size = tuple(args.frame_size)
-    estimate_dimensions(args)
+    logger = setup_logger(Path(__file__).stem, verbose=not args.quiet, log_path=args.log_path)
+
+    estimate_dimensions(args, logger)
+
+
+if __name__ == "__main__":
+    main()

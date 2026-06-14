@@ -16,39 +16,50 @@ Key Features:
 - Reproducible results with configurable random seeds
 
 Usage:
-    python tools/random_frame_extraction.py <input_dir> <output_dir> [options]
+  python tools/random_frame_extraction.py <input_dir> <output_dir> [options]
 
-Common Examples:
-    # Basic extraction (50 random frames)
-    python tools/random_frame_extraction.py videos/ output/ --total-frames 50
-
-    # Multi-field filtering (altitude 130-160m AND ISO ≤400)
-    python tools/random_frame_extraction.py videos/ output/ --srt-filter "rel_alt:130:160" --srt-filter "iso::400"
-
-    # Recursive processing with custom seed
-    python tools/random_frame_extraction.py videos/ output/ --recursive --seed 42
+Arguments:
+  input_dir  : Input directory containing video files.
+  output_dir : Output directory for the extracted frames.
 
 Options:
-    --total-frames <int>              : Number of frames to extract (default: 100)
-    --srt-filter <str>                : Multi-field filter "field:min:max" (repeatable)
-    --srt-field <str>                 : Legacy single-field mode (default: rel_alt)
-    --srt-min-value, --srt-max-value  : Legacy min/max values (default: 130, 160)
-    --output-format {png,jpg,jpeg}    : Image format (default: png)
-    --prefix <str>                    : Filename prefix (default: frame)
-    -r, --recursive                   : Process subdirectories
-    -s, --seed <int>                  : Random seed (default: 0)
+  -h, --help                       : Show this help message and exit.
+  --total-frames <int>             : Number of frames to extract (default: 100).
+  --srt-filter <str>               : Multi-field filter "field:min:max" (repeatable).
+  --srt-field <str>                : Legacy single-field mode (default: rel_alt).
+  --srt-min-value, --srt-max-value : Legacy min/max values (default: 130, 160).
+  --output-format {png,jpg,jpeg}   : Image format (default: png).
+  --prefix <str>                   : Filename prefix (default: frame).
+  -r, --recursive                  : Process subdirectories.
+  -s, --seed <int>                 : Random seed (default: 0).
+  -lp, --log-path <str>            : Where to write logs: a directory or a full file path; defaults to a platform-specific log directory.
+  -q, --quiet                      : Reduce console verbosity to important messages only (default: show INFO-level detail).
+
+Examples:
+1. Basic extraction (50 random frames):
+   python tools/random_frame_extraction.py videos/ output/ --total-frames 50
+
+2. Multi-field filtering (altitude 130-160m AND ISO ≤400):
+   python tools/random_frame_extraction.py videos/ output/ --srt-filter "rel_alt:130:160" --srt-filter "iso::400"
+
+3. Recursive processing with custom seed:
+   python tools/random_frame_extraction.py videos/ output/ --recursive --seed 42
 
 Output: {prefix}_{parent}_{video}_{frame_idx}.{format}
 """
 
 import argparse
+import logging
 import re
+import sys
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 import cv2
 import numpy as np
 import pysrt
+
+from geotrax.utils.logging_utils import setup_logger
 
 # Constants
 SUPPORTED_VIDEO_FORMATS = ['.mp4', '.avi', '.mov', '.mkv']
@@ -62,6 +73,7 @@ DEFAULT_SRT_MAX_VALUE = 160
 
 def collect_all_frames(
     input_dir: Path,
+    logger: logging.Logger,
     srt_filters: Optional[Dict[str, Tuple[Optional[float], Optional[float]]]] = None,
     recursive: bool = False,
 ) -> List[Tuple[Path, int]]:
@@ -116,7 +128,7 @@ def collect_all_frames(
                             else:
                                 # Field not found in this SRT entry - warn once per field per video but keep frame
                                 if field_name not in srt_field_missing_warned:
-                                    print(f"Warning: Field '{field_name}' not found in SRT file for {video_path.name}")
+                                    logger.warning(f"Field '{field_name}' not found in SRT file for {video_path.name}")
                                     srt_field_missing_warned.add(field_name)
 
                 if should_keep_frame:
@@ -150,6 +162,7 @@ def extract_random_frames(
     input_dir: Path,
     output_dir: Path,
     total_frames: int,
+    logger: logging.Logger,
     srt_filters: Optional[Dict[str, Tuple[Optional[float], Optional[float]]]] = None,
     output_format: str = 'png',
     prefix: str = 'frame',
@@ -159,18 +172,18 @@ def extract_random_frames(
     """Extract random frames from all videos in the directory."""
     # Set random seed for reproducible results
     np.random.seed(seed)
-    print(f"Using random seed: {seed}")
+    logger.info(f"Using random seed: {seed}")
 
-    print(f"Collecting frames from: {input_dir}")
+    logger.info(f"Collecting frames from: {input_dir}")
 
     # Collect all valid frames
-    all_frames = collect_all_frames(input_dir, srt_filters, recursive)
+    all_frames = collect_all_frames(input_dir, logger, srt_filters, recursive)
 
     if not all_frames:
-        print("No valid frames found")
+        logger.warning("No valid frames found")
         return
 
-    print(f"Found {len(all_frames)} valid frames")
+    logger.info(f"Found {len(all_frames)} valid frames")
 
     # Randomly select frames
     num_to_extract = min(total_frames, len(all_frames))
@@ -194,7 +207,7 @@ def extract_random_frames(
             if cv2.imwrite(str(output_path), frame):
                 extracted_count += 1
 
-    print(f"Successfully extracted {extracted_count} frames")
+    logger.notice(f"Successfully extracted {extracted_count} frames")
 
 
 def get_video_frame_count(video_path: Path) -> int:
@@ -298,7 +311,8 @@ def parse_srt_field(srt_text: str, field_name: str) -> Optional[float]:
         return None
 
 
-def get_cli_args():
+def parse_cli_args() -> argparse.Namespace:
+    """Parse command-line arguments."""
     parser = argparse.ArgumentParser(description="Extract random frames from videos")
     parser.add_argument('input_dir', type=Path, help='Input directory containing video files')
     parser.add_argument('output_dir', type=Path, help='Output directory for extracted frames')
@@ -317,15 +331,19 @@ def get_cli_args():
     parser.add_argument('--prefix', default=DEFAULT_PREFIX, help='Prefix for output filenames')
     parser.add_argument('--recursive', '-r', action='store_true', help='Process subdirectories recursively')
     parser.add_argument('--seed', '-s', type=int, default=0, help='Random seed for reproducible results')
+    parser.add_argument('--log-path', '-lp', type=Path, default=None, help='Where to write logs: a directory or a full file path; defaults to a platform-specific log directory.')
+    parser.add_argument('--quiet', '-q', action='store_true', help='Reduce console verbosity to important messages only (default: show INFO-level detail).')
     return parser.parse_args()
 
 
-def main():
-    args = get_cli_args()
+def main() -> None:
+    """Command-line entry point."""
+    args = parse_cli_args()
+    logger = setup_logger(Path(__file__).stem, verbose=not args.quiet, log_path=args.log_path)
 
     # Create output directory
     args.output_dir.mkdir(parents=True, exist_ok=True)
-    print(f"Output directory: {args.output_dir}")
+    logger.info(f"Output directory: {args.output_dir}")
 
     # Process SRT filters
     srt_filters = None
@@ -334,21 +352,22 @@ def main():
     if args.srt_filters:
         try:
             srt_filters = parse_filter_args(args.srt_filters)
-            print(f"Using multi-field SRT filters: {srt_filters}")
+            logger.info(f"Using multi-field SRT filters: {srt_filters}")
         except ValueError as e:
-            print(f"Error parsing SRT filters: {e}")
-            return 1
+            logger.error(f"Error parsing SRT filters: {e}")
+            sys.exit(1)
 
     # Handle legacy single-field format for backward compatibility
     elif args.srt_field and (args.srt_min_value is not None or args.srt_max_value is not None):
         srt_filters = {args.srt_field: (args.srt_min_value, args.srt_max_value)}
-        print(f"Using legacy single-field SRT filter: {srt_filters}")
+        logger.info(f"Using legacy single-field SRT filter: {srt_filters}")
 
     # Extract frames
     extract_random_frames(
         args.input_dir,
         args.output_dir,
         args.total_frames,
+        logger,
         srt_filters,
         args.output_format,
         args.prefix,
@@ -356,9 +375,8 @@ def main():
         args.seed,
     )
 
-    print("Frame extraction completed!")
-    return 0
+    logger.notice("Frame extraction completed!")
 
 
 if __name__ == "__main__":
-    exit(main())
+    main()

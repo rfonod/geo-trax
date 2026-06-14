@@ -15,11 +15,14 @@ Arguments:
   image_path : Path to image file or directory containing images.
 
 Options:
+  -h, --help                : Show this help message and exit.
   -a, --annotations <path>  : Annotations directory (default: auto-detect).
   -s, --save                : Save visualizations instead of displaying (default: False).
   -lw, --line_width <int>   : Bounding box line width (default: 3).
   -n, --N <int>             : Number of top annotated frames to process (default: 10).
   -t, --type <int> [<int>]  : Vehicle class IDs to visualize (default: all).
+  -lp, --log-path <str>     : Where to write logs: a directory or a full file path; defaults to a platform-specific log directory.
+  -q, --quiet               : Reduce console verbosity to important messages only (default: show INFO-level detail).
 
 Examples:
 1. Visualize single image:
@@ -41,15 +44,17 @@ Output:
 """
 
 import argparse
+import logging
 from pathlib import Path
 
 import cv2
 from find_max_annotations import find_max_annotations
 
 from geotrax.utils.data_utils import VizColors
+from geotrax.utils.logging_utils import setup_logger
 
 
-def run_visualizer(args):
+def run_visualizer(args: argparse.Namespace, logger: logging.Logger) -> None:
     """Run the visualizer."""
     if args.image_path.is_dir():
         if args.annotations is not None and args.annotations.is_dir():
@@ -59,13 +64,13 @@ def run_visualizer(args):
         top_N_annotations = find_max_annotations(annotations_dir, args.N, args.type)
         for annotation_file, _ in top_N_annotations:
             image_file = args.image_path / f'{annotation_file.stem}.jpg'
-            visualize_annotations(image_file, annotation_file, args.line_width, args.save, args.type)
+            visualize_annotations(image_file, annotation_file, args.line_width, logger, args.save, args.type)
     else:
         if args.annotations is not None:
             annotation_file = args.annotations
         else:
             annotation_file = args.image_path.parent.parent / 'labels' / f'{args.image_path.stem}.txt'
-        visualize_annotations(args.image_path, annotation_file, args.line_width, args.save, args.type)
+        visualize_annotations(args.image_path, annotation_file, args.line_width, logger, args.save, args.type)
 
 
 def load_image(image_path):
@@ -112,7 +117,7 @@ def count_annotations(annotations, type):
         return sum(1 for line in annotations if int(line.split()[0]) in type)
 
 
-def visualize_annotations(image_path, annotation_file, line_width, save=False, veh_type=None):
+def visualize_annotations(image_path, annotation_file, line_width, logger, save=False, veh_type=None):
     """Visualize the annotations on the image."""
     img = load_image(image_path)
     img_height, img_width = img.shape[:2]
@@ -124,7 +129,7 @@ def visualize_annotations(image_path, annotation_file, line_width, save=False, v
         draw_bounding_box(img, annotation, colors, line_width)
 
     num_annotations = count_annotations(annotations, veh_type)
-    print(f'Number of annotations: {num_annotations}')
+    logger.notice(f'Number of annotations: {num_annotations}')
 
     if save:
         save_dir = image_path.parent.parent / 'visualizations'
@@ -141,7 +146,7 @@ def visualize_annotations(image_path, annotation_file, line_width, save=False, v
             return
 
 
-def get_cli_args():
+def parse_cli_args() -> argparse.Namespace:
     """Parse command-line arguments."""
     parser = argparse.ArgumentParser(description='Visualize the frame annotations of the vehicles.')
     parser.add_argument('image_path', type=Path, help='Path to the image to be visualized or to the directory containing the images')
@@ -150,9 +155,18 @@ def get_cli_args():
     parser.add_argument('--line_width', '-lw', type=int, default=3, help='Width of the bounding box line')
     parser.add_argument('--N', '-n', type=int, default=10, help='If folder input, number of top image frames to find (default: 10)')
     parser.add_argument('--type', '-t', nargs="+", type=int, help='Type of vehicle to find (default: all)')
+    parser.add_argument('--log-path', '-lp', type=Path, default=None, help='Where to write logs: a directory or a full file path; defaults to a platform-specific log directory.')
+    parser.add_argument('--quiet', '-q', action='store_true', help='Reduce console verbosity to important messages only (default: show INFO-level detail).')
     return parser.parse_args()
 
 
+def main() -> None:
+    """Command-line entry point."""
+    args = parse_cli_args()
+    logger = setup_logger(Path(__file__).stem, verbose=not args.quiet, log_path=args.log_path)
+
+    run_visualizer(args, logger)
+
+
 if __name__ == '__main__':
-    args = get_cli_args()
-    run_visualizer(args)
+    main()

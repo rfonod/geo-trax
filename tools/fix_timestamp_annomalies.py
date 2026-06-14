@@ -17,16 +17,14 @@ Usage:
   python tools/fix_timestamp_annomalies.py <input> [options]
 
 Arguments:
-  input : str
-          Path to file containing flight log anomalies (created by tools/find_cut_video_issues.py).
+  input : Path to file containing flight log anomalies (created by tools/find_cut_video_issues.py).
 
 Options:
-  -h, --help            : Show this help message and exit.
-  -o, --processed-folder <path> : str, optional
-                        Path to root of processed folder containing cut videos and flight logs
-                        (default: same as input directory).
-  -d, --debug           : bool, optional
-                        Run in debug mode - no files will be modified (default: False).
+  -h, --help                    : Show this help message and exit.
+  -o, --processed-folder <path> : Root of the processed folder containing cut videos and flight logs (default: same as input directory).
+  -d, --debug                   : Run in debug mode - no files will be modified (default: False).
+  -lp, --log-path <str>         : Where to write logs: a directory or a full file path; defaults to a platform-specific log directory.
+  -q, --quiet                   : Reduce console verbosity to important messages only (default: show INFO-level detail).
 
 Examples:
 1. Fix anomalies using default processed folder location:
@@ -65,16 +63,19 @@ Notes:
 """
 
 import argparse
+import logging
 import os
 from pathlib import Path
 
 import pandas as pd
 
+from geotrax.utils.logging_utils import setup_logger
+
 MIN_VIDEO_DURATION = 15  # do not cut videos shorter than 15 seconds
 FPS = 30 # used to calculate the minimum video duration and add margins to the cuts
 
 
-def fix_timetamp_annomalies(args: argparse.Namespace) -> None:
+def fix_timetamp_annomalies(args: argparse.Namespace, logger: logging.Logger) -> None:
     """
     Fix timestamp anomalies found in in the flight logs.
     """
@@ -84,10 +85,10 @@ def fix_timetamp_annomalies(args: argparse.Namespace) -> None:
 
     # keep only the rows with valid timestamp anomalies
     df_anomalies = df_anomalies.dropna(subset=['timestamp_anomaly_frame'])
-    print(f"Found {len(df_anomalies)} anomalies in total.")
+    logger.notice(f"Found {len(df_anomalies)} anomalies in total.")
     if len(df_anomalies) == 0:
         return
-    print(df_anomalies.to_string(index=False))
+    logger.info("\n%s", df_anomalies.to_string(index=False))
 
     # iterate over the anomalies and fix them
     processed_folder = args.input.parent if args.processed_folder is None else args.processed_folder
@@ -100,16 +101,16 @@ def fix_timetamp_annomalies(args: argparse.Namespace) -> None:
         timestamp_anomaly_frame = int(row['timestamp_anomaly_frame'])
 
         if not video_filepath.exists() or not csv_filepath.exists():
-            print(f"\033[91mWARNING: Skipping: {video_filepath} (not found)\033[0m")
+            logger.warning(f"Skipping: {video_filepath} (not found)")
             continue
 
         video_filepath_next = video_filepath.with_name(f"{location_id}{location_sequence+1}.CSV")
         if video_filepath_next.exists():
-            print(f"\033[93mWARNING: Skipping: {video_filepath} (higher sequence number exists)\033[0m")
-            print("Rename the subsequent files manually and run the script again.")
+            logger.warning(f"Skipping: {video_filepath} (higher sequence number exists). "
+                           "Rename the subsequent files manually and run the script again.")
             continue
 
-        print(f"\033[92mFixing: {video_filepath}\033[0m")
+        logger.notice(f"Fixing: {video_filepath}")
 
         # determine the cuts
         df_csv = pd.read_csv(csv_filepath)
@@ -138,7 +139,7 @@ def fix_timetamp_annomalies(args: argparse.Namespace) -> None:
         # create cut files
         for cut in cuts:
             cut_filepath, cut_start, cut_end = cut
-            print(f"Creating cut: {cut_filepath} with start: {cut_start} and end: {cut_end}")
+            logger.info(f"Creating cut: {cut_filepath} with start: {cut_start} and end: {cut_end}")
             if not args.debug:
                 with open(cut_filepath, 'w') as f:
                     f.write(f"{cut_start}, {cut_end}")
@@ -146,10 +147,10 @@ def fix_timetamp_annomalies(args: argparse.Namespace) -> None:
         # rename the original files
         video_filepath_original = video_filepath.with_name(video_filepath.stem + "_original" + video_filepath.suffix)
         csv_filepath_original = csv_filepath.with_name(csv_filepath.stem + "_original" + csv_filepath.suffix)
-        print(f"Renaming: {video_filepath} to {video_filepath_original}")
+        logger.info(f"Renaming: {video_filepath} to {video_filepath_original}")
         if not args.debug:
             os.rename(video_filepath, video_filepath_original)
-        print(f"Renaming: {csv_filepath} to {csv_filepath_original}")
+        logger.info(f"Renaming: {csv_filepath} to {csv_filepath_original}")
         if not args.debug:
             os.rename(csv_filepath, csv_filepath_original)
 
@@ -158,26 +159,35 @@ def fix_timetamp_annomalies(args: argparse.Namespace) -> None:
             cut_filepath = cut[0]
             output_filepath = cut_filepath.with_name(cut_filepath.stem.split('_')[-2] + video_filepath.suffix)
             cmd1 = f"python tools/recut_video_and_csv.py {video_filepath_original} {cut_filepath} -o {output_filepath}"
-            print(f"\033[92mRunning: {cmd1}\033[0m")
+            logger.info(f"Running: {cmd1}")
             if not args.debug:
                 os.system(cmd1)
 
             cmd2 = f"geotrax batch {output_filepath} -y -o"
-            print(f"\033[92mRunning: {cmd2}\033[0m")
+            logger.info(f"Running: {cmd2}")
             if not args.debug:
                 os.system(cmd2)
 
 
-def get_cli_arguments() -> argparse.Namespace:
+def parse_cli_args() -> argparse.Namespace:
     """Parse command-line arguments."""
     parser = argparse.ArgumentParser(description='Fix timestamp anomalies in flight logs by cutting videos and logs at anomaly frames.')
     parser.add_argument('input', type=Path, help="Path to file containing the flight log anomalies.")
-    parser.add_argument("--processed-folder", "-o", type=Path, default= None, help="Path to the root of the processed folder containing the cut videos and flight logs (default: same as input).")
+    parser.add_argument("--processed-folder", "-o", type=Path, default=None, help="Path to the root of the processed folder containing the cut videos and flight logs (default: same as input).")
     parser.add_argument("--debug", "-d", action='store_true', help="Run in debug mode (no files will be modified).")
+    parser.add_argument("--log-path", "-lp", type=Path, default=None, help="Where to write logs: a directory or a full file path; defaults to a platform-specific log directory.")
+    parser.add_argument("--quiet", "-q", action="store_true", help="Reduce console verbosity to important messages only (default: show INFO-level detail).")
 
     return parser.parse_args()
 
 
+def main() -> None:
+    """Command-line entry point."""
+    args = parse_cli_args()
+    logger = setup_logger(Path(__file__).stem, verbose=not args.quiet, log_path=args.log_path)
+
+    fix_timetamp_annomalies(args, logger)
+
+
 if __name__ == "__main__":
-    args = get_cli_arguments()
-    fix_timetamp_annomalies(args)
+    main()

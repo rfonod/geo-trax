@@ -15,11 +15,11 @@ Arguments:
   input : Path to CSV file, directory with CSV files, or dataset root directory.
 
 Options:
-  -h, --help                     : Show this help message and exit.
-  -at, --acceleration-threshold <float> : Acceleration threshold in m/s² (default: 12).
+  -h, --help                             : Show this help message and exit.
+  -at, --acceleration-threshold <float>  : Acceleration threshold in m/s² (default: 12).
   -st, --speed-threshold <float>         : Speed threshold in km/h (default: 130).
   -lp, --log-path <str>                  : Where to write logs: a directory or a full file path; defaults to a platform-specific log directory.
-  -v, --verbose                          : Set verbosity to INFO level (default: WARNING).
+  -q, --quiet                            : Reduce console verbosity to important messages only (default: show INFO-level detail).
 
 Examples:
 1. Check single CSV file:
@@ -28,8 +28,8 @@ Examples:
 2. Check dataset with custom thresholds:
    python tools/check_dataset.py dataset/ --speed-threshold 100 --acceleration-threshold 10
 
-3. Verbose output with logging:
-   python tools/check_dataset.py dataset/ --verbose --log-path validation.log
+3. Quiet output, logging to a custom file:
+   python tools/check_dataset.py dataset/ --quiet --log-path validation.log
 
 Input:
 - CSV files with vehicle tracking data including Vehicle_Speed and Vehicle_Acceleration columns
@@ -245,13 +245,18 @@ def parse_cli_args() -> argparse.Namespace:
     parser.add_argument("--acceleration-threshold", "-at", type=float, default=12, help="Acceleration threshold in m/s² (default: 12)")
     parser.add_argument("--speed-threshold", "-st", type=float, default=130, help="Speed threshold in km/h (default: 130)")
     parser.add_argument("--log-path", "-lp", type=Path, default=None, help="Where to write logs: a directory or a full file path; defaults to a platform-specific log directory.")
-    parser.add_argument("--verbose", "-v", action="store_true", help="Set verbosity to INFO level")
+    parser.add_argument("--quiet", "-q", action="store_true", help="Reduce console verbosity to important messages only (default: show INFO-level detail).")
 
     return parser.parse_args()
 
 
-if __name__ == '__main__':
+def main() -> None:
+    """Command-line entry point."""
     args = parse_cli_args()
-    logger = setup_logger(Path(__file__).stem, args.verbose, args.log_path)
+    logger = setup_logger(Path(__file__).stem, verbose=not args.quiet, log_path=args.log_path)
 
     validate_speed_acceleration(args, logger)
+
+
+if __name__ == '__main__':
+    main()

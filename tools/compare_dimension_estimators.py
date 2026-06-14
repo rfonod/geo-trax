@@ -22,9 +22,12 @@ Arguments:
     source : Video file or YAML configuration file containing video metadata.
 
 Options:
-    -p, --plot     Plot length and width histograms for the chosen vehicle ID.
-    -i, --id <int> Vehicle ID to analyze and plot (default: 0).
-    -l, --lines <int> Number of output lines from each method to display (default: 5).
+    -h, --help            : Show this help message and exit.
+    -p, --plot            : Plot length and width histograms for the chosen vehicle ID.
+    -i, --id <int>        : Vehicle ID to analyze and plot (default: 0).
+    -l, --lines <int>     : Number of output lines from each method to display (default: 5).
+    -lp, --log-path <str> : Where to write logs: a directory or a full file path; defaults to a platform-specific log directory.
+    -q, --quiet           : Reduce console verbosity to important messages only (default: show INFO-level detail).
 
 Examples:
     python tools/compare_dimension_estimators.py video.mp4
@@ -41,6 +44,7 @@ Output:
 """
 
 import argparse
+import logging
 import time
 from pathlib import Path
 
@@ -51,6 +55,7 @@ import pandas as pd
 import yaml
 
 from geotrax.utils.file_utils import detect_delimiter
+from geotrax.utils.logging_utils import setup_logger
 
 GSD_150 = 0.0282  # meters per pixel at 3840x2160 resolution and 150m altitude
 GSD_140 = 0.0263  # meters per pixel at 3840x2160 resolution and 140m altitude
@@ -67,7 +72,8 @@ tau_c = {
 VIDEO_FORMATS = {'.mp4', '.mov', '.avi', '.mkv'}
 
 
-def main(args):
+def compare_dimension_estimators(args: argparse.Namespace, logger: logging.Logger) -> None:
+    """Compare the old and new vehicle-dimension estimators on the source's tracking results."""
     # Load tracks associated with the video (need to run tracking first)
     tracks_txt_file = Path(f"{str(args.source.parent / 'results' / args.source.stem)}.txt")
 
@@ -79,59 +85,59 @@ def main(args):
 
     # Estimate vehicle dimensions with the old method
     start_time = time.time()
-    tracks_old = estimate_vehicle_dimensions_old(tracks, args)
+    tracks_old = estimate_vehicle_dimensions_old(tracks, args, logger)
     time_old = time.time() - start_time
 
     # Estimate vehicle dimensions with the new method
     start_time = time.time()
-    tracks_new = estimate_vehicle_dimensions_new(tracks, args)
+    tracks_new = estimate_vehicle_dimensions_new(tracks, args, logger)
     time_new = time.time() - start_time
 
-    # print the time taken for each method
+    # report the time taken for each method
     if not args.plot:
-        print(f"Computing with the OLD method took: {time_old} seconds")
-        print(f"Computing with the NEW method took: {time_new} seconds")
+        logger.info(f"Computing with the OLD method took: {time_old} seconds")
+        logger.info(f"Computing with the NEW method took: {time_new} seconds")
 
     # compare the results
-    analyse_results(tracks_new, tracks_old, args)
+    analyse_results(tracks_new, tracks_old, args, logger)
 
 
-def analyse_results(tracks_new, tracks_old, args):
+def analyse_results(tracks_new, tracks_old, args, logger):
     df_new = pd.DataFrame(tracks_new)
     df_old = pd.DataFrame(tracks_old)
 
-    print(df_new.head(args.lines))
-    print(df_old.head(args.lines))
+    logger.info("New method (head):\n%s", df_new.head(args.lines).to_string())
+    logger.info("Old method (head):\n%s", df_old.head(args.lines).to_string())
 
     # calculate the difference between the two methods, use only the last two columns
     diff_L = np.abs(tracks_new[:, -2] - tracks_old[:, -2])
     diff_W = np.abs(tracks_new[:, -1] - tracks_old[:, -1])
 
-    # print the stats and round the results to 4 decimal places
-    print(f"\fMax difference in length: {np.round(np.nanmax(diff_L), 4)}")
-    print(f"Max difference in width: {np.round(np.nanmax(diff_W), 4)}")
-    print(f"Mean difference in length: {np.round(np.nanmean(diff_L), 4)}")
-    print(f"Mean difference in width: {np.round(np.nanmean(diff_W), 4)}")
-    print(f"Median difference in length: {np.round(np.nanmedian(diff_L), 4)}")
-    print(f"Median difference in width: {np.round(np.nanmedian(diff_W), 4)}")
-
-    # print the id of the track with the maximum difference
+    # id of the track with the maximum difference
     idx_L_max = np.nanargmax(diff_L)
     idx_W_max = np.nanargmax(diff_W)
     id_L_max = int(tracks_new[idx_L_max, 1])
     id_W_max = int(tracks_new[idx_W_max, 1])
-    print(f"\nTrack ID with max difference in length: {id_L_max}")
-    print(f"Track ID with max difference in width: {id_W_max}")
 
-    # print the worst case scenarios side by side
-    print(f'\nID:         {id_L_max:<20}{id_W_max:<20}')
-    print(f'Old (L):    {tracks_old[idx_L_max][-2]:<20.4f}{tracks_old[idx_W_max][-1]:<20.4f}')
-    print(f'New (L):    {tracks_new[idx_L_max][-2]:<20.4f}{tracks_new[idx_W_max][-1]:<20.4f}')
-    print(f'Old (W):    {tracks_old[idx_L_max][-1]:<20.4f}{tracks_old[idx_W_max][-1]:<20.4f}')
-    print(f'New (W):    {tracks_new[idx_L_max][-1]:<20.4f}{tracks_new[idx_W_max][-1]:<20.4f}')
+    # report the stats (rounded to 4 decimal places) and worst-case comparison
+    logger.notice(
+        f"Max difference in length: {np.round(np.nanmax(diff_L), 4)}\n"
+        f"Max difference in width: {np.round(np.nanmax(diff_W), 4)}\n"
+        f"Mean difference in length: {np.round(np.nanmean(diff_L), 4)}\n"
+        f"Mean difference in width: {np.round(np.nanmean(diff_W), 4)}\n"
+        f"Median difference in length: {np.round(np.nanmedian(diff_L), 4)}\n"
+        f"Median difference in width: {np.round(np.nanmedian(diff_W), 4)}\n"
+        f"Track ID with max difference in length: {id_L_max}\n"
+        f"Track ID with max difference in width: {id_W_max}\n"
+        f"\nID:         {id_L_max:<20}{id_W_max:<20}\n"
+        f"Old (L):    {tracks_old[idx_L_max][-2]:<20.4f}{tracks_old[idx_W_max][-1]:<20.4f}\n"
+        f"New (L):    {tracks_new[idx_L_max][-2]:<20.4f}{tracks_new[idx_W_max][-1]:<20.4f}\n"
+        f"Old (W):    {tracks_old[idx_L_max][-1]:<20.4f}{tracks_old[idx_W_max][-1]:<20.4f}\n"
+        f"New (W):    {tracks_new[idx_L_max][-1]:<20.4f}{tracks_new[idx_W_max][-1]:<20.4f}"
+    )
 
 
-def estimate_vehicle_dimensions_new(tracks, args, eps=4, r0=1.25, GSD=GSD, theta_bar_deg=15, tau_c=tau_c):
+def estimate_vehicle_dimensions_new(tracks, args, logger, eps=4, r0=1.25, GSD=GSD, theta_bar_deg=15, tau_c=tau_c):
     # determine the radius for the azimuth-based filtering
     r = r0 / GSD
 
@@ -183,7 +189,7 @@ def estimate_vehicle_dimensions_new(tracks, args, eps=4, r0=1.25, GSD=GSD, theta
         id2class.setdefault(id, v_class)
 
     # plot the distribution of vehicle lengths and widths (initial raw measurements)
-    plot_histograms(id2lengths, id2widths, args, 'New Method - Initial (Step 2)')
+    plot_histograms(id2lengths, id2widths, args, 'New Method - Initial (Step 2)', logger)
 
     # Step 3: azimuth-based filtering
     for id in unique_ids:
@@ -207,20 +213,12 @@ def estimate_vehicle_dimensions_new(tracks, args, eps=4, r0=1.25, GSD=GSD, theta
                 if np.any(np.abs(azimuth - np.array([0, np.pi / 2, np.pi, -np.pi / 2, -np.pi])) <= theta_bar):
                     mask[idx_prev:idx] = True
 
-                # for debugging, print the azimuth-related information
+                # for debugging, log the azimuth-related information
                 if args.id == id:
-                    print(
-                        idx_prev,
-                        idx,
-                        distance,
-                        '>=',
-                        r,
-                        np.rad2deg(azimuth),
-                        '|',
-                        '\nL:',
-                        np.array(lengths)[mask],
-                        '\nW:',
-                        np.array(widths)[mask],
+                    logger.info(
+                        f"{idx_prev} {idx} {distance} >= {r} {np.rad2deg(azimuth)} |"
+                        f"\nL: {np.array(lengths)[mask]}"
+                        f"\nW: {np.array(widths)[mask]}"
                     )
 
                 idx_prev = idx
@@ -232,7 +230,7 @@ def estimate_vehicle_dimensions_new(tracks, args, eps=4, r0=1.25, GSD=GSD, theta
         id2widths[id] = widths[mask]
 
     # plot the distribution of vehicle lengths and widths (after azimuth-based filtering)
-    plot_histograms(id2lengths, id2widths, args, 'New Method - Azimuth Filtered (Step 3)')
+    plot_histograms(id2lengths, id2widths, args, 'New Method - Azimuth Filtered (Step 3)', logger)
 
     # Step 4: final dimension computation
     id2length, id2width = {}, {}
@@ -242,7 +240,7 @@ def estimate_vehicle_dimensions_new(tracks, args, eps=4, r0=1.25, GSD=GSD, theta
         id2width[id] = np.percentile(id2widths[id], 25) if len(id2widths[id]) > 0 else np.nan
 
         if args.id == id:
-            print(f'\nID: {int(id)} | Length: {id2length[id]} | Width: {id2width[id]}\n')
+            logger.info(f"ID: {int(id)} | Length: {id2length[id]} | Width: {id2width[id]}")
 
     # Finally: append v_length and v_width to each track, per id, as two last columns
     tracks = np.append(tracks, np.zeros((len(tracks), 2)), axis=1)
@@ -254,7 +252,7 @@ def estimate_vehicle_dimensions_new(tracks, args, eps=4, r0=1.25, GSD=GSD, theta
     return tracks
 
 
-def estimate_vehicle_dimensions_old(tracks, args, bbox_ratio_threshold=1.25, percentile_lower=25, percentile_upper=75):
+def estimate_vehicle_dimensions_old(tracks, args, logger, bbox_ratio_threshold=1.25, percentile_lower=25, percentile_upper=75):
     # filter tracks with id != -1 directly in numpy array
     valid_tracks = tracks[tracks[:, 1] != -1]
 
@@ -272,7 +270,7 @@ def estimate_vehicle_dimensions_old(tracks, args, bbox_ratio_threshold=1.25, per
         id2v_lengths[id_].append(max(w, h))
         id2v_widths[id_].append(min(w, h))
     # plot histograms for old method before filtering
-    plot_histograms(id2v_lengths, id2v_widths, args, 'Old Method - Raw')
+    plot_histograms(id2v_lengths, id2v_widths, args, 'Old Method - Raw', logger)
 
     id2v_length = {}
     id2v_width = {}
@@ -313,14 +311,14 @@ def estimate_vehicle_dimensions_old(tracks, args, bbox_ratio_threshold=1.25, per
     return tracks
 
 
-def plot_histograms(id2lengths, id2widths, args, title):
+def plot_histograms(id2lengths, id2widths, args, title, logger):
     if args.plot:
         vehicle_id = args.id
         if vehicle_id == 0:
             while vehicle_id <= 0:
                 vehicle_id = int(input("Enter a valid ID to plot: "))
                 if vehicle_id not in id2lengths:
-                    print(f"ID {vehicle_id} not found in the tracks")
+                    logger.warning(f"ID {vehicle_id} not found in the tracks")
             args.id = vehicle_id
 
         plt.hist(id2lengths[vehicle_id], bins=50, alpha=0.5, label='Vehicle Lengths')
@@ -330,15 +328,26 @@ def plot_histograms(id2lengths, id2widths, args, title):
         plt.show()
 
 
-def parse_args():
+def parse_cli_args() -> argparse.Namespace:
+    """Parse command-line arguments."""
     parser = argparse.ArgumentParser(description="Compare the old and new methods for estimating vehicle dimensions")
     parser.add_argument("source", type=Path, help="Specific video file (or YAML file) to process")
     parser.add_argument("--plot", "-p", action="store_true", help="plot histograms [default: False]")
     parser.add_argument("--id", "-i", type=int, default=0, help="ID to print/plot in detail")
     parser.add_argument("--lines", "-l", type=int, default=5, help="Number of lines to print")
+    parser.add_argument("--log-path", "-lp", type=Path, default=None, help="Where to write logs: a directory or a full file path; defaults to a platform-specific log directory.")
+    parser.add_argument("--quiet", "-q", action="store_true", help="Reduce console verbosity to important messages only (default: show INFO-level detail).")
 
     return parser.parse_args()
 
 
+def main() -> None:
+    """Command-line entry point."""
+    args = parse_cli_args()
+    logger = setup_logger(Path(__file__).stem, verbose=not args.quiet, log_path=args.log_path)
+
+    compare_dimension_estimators(args, logger)
+
+
 if __name__ == '__main__':
-    main(parse_args())
+    main()

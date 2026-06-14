@@ -22,6 +22,8 @@ Options:
   -t, --tune            : Enable smoothing parameter tuning (default: False).
   -f, --filter <str>    : Filter type: gaussian or savitzky_golay (default: gaussian).
   -d, --debug           : Enable debug mode for additional output (default: False).
+  -lp, --log-path <str> : Where to write logs: a directory or a full file path; defaults to a platform-specific log directory.
+  -q, --quiet           : Reduce console verbosity to important messages only (default: show INFO-level detail).
 
 Examples:
 1. Basic comparison with visualization:
@@ -53,6 +55,8 @@ Notes:
 
 import argparse
 import datetime
+import logging
+import sys
 from pathlib import Path
 from typing import Union
 
@@ -66,13 +70,15 @@ from scipy.ndimage import gaussian_filter1d
 from scipy.signal import savgol_filter
 from stabilo import Stabilizer
 
+from geotrax.utils.logging_utils import setup_logger
+
 try:
     from geotrax.utils.file_utils import detect_delimiter
 except ImportError as e:
     print(
         "\033[91mCould not import 'detect_delimiter' from 'utils.file_utils'.\n"
         "Make sure you have installed the geo-trax package in editable mode:\n"
-        "    pip install -e .\n"
+        "    python -m pip install -e .\n"
         "from the project root directory.\033[0m"
     )
     raise e
@@ -138,18 +144,19 @@ COLORS = [
 SAVE_FONT_SIZE = 14
 
 
-def evaluate_av_data(args):
+def evaluate_av_data(args: argparse.Namespace, logger: logging.Logger) -> None:
+    """Compare on-board AV trajectories against extracted trajectories (and optionally tune filters)."""
     # get the AV trajectory and speed from the Stanford dataset
     df_stanford_geo = get_on_board_av_data(args.data / 'av_trajectories')
 
     # get the AV trajectory and speed from our dataset
-    df_extracted_geo, df_extracted_img = get_extracted_av_data(args.data / 'results')
+    df_extracted_geo, df_extracted_img = get_extracted_av_data(args.data / 'results', logger)
 
     if args.tune:
-        tune_smoothing_parameters(df_stanford_geo, df_extracted_geo, args)
+        tune_smoothing_parameters(df_stanford_geo, df_extracted_geo, args, logger)
     else:
         # plot the AV trajectories in the image coordinates
-        plot_img_trajectories_video(df_extracted_img, args)
+        plot_img_trajectories_video(df_extracted_img, args, logger)
 
         # plot the global AV trajectory (on-board sensor only, hue=speed) in the global/local coordinates
         plot_geo_trajectories_all(df_stanford_geo, df_extracted_geo, True, args)
@@ -161,7 +168,7 @@ def evaluate_av_data(args):
         plot_geo_trajectories_video(df_stanford_geo, df_extracted_geo, args)
 
         # compute the positional and speed errors
-        df_stanford_geo = compute_positional_and_speed_errors(df_stanford_geo, df_extracted_geo, args)[0]
+        df_stanford_geo = compute_positional_and_speed_errors(df_stanford_geo, df_extracted_geo, args, logger)[0]
 
         # plot the positional and speed errors
         plot_positional_and_speed_errors(df_stanford_geo, args)
@@ -206,11 +213,11 @@ def get_on_board_av_data(av_trajectories_folder) -> pd.DataFrame:
     return df_av
 
 
-def get_extracted_av_data(results_folder) -> Union[pd.DataFrame, pd.DataFrame]:
+def get_extracted_av_data(results_folder, logger) -> Union[pd.DataFrame, pd.DataFrame]:
     # check if data is a directory
     if not results_folder.is_dir():
-        print(f"Error: Data {results_folder} is not a directory.")
-        exit(1)
+        logger.critical(f"Data {results_folder} is not a directory.")
+        sys.exit(1)
 
     # get the filepaths of the extracted vehicle trajectories
     available_filenames = [file.name for file in results_folder.glob('*.csv')]
@@ -311,7 +318,7 @@ def compute_kinematics(df_extracted, video, sigma, filter_name):
     return Speed, Acceleration
 
 
-def tune_smoothing_parameters(df_stanford, df_extracted, args):
+def tune_smoothing_parameters(df_stanford, df_extracted, args, logger):
     # define the sigma range and step
     if args.filter == 'gaussian':
         sigma_min, sigma_max, sigma_step = 1, 25, 0.5  # for Gaussian filter
@@ -332,11 +339,11 @@ def tune_smoothing_parameters(df_stanford, df_extracted, args):
 
         if i == 0:
             df_av_stanford_with_errors, _, intersection_error_stats_sigma, intersection_meta = (
-                compute_positional_and_speed_errors(df_stanford, df_av_extracted_smoothed, args)
+                compute_positional_and_speed_errors(df_stanford, df_av_extracted_smoothed, args, logger)
             )
         else:
             _, _, intersection_error_stats_sigma, _ = compute_positional_and_speed_errors(
-                df_stanford, df_av_extracted_smoothed, args
+                df_stanford, df_av_extracted_smoothed, args, logger
             )
 
         for intersection in intersection_error_stats_sigma.keys():
@@ -346,7 +353,7 @@ def tune_smoothing_parameters(df_stanford, df_extracted, args):
                 error_stats[intersection] = {sigma: intersection_error_stats_sigma[intersection]}
 
     # find the best sigma for each intersection based on the lowest mean absolute speed error
-    print('Based on lowest MEAN absolute speed error:')
+    logger.notice('Based on lowest MEAN absolute speed error:')
     sigma_best_all = 0
     sigma_best_weighted = 0
     for intersection, stats in error_stats.items():
@@ -361,9 +368,9 @@ def tune_smoothing_parameters(df_stanford, df_extracted, args):
                 df_av_extracted_smoothed.loc[df_av_extracted_smoothed['Video'] == video, 'Vehicle_Acceleration'] = (
                     Acceleration
                 )
-        print(f'The best sigma for intersection {intersection} is {sigma_best}, resulting in speed error of {stats[sigma_best][2]:.3f} +/- {stats[sigma_best][3]:.3f} km/h')
-    print(f'The average best sigma for all intersections: {sigma_best_all / len(error_stats):.2f}')
-    print(f'The weighted average best sigma for all intersections: {sigma_best_weighted / sum([intersection_meta[intersection]["length"] for intersection in intersection_meta]):.2f}')
+        logger.notice(f'The best sigma for intersection {intersection} is {sigma_best}, resulting in speed error of {stats[sigma_best][2]:.3f} +/- {stats[sigma_best][3]:.3f} km/h')
+    logger.notice(f'The average best sigma for all intersections: {sigma_best_all / len(error_stats):.2f}')
+    logger.notice(f'The weighted average best sigma for all intersections: {sigma_best_weighted / sum([intersection_meta[intersection]["length"] for intersection in intersection_meta]):.2f}')
 
     # plot the error statistics for the speed errors for different tuning parameters
     plot_tuned_speed_errors(error_stats, args)
@@ -371,7 +378,7 @@ def tune_smoothing_parameters(df_stanford, df_extracted, args):
     plot_kinematics(df_av_stanford_with_errors, df_av_extracted_smoothed, args, 'acceleration')
 
     # find the best sigma for each intersection based on the lowest speed error standard deviation
-    print('\nBased on lowest speed error STD. DEV.:')
+    logger.notice('Based on lowest speed error STD. DEV.:')
     sigma_best_all = 0
     for intersection, stats in error_stats.items():
         # choose the sigma with the lowest speed error standard deviation
@@ -388,18 +395,18 @@ def tune_smoothing_parameters(df_stanford, df_extracted, args):
                 df_av_extracted_smoothed.loc[
                     df_av_extracted_smoothed['Video'] == video, 'Vehicle_Acceleration'
                 ] = Acceleration
-        print(
+        logger.notice(
             f'The best sigma for intersection {intersection} is {sigma_best}, resulting in speed error of '
             f'{stats[sigma_best][2]:.3f} +/- {stats[sigma_best][3]:.3f} km/h'
         )
-    print(f'The average best sigma for all intersections is {sigma_best_all / len(error_stats):.2f}')
+    logger.notice(f'The average best sigma for all intersections is {sigma_best_all / len(error_stats):.2f}')
 
     # plot the speed errors for different tuning parameters
     plot_kinematics(df_av_stanford_with_errors, df_av_extracted_smoothed, args, 'speed')
     plot_kinematics(df_av_stanford_with_errors, df_av_extracted_smoothed, args, 'acceleration')
 
 
-def compute_positional_and_speed_errors(df_stanford, df_extracted, args) -> Union[pd.DataFrame, dict]:
+def compute_positional_and_speed_errors(df_stanford, df_extracted, args, logger) -> Union[pd.DataFrame, dict]:
     # define helper function to compute the length of the trajectory
     def compute_trajectory_length(df):
         trajectory_length = 0
@@ -453,10 +460,12 @@ def compute_positional_and_speed_errors(df_stanford, df_extracted, args) -> Unio
             trajectory_length,
         )
         if not args.tune:
-            print(f'Video {video:<6}: Positional error: {positional_error_mean:.3f} +/- {positional_error_std:.3f} m')
-            print(f'{"":<13} Speed error:   {speed_error_mean:.3f} +/- {speed_error_std:.3f} km/h')
-            print(f'{"":<13} Length:           {round(trajectory_length, 2)} m')
-            print(f'{"":<13} Duration:         {round(trajectory_duration, 2)} s\n')
+            logger.notice(
+                f'Video {video:<6}: Positional error: {positional_error_mean:.3f} +/- {positional_error_std:.3f} m\n'
+                f'{"":<13} Speed error:   {speed_error_mean:.3f} +/- {speed_error_std:.3f} km/h\n'
+                f'{"":<13} Length:           {round(trajectory_length, 2)} m\n'
+                f'{"":<13} Duration:         {round(trajectory_duration, 2)} s'
+            )
 
         # merge the errors and duration for the intersection
         if intersection in intersection_errors:
@@ -478,10 +487,10 @@ def compute_positional_and_speed_errors(df_stanford, df_extracted, args) -> Unio
         dfs_with_errors.append(df_stanford_f)
 
         if args.debug:
-            print(df_extracted_f.head().to_string(index=False))
-            print(df_stanford_f.head().to_string(index=False))
-            print(df_extracted_f.tail().to_string(index=False))
-            print(df_stanford_f.tail().to_string(index=False))
+            logger.info("\n%s", df_extracted_f.head().to_string(index=False))
+            logger.info("\n%s", df_stanford_f.head().to_string(index=False))
+            logger.info("\n%s", df_extracted_f.tail().to_string(index=False))
+            logger.info("\n%s", df_stanford_f.tail().to_string(index=False))
 
     # compute and print the positional and speed errors per intersection
     for intersection, (positional_errors, speed_errors) in intersection_errors.items():
@@ -495,10 +504,12 @@ def compute_positional_and_speed_errors(df_stanford, df_extracted, args) -> Unio
             speed_error_std,
         )
         if not args.tune:
-            print(f'Intersec. {intersection:<2}: Positional error: {positional_error_mean:.3f} +/- {positional_error_std:.3f} m')
-            print(f'{"":<13} Speed error:   {speed_error_mean:.3f} +/- {speed_error_std:.3f} km/h')
-            print(f'{"":<13} Length:           {round(intersection_meta[intersection]["length"], 2)} m')
-            print(f'{"":<13} Duration:         {round(intersection_meta[intersection]["duration"], 2)} s\n')
+            logger.notice(
+                f'Intersec. {intersection:<2}: Positional error: {positional_error_mean:.3f} +/- {positional_error_std:.3f} m\n'
+                f'{"":<13} Speed error:   {speed_error_mean:.3f} +/- {speed_error_std:.3f} km/h\n'
+                f'{"":<13} Length:           {round(intersection_meta[intersection]["length"], 2)} m\n'
+                f'{"":<13} Duration:         {round(intersection_meta[intersection]["duration"], 2)} s'
+            )
 
     # concatenate the dataframes
     df_stanford_with_errors = pd.concat(dfs_with_errors, ignore_index=True)
@@ -690,19 +701,19 @@ def plot_tuned_speed_errors(error_stats, args):
         save_show_plot(plt, 'speed_error_vs_sigma', args)
 
 
-def plot_img_trajectories_video(df_extracted, args):
+def plot_img_trajectories_video(df_extracted, args, logger):
     if args.show or args.save:
         scenes, transforms = {}, {}
         for video in sorted(df_extracted['Video'].unique()):
             video_filepath = args.data / (video + '.mp4')
             if not video_filepath.is_file():
-                print(f"WARNING: File {video_filepath} does not exist.")
+                logger.warning(f"File {video_filepath} does not exist.")
                 continue
             cap = cv2.VideoCapture(str(video_filepath))
             ret, scene = cap.read()
             cap.release()
             if not ret:
-                print(f'WARNING: Could not read the first frame of {video_filepath}.')
+                logger.warning(f'Could not read the first frame of {video_filepath}.')
                 continue
 
             intersection = video[0]
@@ -1132,7 +1143,8 @@ def save_show_plot(plt, file_name, args):
         plt.show()
 
 
-def get_cli_arguments():
+def parse_cli_args() -> argparse.Namespace:
+    """Parse command-line arguments."""
     parser = argparse.ArgumentParser(description="Compare AV trajectories and tune smoothing filters")
     parser.add_argument("--data", type=Path, required=True, help="Path to AV trajectory data folder")
     parser.add_argument("--save", action="store_true", help="Save plots as PDF files")
@@ -1142,9 +1154,18 @@ def get_cli_arguments():
     parser.add_argument("--filter", "-f", default="gaussian",
                         choices=["gaussian", "savitzky_golay"], help="Filter type")
     parser.add_argument("--debug", "-d", action="store_true", help="Enable debug mode")
+    parser.add_argument("--log-path", "-lp", type=Path, default=None, help="Where to write logs: a directory or a full file path; defaults to a platform-specific log directory.")
+    parser.add_argument("--quiet", "-q", action="store_true", help="Reduce console verbosity to important messages only (default: show INFO-level detail).")
     return parser.parse_args()
 
 
+def main() -> None:
+    """Command-line entry point."""
+    args = parse_cli_args()
+    logger = setup_logger(Path(__file__).stem, verbose=not args.quiet, log_path=args.log_path)
+
+    evaluate_av_data(args, logger)
+
+
 if __name__ == '__main__':
-    args = get_cli_arguments()
-    evaluate_av_data(args)
+    main()

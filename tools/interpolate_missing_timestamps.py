@@ -19,7 +19,17 @@ Arguments:
   input_csv : Path to the input CSV file containing timestamps to interpolate.
 
 Options:
-  --backward    : Perform backward interpolation instead of forward interpolation (default: False).
+  -h, --help            : Show this help message and exit.
+  --backward            : Perform backward interpolation instead of forward interpolation (default: False).
+  -lp, --log-path <str> : Where to write logs: a directory or a full file path; defaults to a platform-specific log directory.
+  -q, --quiet           : Reduce console verbosity to important messages only (default: show INFO-level detail).
+
+Examples:
+1. Forward-interpolate missing timestamps:
+   python tools/interpolate_missing_timestamps.py flight_log.CSV
+
+2. Backward-interpolate missing timestamps:
+   python tools/interpolate_missing_timestamps.py flight_log.CSV --backward
 
 Input:
 - CSV file with a 'timestamp' column that may contain missing (NaN) values
@@ -37,15 +47,18 @@ Notes:
 """
 
 import argparse
+import logging
 from pathlib import Path
 
 import pandas as pd
 
+from geotrax.utils.logging_utils import setup_logger
 
-def interpolate_timestamps(args):
+
+def interpolate_timestamps(args: argparse.Namespace, logger: logging.Logger) -> None:
+    """Interpolate missing timestamps using the 29.97 fps frame-timing pattern."""
     df = pd.read_csv(args.input_csv)
-    print(df.head())
-    print(df.tail())
+    logger.info("Before interpolation:\n%s\n...\n%s", df.head().to_string(), df.tail().to_string())
 
     # Define the cycle increments for 29.97 fps
     delta_times = [33, 33, 34]  # Alternating increments in milliseconds
@@ -86,22 +99,31 @@ def interpolate_timestamps(args):
                 df.loc[i, 'timestamp'] = new_timestamp.strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]
                 counter += 1
 
-    print(df.head())
-    print(df.tail())
+    logger.info("After interpolation:\n%s\n...\n%s", df.head().to_string(), df.tail().to_string())
 
     # Save the interpolated CSV
     output_csv = args.input_csv.parent / (args.input_csv.stem + '_interpolated' + '.CSV')
     df.to_csv(output_csv, index=False)
+    logger.notice(f"Interpolated timestamps saved to {output_csv}")
 
 
-def get_cli_arguments() -> argparse.Namespace:
+def parse_cli_args() -> argparse.Namespace:
     """Parse command-line arguments."""
     parser = argparse.ArgumentParser(description='Interpolate missing timestamps in a CSV file')
     parser.add_argument('input_csv', type=Path, help='Input CSV file')
     parser.add_argument('--backward', action='store_true', help='Perform backward interpolation')
+    parser.add_argument('--log-path', '-lp', type=Path, default=None, help='Where to write logs: a directory or a full file path; defaults to a platform-specific log directory.')
+    parser.add_argument('--quiet', '-q', action='store_true', help='Reduce console verbosity to important messages only (default: show INFO-level detail).')
     return parser.parse_args()
 
 
+def main() -> None:
+    """Command-line entry point."""
+    args = parse_cli_args()
+    logger = setup_logger(Path(__file__).stem, verbose=not args.quiet, log_path=args.log_path)
+
+    interpolate_timestamps(args, logger)
+
+
 if __name__ == '__main__':
-    args = get_cli_arguments()
-    interpolate_timestamps(args)
+    main()

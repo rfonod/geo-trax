@@ -32,6 +32,8 @@ Options:
   -ec, --exact-cut        : Perform exact frame cutting with re-encoding (slower but precise; default: off).
   -b, --bitrate <rate>    : Video bitrate for exact-cut mode (e.g., '5M', '10000k'; default: auto).
   -d, --debug             : Run in debug mode with verification and detailed output (default: False).
+  -lp, --log-path <str>   : Where to write logs: a directory or a full file path; defaults to a platform-specific log directory.
+  -q, --quiet             : Reduce console verbosity to important messages only (default: show INFO-level detail).
 
 Cut File Format:
   cut_start_frame_number, cut_end_frame_number, [rotation]
@@ -74,10 +76,12 @@ Notes:
 """
 
 import argparse
+import logging
 import os
 import platform
 import shlex
 import subprocess
+import sys
 from pathlib import Path
 from typing import Dict, Tuple
 
@@ -85,17 +89,19 @@ import cv2
 import numpy as np
 import pandas as pd
 
+from geotrax.utils.logging_utils import setup_logger
 
-def process_cutting(filepaths: Dict[str, Path], cuts: Tuple[int, int, int] = None, debug: bool = False, exact_cut: bool = False, bitrate: str = None) -> None:
+
+def process_cutting(filepaths: Dict[str, Path], logger: logging.Logger, cuts: Tuple[int, int, int] = None, debug: bool = False, exact_cut: bool = False, bitrate: str = None) -> None:
     if cuts is None:
-        cuts = get_cuts(filepaths)
+        cuts = get_cuts(filepaths, logger)
     perform_sanity_checks(cuts, filepaths)
-    cuts_adjusted = get_adjusted_cuts(cuts, filepaths, debug, exact_cut)
-    cut_and_save_video(filepaths, cuts_adjusted, debug, exact_cut, bitrate)
-    cut_and_save_csv(filepaths, cuts_adjusted, debug)
+    cuts_adjusted = get_adjusted_cuts(cuts, filepaths, logger, debug, exact_cut)
+    cut_and_save_video(filepaths, cuts_adjusted, logger, debug, exact_cut, bitrate)
+    cut_and_save_csv(filepaths, cuts_adjusted, logger, debug)
 
 
-def cut_and_save_video(filepaths: Dict[str, Path], cuts: Tuple[int, int, int], debug: bool = False, exact_cut: bool = False, bitrate: str = None) -> None:
+def cut_and_save_video(filepaths: Dict[str, Path], cuts: Tuple[int, int, int], logger: logging.Logger, debug: bool = False, exact_cut: bool = False, bitrate: str = None) -> None:
     cut_start, cut_end, rotation = cuts
     input_video = str(filepaths["input_video"])
     output_video = str(filepaths["output_video"])
@@ -126,14 +132,14 @@ def cut_and_save_video(filepaths: Dict[str, Path], cuts: Tuple[int, int, int], d
 
     if not debug:
         cmd += ' -v quiet'
-    print(f"Running the following command: {cmd}")
+    logger.info(f"Running the following command: {cmd}")
     result = subprocess.run(cmd, shell=True)
     if result.returncode == 0:
-        print(f"Cut video saved to '{output_video}'")
+        logger.notice(f"Cut video saved to '{output_video}'")
     else:
-        print('\033[91m' + f"ffmpeg exited with code {result.returncode} for '{input_video}'" + '\033[0m')
+        logger.error(f"ffmpeg exited with code {result.returncode} for '{input_video}'")
     if debug:
-        verify_cut(filepaths, cut_start, cut_end, debug)
+        verify_cut(filepaths, cut_start, cut_end, logger, debug)
 
     # if needed, perform counter-clockwise rotation (metadata level rotation, no re-encoding needed)
     if int(rotation) != 0 and not debug:
@@ -148,13 +154,13 @@ def cut_and_save_video(filepaths: Dict[str, Path], cuts: Tuple[int, int, int], d
         os.remove(temp_filepath)
 
 
-def cut_and_save_csv(filepaths: Dict[str, Path], cuts: Tuple[int, int, int], debug: bool = False) -> None:
+def cut_and_save_csv(filepaths: Dict[str, Path], cuts: Tuple[int, int, int], logger: logging.Logger, debug: bool = False) -> None:
     input_csv = filepaths["input_csv"]
     output_csv = filepaths["output_csv"]
 
     # Check if CSV file exists
     if not input_csv.exists():
-        print(f"No flight log found at '{input_csv}', skipping CSV cutting.")
+        logger.warning(f"No flight log found at '{input_csv}', skipping CSV cutting.")
         return
 
     cut_start = cuts[0]
@@ -168,18 +174,18 @@ def cut_and_save_csv(filepaths: Dict[str, Path], cuts: Tuple[int, int, int], deb
         df = pd.read_csv(input_csv)
         # Check if 'frame' column exists
         if 'frame' not in df.columns:
-            print(f"Warning: 'frame' column not found in '{input_csv}', skipping CSV cutting.")
+            logger.warning(f"'frame' column not found in '{input_csv}', skipping CSV cutting.")
             return
         df = df[(df['frame'] >= cut_start) & (df['frame'] <= cut_end)]
         df['frame'] = df['frame'] - cut_start
         df.to_csv(output_csv, index=False)
-        print(f"Saved the cut flight log to '{output_csv}'")
+        logger.notice(f"Saved the cut flight log to '{output_csv}'")
     except Exception as e:
-        print('\033[91m' + f"Problem with cutting the flight log '{input_csv}': {e}" + '\033[0m')
+        logger.error(f"Problem with cutting the flight log '{input_csv}': {e}")
 
 
 def verify_cut(
-    filepaths: Dict[str, Path], cut_start: int, cut_end: int, debug=False, verify_N_frames: int = 30
+    filepaths: Dict[str, Path], cut_start: int, cut_end: int, logger: logging.Logger, debug=False, verify_N_frames: int = 30
 ) -> None:
     input_video = str(filepaths["input_video"])
     output_video = str(filepaths["output_video"])
@@ -195,10 +201,10 @@ def verify_cut(
     try:
         cap = cv2.VideoCapture(input_video)
     except Exception as e:
-        print('\033[91m' + f"Problem with reading '{input_video}': {e}" + '\033[0m')
+        logger.error(f"Problem with reading '{input_video}': {e}")
     else:
-        print("Total number of frames in the input video:", int(cap.get(cv2.CAP_PROP_FRAME_COUNT)))
-        print("FPS of the input video:", cap.get(cv2.CAP_PROP_FPS))
+        logger.info(f"Total number of frames in the input video: {int(cap.get(cv2.CAP_PROP_FRAME_COUNT))}")
+        logger.info(f"FPS of the input video: {cap.get(cv2.CAP_PROP_FPS)}")
         i = 0
         while cap.isOpened():
             ret, frame = cap.read()
@@ -213,10 +219,10 @@ def verify_cut(
     try:
         cap = cv2.VideoCapture(output_video)
     except Exception as e:
-        print('\033[91m' + f"Problem with reading '{output_video}': {e}" + '\033[0m')
+        logger.error(f"Problem with reading '{output_video}': {e}")
     else:
-        print("Total number of frames in the cut video:", int(cap.get(cv2.CAP_PROP_FRAME_COUNT)))
-        print("FPS of the cut video:", cap.get(cv2.CAP_PROP_FPS))
+        logger.info(f"Total number of frames in the cut video: {int(cap.get(cv2.CAP_PROP_FRAME_COUNT))}")
+        logger.info(f"FPS of the cut video: {cap.get(cv2.CAP_PROP_FPS)}")
         i = 0
         while cap.isOpened() and i < cut_end:
             ret, frame = cap.read()
@@ -231,11 +237,11 @@ def verify_cut(
     for i, imgs_i in enumerate(zip(input_frames_selected, cut_frames_selected)):
         img_input_i, img_cut_i = imgs_i
         if img_input_i is None or img_cut_i is None:
-            print('\033[91m' + f"Problem with reading frame {i} from the input/cut video" + '\033[0m')
+            logger.error(f"Problem with reading frame {i} from the input/cut video")
             break
         img_diff = cv2.absdiff(img_input_i, img_cut_i)
         img_diff_rmse = np.sqrt(np.mean(img_diff**2))
-        print(
+        logger.info(
             f"({i}) Mean RMSE of the cut frame #: {i * verify_every_nth_frame} wrt input frame #: {cut_start + i * verify_every_nth_frame} is: {img_diff_rmse}"
         )
         if debug:
@@ -249,14 +255,14 @@ def verify_cut(
 
 
 def get_adjusted_cuts(
-    cuts: Tuple[int, int, int], filepaths: Dict[str, Path], debug: bool = False, exact_cut: bool = False
+    cuts: Tuple[int, int, int], filepaths: Dict[str, Path], logger: logging.Logger, debug: bool = False, exact_cut: bool = False
 ) -> Tuple[int, int, int]:
     cut_start = cuts[0]
     cut_end = cuts[1]
 
     # Skip keyframe adjustment if exact cutting is requested
     if exact_cut:
-        print(f"Exact cutting enabled: cutting from frame {cut_start} to frame {cut_end} (with re-encoding).")
+        logger.info(f"Exact cutting enabled: cutting from frame {cut_start} to frame {cut_end} (with re-encoding).")
         return cuts
 
     input_video = str(filepaths['input_video'])
@@ -312,46 +318,46 @@ def get_adjusted_cuts(
     end_adjusted = cut_end_adjusted != cut_end
 
     if not start_adjusted and not end_adjusted:
-        print(f"Requested cut frames ({cut_start} to {cut_end}) are already at keyframes. No adjustment needed.")
+        logger.info(f"Requested cut frames ({cut_start} to {cut_end}) are already at keyframes. No adjustment needed.")
     else:
         if start_adjusted:
             frame_diff_start = cut_start_adjusted - cut_start
-            print(f"Adjusted cut start from frame {cut_start} to frame {cut_start_adjusted} (+{frame_diff_start} frames to nearest keyframe).")
+            logger.info(f"Adjusted cut start from frame {cut_start} to frame {cut_start_adjusted} (+{frame_diff_start} frames to nearest keyframe).")
         else:
-            print(f"Requested cut start frame {cut_start} is already at a keyframe.")
+            logger.info(f"Requested cut start frame {cut_start} is already at a keyframe.")
 
         if end_adjusted:
             frame_diff_end = cut_end_adjusted - cut_end
-            print(f"Adjusted cut end from frame {cut_end} to frame {cut_end_adjusted} ({frame_diff_end:+d} frames to nearest keyframe).")
+            logger.info(f"Adjusted cut end from frame {cut_end} to frame {cut_end_adjusted} ({frame_diff_end:+d} frames to nearest keyframe).")
         else:
-            print(f"Requested cut end frame {cut_end} is already at a keyframe.")
+            logger.info(f"Requested cut end frame {cut_end} is already at a keyframe.")
 
     if debug:
-        print("Key frames (in sec):", key_frames)
-        print("Key frame diffs wrt cut_start:", key_frames_diffs_start)
-        print("Key frame diffs wrt cut_end:", key_frames_diffs_end)
-        print("Closest (from right) key frame for start (in sec):", closest_key_frame_start)
-        print("Closest (from left) key frame for end (in sec):", closest_key_frame_end)
-        print(f"Original cut start ({cut_start}) adjusted to {cut_start_adjusted}")
-        print(f"Original cut end ({cut_end}) adjusted to {cut_end_adjusted}")
+        logger.info("Key frames (in sec): %s", key_frames)
+        logger.info("Key frame diffs wrt cut_start: %s", key_frames_diffs_start)
+        logger.info("Key frame diffs wrt cut_end: %s", key_frames_diffs_end)
+        logger.info("Closest (from right) key frame for start (in sec): %s", closest_key_frame_start)
+        logger.info("Closest (from left) key frame for end (in sec): %s", closest_key_frame_end)
+        logger.info(f"Original cut start ({cut_start}) adjusted to {cut_start_adjusted}")
+        logger.info(f"Original cut end ({cut_end}) adjusted to {cut_end_adjusted}")
 
     return (cut_start_adjusted, cut_end_adjusted, cuts[2])
 
 
-def get_cuts(filepaths: Dict[str, Path]) -> Tuple[int, int, int]:
+def get_cuts(filepaths: Dict[str, Path], logger: logging.Logger) -> Tuple[int, int, int]:
     try:
         with open(filepaths['cuts_txt'], 'r') as f:
             cuts = [line.rstrip().split(',') for line in f if line.strip()]
     except FileNotFoundError:
-        print('\033[91m' + f"Problem with reading '{filepaths['cuts_txt']}'" + '\033[0m')
-        exit(1)
+        logger.critical(f"Problem with reading '{filepaths['cuts_txt']}'")
+        sys.exit(1)
 
     if len(cuts) == 0:
-        print('\033[91m' + f"The file '{filepaths['cuts_txt']}' is empty!" + '\033[0m')
-        exit(1)
+        logger.critical(f"The file '{filepaths['cuts_txt']}' is empty!")
+        sys.exit(1)
     elif len(cuts) > 1:
-        print('\033[91m' + f"The file '{filepaths['cuts_txt']}' contains more than one line!" + '\033[0m')
-        exit(1)
+        logger.critical(f"The file '{filepaths['cuts_txt']}' contains more than one line!")
+        sys.exit(1)
     else:
         cuts = cuts[0]
         cut_start = int(cuts[0].strip())
@@ -361,7 +367,7 @@ def get_cuts(filepaths: Dict[str, Path]) -> Tuple[int, int, int]:
         except (IndexError, ValueError):
             cut_video_rotate = 0
 
-    print(f"Requested to cut the input video from frame {cut_start} to frame {cut_end} with rotation {cut_video_rotate}.")
+    logger.info(f"Requested to cut the input video from frame {cut_start} to frame {cut_end} with rotation {cut_video_rotate}.")
     cuts = (cut_start, cut_end, cut_video_rotate)
     return cuts
 
@@ -384,7 +390,8 @@ def perform_sanity_checks(cuts: Tuple[int, int, int], filepaths: Dict[str, Path]
     )
 
 
-def get_cli_arguments():
+def parse_cli_args() -> argparse.Namespace:
+    """Parse command-line arguments."""
     parser = argparse.ArgumentParser(description="Cut video and flight log according to specified frame ranges.")
     parser.add_argument('input_video', type=Path, help="File path to the input video")
     parser.add_argument('cuts', type=Path, nargs='?', help="File path to the cuts file")
@@ -396,11 +403,15 @@ def get_cli_arguments():
     parser.add_argument('--exact-cut', '-ec', action='store_true', help="Perform exact frame cutting with re-encoding (slower but precise)")
     parser.add_argument('--bitrate', '-b', type=str, default=None, help="Video bitrate for exact-cut mode (e.g., '5M', '10000k')")
     parser.add_argument('--debug', '-d', action='store_true', help="Run in debug mode")
+    parser.add_argument('--log-path', '-lp', type=Path, default=None, help="Where to write logs: a directory or a full file path; defaults to a platform-specific log directory.")
+    parser.add_argument('--quiet', '-q', action='store_true', help="Reduce console verbosity to important messages only (default: show INFO-level detail).")
     return parser.parse_args()
 
 
-if __name__ == "__main__":
-    args = get_cli_arguments()
+def main() -> None:
+    """Command-line entry point."""
+    args = parse_cli_args()
+    logger = setup_logger(Path(__file__).stem, verbose=not args.quiet, log_path=args.log_path)
 
     # Determine CSV suffix case based on video suffix case
     csv_suffix = '.csv' if args.input_video.suffix.islower() else '.CSV'
@@ -435,4 +446,8 @@ if __name__ == "__main__":
         filepaths['output_csv'] = args.input_video.with_name(f"{args.input_video.stem}_cut{csv_suffix}")
 
     # Process cutting - both paths converge here
-    process_cutting(filepaths, cuts=cuts, debug=args.debug, exact_cut=args.exact_cut, bitrate=args.bitrate)
+    process_cutting(filepaths, logger, cuts=cuts, debug=args.debug, exact_cut=args.exact_cut, bitrate=args.bitrate)
+
+
+if __name__ == "__main__":
+    main()

@@ -22,6 +22,8 @@ Options:
   -o, --output <path>        : Output folder for annotated images
                                (default: same as --seg-folder).
   -e, --ext <str>            : File extension of orthophoto images (default: png).
+  -lp, --log-path <str>      : Where to write logs: a directory or a full file path; defaults to a platform-specific log directory.
+  -q, --quiet                : Reduce console verbosity to important messages only (default: show INFO-level detail).
 
 Input:
   - Orthophoto images (PNG/TIF/TIFF) in <ortho_folder>.
@@ -57,7 +59,7 @@ import cv2
 import numpy as np
 import pandas as pd
 
-LOGGER_PREFIX = f'[{Path(__file__).name}]'
+from geotrax.utils.logging_utils import setup_logger
 
 LANE_COLOR = (0, 0, 255)
 SECTION_COLOR = (255, 0, 0)
@@ -69,15 +71,12 @@ SECTION_LABEL_THICKNESS = 8
 FONT = cv2.FONT_HERSHEY_SIMPLEX
 
 
-def visualize_segmentations(ortho_folder, seg_folder, output, ext, logger=None):
+def visualize_segmentations(ortho_folder, seg_folder, output, ext, logger: logging.Logger):
     """Overlay lane segmentations onto each orthophoto and write annotated images."""
-    if logger is None:
-        logger = logging.getLogger(__name__)
-
     ext = ext.lstrip('.')
     ortho_files = sorted(ortho_folder.glob(f'*.{ext}'))
     if not ortho_files:
-        logger.warning(f'{LOGGER_PREFIX} No *.{ext} files found in "{ortho_folder}".')
+        logger.warning(f'No *.{ext} files found in "{ortho_folder}".')
         return
 
     output.mkdir(parents=True, exist_ok=True)
@@ -86,12 +85,12 @@ def visualize_segmentations(ortho_folder, seg_folder, output, ext, logger=None):
     for ortho_file in ortho_files:
         seg_file = seg_folder / f'{ortho_file.stem}.csv'
         if not seg_file.exists():
-            logger.warning(f'{LOGGER_PREFIX} No segmentation CSV for "{ortho_file.name}" — skipping.')
+            logger.warning(f'No segmentation CSV for "{ortho_file.name}" — skipping.')
             continue
 
         img = cv2.imread(str(ortho_file))
         if img is None:
-            logger.warning(f'{LOGGER_PREFIX} Could not read "{ortho_file}" — skipping.')
+            logger.warning(f'Could not read "{ortho_file}" — skipping.')
             continue
 
         lanes = pd.read_csv(seg_file)
@@ -100,13 +99,13 @@ def visualize_segmentations(ortho_folder, seg_folder, output, ext, logger=None):
 
         out_path = output / f'{ortho_file.stem}.png'
         cv2.imwrite(str(out_path), img)
-        logger.info(f'{LOGGER_PREFIX} Saved "{out_path.name}".')
+        logger.info(f'Saved "{out_path.name}".')
         n_saved += 1
 
     if n_saved:
-        logger.info(f'{LOGGER_PREFIX} Done — {n_saved} image(s) saved to "{output}".')
+        logger.notice(f'Done — {n_saved} image(s) saved to "{output}".')
     else:
-        logger.warning(f'{LOGGER_PREFIX} No images were processed.')
+        logger.warning('No images were processed.')
 
 
 def _draw_lanes(img, lanes):
@@ -141,7 +140,8 @@ def _poly_center(row):
     return cx, cy
 
 
-def get_cli_arguments():
+def parse_cli_args() -> argparse.Namespace:
+    """Parse command-line arguments."""
     parser = argparse.ArgumentParser(
         description='Overlay road segmentation data onto orthophoto images.',
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -155,12 +155,17 @@ def get_cli_arguments():
                         help='Output folder for annotated images (default: same as --seg-folder).')
     parser.add_argument('-e', '--ext', type=str, default='png',
                         help='File extension of orthophoto images (default: png).')
+    parser.add_argument('-lp', '--log-path', type=Path, default=None,
+                        help='Where to write logs: a directory or a full file path; defaults to a platform-specific log directory.')
+    parser.add_argument('-q', '--quiet', action='store_true',
+                        help='Reduce console verbosity to important messages only (default: show INFO-level detail).')
     return parser.parse_args()
 
 
-if __name__ == '__main__':
-    logging.basicConfig(level=logging.INFO, format='%(message)s')
-    args = get_cli_arguments()
+def main() -> None:
+    """Command-line entry point."""
+    args = parse_cli_args()
+    logger = setup_logger(Path(__file__).stem, verbose=not args.quiet, log_path=args.log_path)
 
     seg_folder = args.seg_folder or args.ortho_folder / 'segmentations'
     output = args.output or seg_folder
@@ -170,4 +175,9 @@ if __name__ == '__main__':
         seg_folder=seg_folder,
         output=output,
         ext=args.ext,
+        logger=logger,
     )
+
+
+if __name__ == '__main__':
+    main()
