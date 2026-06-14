@@ -102,7 +102,7 @@ def setup_logger(name: str, verbose: bool = False, log_path: Union[str, Path, No
         file_handler.setFormatter(file_formatter)
         file_handler.setLevel(logging.INFO)
         logger.addHandler(file_handler)
-        logger.notice(f"Saving logs to: {log_filepath}")  # NOTICE so it shows on the console even without --verbose
+        print(f"Saving logs to: {log_filepath}")  # console-only notice; not written to the log file itself
 
     logger._original_formatters = {h: h.formatter for h in logger.handlers}
 
