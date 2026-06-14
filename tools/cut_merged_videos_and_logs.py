@@ -14,10 +14,10 @@ video; when absent only the video is cut. All companion files must reside in the
 same directory as the merged video.
 
 Prior to this tool, raw per-flight videos and their DJI SRT flight logs are
-merged per session using tools/create_merged_videos.py. DJI drones automatically
+merged per session using tools/merge_videos_and_logs.py. DJI drones automatically
 split continuous recordings into multiple files (typically capped at ~4 GB to
 stay within FAT32 file-system limits), so a single hover session may span
-several .mp4/.srt file pairs. create_merged_videos.py concatenates the video
+several .mp4/.srt file pairs. merge_videos_and_logs.py concatenates the video
 files into one merged .mp4 and concatenates the SRT files into one merged .srt.
 
 Cut start frames are snapped to the nearest I-frame to avoid re-encoding.
