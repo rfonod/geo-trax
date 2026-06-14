@@ -22,15 +22,9 @@ For model export, additional dependencies are required depending on the format:
 
 - **ONNX** (`onnx` format): install the `export` extras:
   ```bash
-  python -m pip install -e ".[export]"
+  python -m pip install -e '.[export]'
   ```
 - **TensorRT** (`engine` format): requires a CUDA-capable GPU and a separate TensorRT installation (not pip-installable). See the [TensorRT install guide](https://docs.nvidia.com/deeplearning/tensorrt/install-guide).
-
-Or install the minimum required packages manually:
-
-```bash
-python -m pip install ultralytics comet_ml
-```
 
 ---
 
