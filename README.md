@@ -87,7 +87,7 @@ Then, install geo-trax using one of the following options:
 ### Option 1: Install from PyPI
 
 ```bash
-pip install geo-trax
+python -m pip install geo-trax
 ```
 
 This installs the `geotrax` command-line interface (see [Batch Processing Example](#batch-processing-example)) together with the bundled configuration tree (`geotrax/cfg/`).
@@ -101,17 +101,18 @@ Recommended for development or model training — the default detection model we
 
 ```bash
 git clone --depth 1 https://github.com/rfonod/geo-trax.git   # latest snapshot only; drop --depth 1 for full history
-cd geo-trax && pip install -e .   # pip  (-e: editable mode, reflects code changes without reinstalling)
-# uv pip install -e .             # uv   (faster; requires uv venv from above)
-# poetry install                  # Poetry (auto-manages virtualenv; skip the virtual environment step)
+cd geo-trax
+python -m pip install -e .   # pip  (-e: editable mode, reflects code changes without reinstalling)
+# uv pip install -e .        # uv   (faster; requires uv venv from above)
+# poetry install             # Poetry (auto-manages virtualenv; skip the virtual environment step)
 ```
 
 **[Optional] Install development dependencies** (for development, testing, or other non-core auxiliary scripts):
 
 ```bash
-pip install -e '.[dev]'           # pip
-# uv pip install -e '.[dev]'      # uv
-# poetry install --extras dev     # Poetry
+python -m pip install -e '.[dev]'   # pip
+# uv pip install -e '.[dev]'        # uv
+# poetry install --extras dev       # Poetry
 ```
 
 ## Model Training

@@ -15,21 +15,21 @@ This folder contains Bash scripts for training YOLOv8 object detection models an
 Install the core package (covers training and Comet ML logging):
 
 ```bash
-pip install -e .
+python -m pip install -e .
 ```
 
 For model export, additional dependencies are required depending on the format:
 
 - **ONNX** (`onnx` format): install the `export` extras:
   ```bash
-  pip install -e ".[export]"
+  python -m pip install -e ".[export]"
   ```
 - **TensorRT** (`engine` format): requires a CUDA-capable GPU and a separate TensorRT installation (not pip-installable). See the [TensorRT install guide](https://docs.nvidia.com/deeplearning/tensorrt/install-guide).
 
 Or install the minimum required packages manually:
 
 ```bash
-pip install ultralytics comet_ml
+python -m pip install ultralytics comet_ml
 ```
 
 ---
@@ -114,7 +114,7 @@ Recursively searches a directory for `.pt` files and exports them to the specifi
 | `-o` | Overwrite already-exported files |
 | `-c <config_file>` | Path to a custom Ultralytics config (default: `geotrax/cfg/ultralytics/default.yaml`) |
 
-> **Note:** TensorRT (`engine`) export requires a CUDA-capable GPU and a separate TensorRT installation (not pip-installable). ONNX export has no GPU requirement. Additional packages (`onnx`, `onnxslim`, `onnxruntime`) are needed for ONNX export and are included in the `export` extras: `pip install -e ".[export]"`.
+> **Note:** TensorRT (`engine`) export requires a CUDA-capable GPU and a separate TensorRT installation (not pip-installable). ONNX export has no GPU requirement. Additional packages (`onnx`, `onnxslim`, `onnxruntime`) are needed for ONNX export and are included in the `export` extras: `python -m pip install -e ".[export]"`.
 
 ### Examples
 
@@ -176,7 +176,7 @@ The training script integrates with [Comet ML](https://www.comet.com/) for exper
 
 1. **Install Comet ML** (already included in the `dev` extras):
    ```bash
-   pip install comet_ml
+   python -m pip install comet_ml
    ```
 
 2. **Set your Comet API key** as an environment variable:
