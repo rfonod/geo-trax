@@ -76,6 +76,7 @@ export = [
 
 [project.urls]
 Homepage = "https://github.com/rfonod/geo-trax/"
+Source = "https://github.com/rfonod/geo-trax/"
 Repository = "https://github.com/rfonod/geo-trax/"
 Changelog = "https://github.com/rfonod/geo-trax/releases"
 Issues = "https://github.com/rfonod/geo-trax/issues/"

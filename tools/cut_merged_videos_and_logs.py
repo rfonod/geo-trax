@@ -20,12 +20,15 @@ stay within FAT32 file-system limits), so a single hover session may span
 several .mp4/.srt file pairs. merge_videos_and_logs.py concatenates the video
 files into one merged .mp4 and concatenates the SRT files into one merged .srt.
 
-Cut start frames are snapped to the nearest I-frame to avoid re-encoding.
-Output filenames are derived from an optional location label (nearest point in
-a user-supplied JSON map) and a per-label sequential counter
-(e.g. A1.mp4/A1.csv, A2.mp4/A2.csv, ...).
+The cutting points are defined by the user in a cut specification file (one cut
+per line) — either by manually inspecting the merged video or with an automated
+scene-change detector. Cut start frames are snapped to the nearest I-frame to
+avoid re-encoding. Output filenames are derived automatically from an optional
+location map (nearest named point to the GPS centroid of each clip) and a
+per-label sequential counter (e.g. A1.mp4/A1.csv, A2.mp4/A2.csv, ...); the
+location map auto-labels the outputs but does not determine the cutting itself.
 
-This tool was developed for the Songdo UAV dataset accompanying:
+This tool was developed for the Songdo Traffic dataset accompanying:
   Fonod et al., "Advanced computer vision for extracting georeferenced vehicle
   trajectories from drone imagery," Transportation Research Part C, 2025.
   https://doi.org/10.1016/j.trc.2025.105205
@@ -80,10 +83,15 @@ Input:
                   I-frame to avoid re-encoding.
     <stem>.srt : DJI SRT flight log (optional). If absent, the video is still
                  cut but no CSV flight log is generated for that session.
-                 Both bracket-delimited ([k: v] [k: v] ...) and comma-separated
-                 ([k: v, k: v, ...]) DJI SRT variants are supported. Field-name
-                 aliases across drone families (Mavic, Air, Inspire, Matrice, ...)
-                 are resolved automatically; see _FIELD_ALIASES in the source.
+                 Three bracket layouts are supported and may be mixed on one line:
+                   [k: v] [k: v] ...        one field per bracket
+                   [k: v, k: v, ...]        comma-separated fields
+                   [k1: v1 k2: v2]          space-separated fields
+                 The last form occurs, for example, when rel_alt and abs_alt are
+                 packed into a single bracket without a comma separator
+                 (e.g. [rel_alt: 0.000 abs_alt: -37.276]).
+                 Field-name aliases across drone families (Mavic, Air, Inspire,
+                 Matrice, ...) are resolved automatically; see _FIELD_ALIASES.
                  Missing fields default to 0 / empty string rather than crashing.
 
 Output (all files written to the same directory as the merged video):
@@ -449,13 +457,15 @@ def determine_intersection(
 def _parse_srt_line(log_line: str) -> dict[str, str]:
     """Extract all key-value pairs from a DJI SRT log line.
 
-    Handles bracket-delimited fields ([k: v] [k: v] ...) and comma-separated
-    fields within a single bracket ([k: v, k: v, ...]), as well as mixed forms
-    produced by different DJI drone families and firmware versions.
+    Handles three bracket layouts produced by different DJI drone families:
+    - One field per bracket : [k: v] [k: v] ...
+    - Comma-separated fields: [k: v, k: v, ...]
+    - Space-separated fields : [k1: v1 k2: v2] (e.g. [rel_alt: 0.000 abs_alt: -37.276])
+    Mixed layouts within a single line are also supported.
     """
     fields: dict[str, str] = {}
     for content in re.findall(r'\[([^\[\]]+)\]', log_line):
-        for part in re.split(r',', content):
+        for part in re.split(r',|\s+(?=\w+\s*:)', content):
             m = re.match(r'(\w+)\s*:\s*(.+)', part.strip())
             if m:
                 fields[m.group(1).lower()] = m.group(2).strip()

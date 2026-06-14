@@ -5,36 +5,50 @@
 """
 merge_videos_and_logs.py - Video and Flight Log Merging Tool
 
-Merges multiple per-flight video files and their DJI SRT flight logs from a single
-session directory into one merged video and one merged SRT file.
+Merges multiple per-flight video files and their DJI SRT flight logs from one or
+more session directories into merged video and SRT files, one pair per session.
 
 DJI drones automatically split continuous recordings into multiple smaller files
 (typically capped at ~4 GB to remain within FAT32 file-system limits), so a single
 hover session produces several .mp4/.srt file pairs. This tool concatenates them in
-sorted filename order, producing a single .mp4 and a single .srt that span the full
-session. The merged .srt preserves correct wall-clock timestamps and frame counters.
+sorted filename order into a single .mp4 and a single .srt that span the full session.
+The merged .srt preserves correct wall-clock timestamps and frame counters across files.
 
-The merged files are intended as input to tools/cut_merged_videos_and_logs.py, which
-cuts them into individual clips per location.
+The merged files serve as input to tools/cut_merged_videos_and_logs.py, which cuts
+them into labelled clips according to user-defined cut specification files. Cutting
+points must be defined by the user — either manually by inspecting the merged video
+or with an automated scene-change detector. An optional location map can then be
+supplied to auto-label each clip with the nearest named location (e.g. an intersection
+ID); this is what determines the output filenames, not the cutting itself.
 
-This tool was developed for the Songdo UAV dataset accompanying:
+This tool was developed for the Songdo Traffic dataset accompanying:
   Fonod et al., "Advanced computer vision for extracting georeferenced vehicle
   trajectories from drone imagery," Transportation Research Part C, 2025.
   https://doi.org/10.1016/j.trc.2025.105205
+In the Songdo experiment, each drone monitored multiple intersections per session,
+moving between them to maximise coverage. Merging the split files into one merged
+video per session allows the downstream cutting tool to produce one clip per
+intersection from a single merged source.
 
 Usage:
   python tools/merge_videos_and_logs.py <source_dir> [options]
 
 Arguments:
-  source_dir : Directory containing per-flight video and SRT pairs for one session.
+  source_dir : Root directory to search recursively for per-flight video files.
+               Can be a single session directory or the root of an entire experiment
+               (all session sub-directories are discovered automatically).
 
 Options:
   -h, --help                 : Show this help message and exit.
-  -od, --output-dir <path>   : Directory for merged output files (default: <source_dir>).
+  -od, --output-dir <path>   : Root directory for merged output files. The
+                               subdirectory structure under <source_dir> is mirrored
+                               here (default: <source_dir>, i.e. merged files are
+                               written into each session directory alongside the raws).
   -os, --output-stem <str>   : Stem for merged output filenames (default: '0_merged').
-                               Produces <output_stem>.mp4 and <output_stem>.srt.
+                               Produces <output_stem>.mp4 and <output_stem>.srt per session.
   -ve, --video-ext <str>     : Video file extension to search for, including the leading
                                dot (default: '.MP4'). Case-insensitive.
+  -ow, --overwrite           : Overwrite existing merged output files (default: skip).
   -dr, --dry-run             : Simulate merging without writing any files (default: off).
   -lp, --log-path <str>      : Where to write logs: a directory or a full file path;
                                defaults to a platform-specific log directory.
@@ -42,43 +56,48 @@ Options:
                                (default: show INFO-level detail).
 
 Examples:
-1. Merge all .MP4 and .SRT files in a session directory:
-   python tools/merge_videos_and_logs.py /path/to/RAW/2022-10-04/D1/AM1
-
-2. Write merged files to a separate output directory:
-   python tools/merge_videos_and_logs.py /path/to/RAW/D1/AM1 --output-dir /path/to/PROCESSED/D1/AM1
-
-3. Dry run to preview what would be merged:
-   python tools/merge_videos_and_logs.py /path/to/RAW/D1/AM1 --dry-run
-
-4. Songdo dataset (see paper above): merge all flights for drone 1, morning session 1:
+1. Merge a single session:
    python tools/merge_videos_and_logs.py /path/to/RAW/2022-10-04/D1/AM1 \\
      --output-dir /path/to/PROCESSED/2022-10-04/D1/AM1
 
-Input:
-- A flat directory containing per-flight video files (e.g. DJI_0001.MP4, DJI_0002.MP4)
-  and their companion DJI SRT flight logs (e.g. DJI_0001.SRT, DJI_0002.SRT). Files are
-  processed in sorted filename order. Video files are validated with ffprobe before
-  merging; corrupted or empty files are skipped with a warning.
+2. Merge all sessions across an entire experiment in one pass:
+   python tools/merge_videos_and_logs.py /path/to/RAW --output-dir /path/to/PROCESSED
 
-Output:
+3. Dry run to preview what would be merged across a full experiment:
+   python tools/merge_videos_and_logs.py /path/to/RAW --output-dir /path/to/PROCESSED --dry-run
+
+4. Re-merge, overwriting previously merged files:
+   python tools/merge_videos_and_logs.py /path/to/RAW --output-dir /path/to/PROCESSED --overwrite
+
+Input:
+- One or more session directories, each containing per-flight video files
+  (e.g. DJI_0001.MP4, DJI_0002.MP4) and their companion DJI SRT flight logs
+  (e.g. DJI_0001.SRT, DJI_0002.SRT). Files within each session are sorted by
+  filename — DJI names files with monotonically increasing counters (DJI_0001,
+  DJI_0002, ...) and files are typically copied directly from the drone without
+  renaming, so filename order equals recording order. No SRT timestamp inspection
+  is needed.
+  Video files are validated with ffprobe before merging; corrupted files are skipped.
+
+Output (per discovered session, written to the mirrored path under <output_dir>):
 - <output_stem>.mp4 : Merged video (stream-copy concatenation, no re-encoding).
 - <output_stem>.srt : Merged DJI SRT flight log with adjusted timestamps and frame
                       counters. Written only when at least one SRT companion is found.
-  Both files are written to <output_dir> (defaults to <source_dir>).
 
 Notes:
 - Video merging uses ffmpeg stream-copy (no quality loss, very fast).
-- SRT merging is handled in pure Python without additional dependencies. Both
-  'FrameCnt : N' and 'SrtCnt : N' counter formats across DJI drone families are
-  handled automatically.
+- SRT merging is implemented in pure Python; no additional dependencies are required
+  beyond the core geo-trax install. Both 'FrameCnt : N' and 'SrtCnt : N' counter
+  formats used across DJI drone families are handled automatically.
 - GPS coordinates and other telemetry fields in the SRT content are preserved
   verbatim from the original per-flight files.
 - If a video file has no companion SRT, it is still included in the video merge but
   its corresponding time window will be absent from the merged SRT (with a warning).
-- If the output files already exist they are skipped.
+- Existing output files are skipped unless --overwrite is specified.
+- It is recommended to keep <source_dir> and <output_dir> as separate root directories
+  to prevent the recursive scan from picking up previously merged files on a second run.
 
-Directory structure (recommended for multi-drone campaigns, e.g. Songdo dataset):
+Directory structure (Songdo dataset — non-prescriptive example):
   RAW/
   └── <ISO8601_date>/       # e.g. 2022-10-04
       └── D<drone_id>/      # e.g. D1, D2
@@ -95,7 +114,7 @@ Directory structure (recommended for multi-drone campaigns, e.g. Songdo dataset)
           └── <session>/
               ├── 0_merged.mp4
               ├── 0_merged.srt
-              └── 0_merged.txt  ← cut specification (created manually)
+              └── 0_merged.txt  ← cut specification (created manually by the user)
 """
 
 from __future__ import annotations
@@ -110,19 +129,29 @@ from pathlib import Path
 from geotrax.utils.logging_utils import setup_logger
 
 
+def find_session_dirs(source_dir: Path, video_ext: str, logger: logging.Logger) -> list[Path]:
+    """Recursively find all directories that directly contain at least one video file."""
+    session_dirs = sorted({
+        p.parent for p in source_dir.rglob('*')
+        if p.is_file() and p.suffix.lower() == video_ext.lower()
+    })
+    logger.info(f"Found {len(session_dirs)} session director{'y' if len(session_dirs) == 1 else 'ies'} under '{source_dir}'.")
+    return session_dirs
+
+
 def find_video_srt_pairs(
-    source_dir: Path,
+    session_dir: Path,
     video_ext: str,
     logger: logging.Logger,
 ) -> list[tuple[Path, Path | None]]:
-    """Scan source_dir for video files (sorted), validate them, and find companion SRTs."""
+    """Scan session_dir for video files (sorted by name), validate them, and find companion SRTs."""
     video_files = sorted(
-        p for p in source_dir.iterdir()
+        p for p in session_dir.iterdir()
         if p.is_file() and p.suffix.lower() == video_ext.lower()
     )
 
     if not video_files:
-        logger.error(f"No '{video_ext}' files found in '{source_dir}'.")
+        logger.error(f"No '{video_ext}' files found in '{session_dir}'.")
         return []
 
     pairs = []
@@ -168,12 +197,13 @@ def _find_companion_srt(video: Path, logger: logging.Logger) -> Path | None:
 def merge_videos(
     video_files: list[Path],
     output_path: Path,
+    overwrite: bool,
     dry_run: bool,
     logger: logging.Logger,
 ) -> bool:
     """Concatenate video_files into output_path using ffmpeg stream-copy."""
-    if output_path.exists():
-        logger.info(f"Merged video already exists at '{output_path}'; skipping.")
+    if output_path.exists() and not overwrite:
+        logger.info(f"Merged video already exists at '{output_path}'; skipping (use --overwrite to force).")
         return True
 
     logger.info(f"Merging {len(video_files)} video file(s) into '{output_path.name}':")
@@ -190,7 +220,7 @@ def merge_videos(
             f.write(f"file '{video}'\n")
 
     result = subprocess.run([
-        'ffmpeg', '-loglevel', 'error',
+        'ffmpeg', '-loglevel', 'error', '-y',
         '-f', 'concat', '-safe', '0',
         '-i', str(manifest_path),
         '-codec', 'copy',
@@ -209,12 +239,13 @@ def merge_videos(
 def merge_srt_files(
     srt_files: list[Path],
     output_path: Path,
+    overwrite: bool,
     dry_run: bool,
     logger: logging.Logger,
 ) -> bool:
     """Merge SRT flight logs into a single file with adjusted timestamps and frame counters."""
-    if output_path.exists():
-        logger.info(f"Merged SRT already exists at '{output_path}'; skipping.")
+    if output_path.exists() and not overwrite:
+        logger.info(f"Merged SRT already exists at '{output_path}'; skipping (use --overwrite to force).")
         return True
 
     logger.info(f"Merging {len(srt_files)} SRT file(s) into '{output_path.name}':")
@@ -327,12 +358,13 @@ def _blocks_to_srt(blocks: list[dict]) -> str:
 def parse_cli_args() -> argparse.Namespace:
     """Parse command-line arguments."""
     parser = argparse.ArgumentParser(
-        description='Merge per-flight DJI videos and SRT flight logs into a single merged file.'
+        description='Merge per-flight DJI videos and SRT flight logs into one merged file per session.'
     )
-    parser.add_argument('source_dir', type=Path, help='Directory containing per-flight video and SRT pairs.')
-    parser.add_argument('--output-dir', '-od', type=Path, default=None, help='Directory for merged output files (default: <source_dir>).')
+    parser.add_argument('source_dir', type=Path, help='Root directory to search recursively for per-flight video files.')
+    parser.add_argument('--output-dir', '-od', type=Path, default=None, help='Root directory for merged output files; subdirectory structure under <source_dir> is mirrored (default: <source_dir>).')
     parser.add_argument('--output-stem', '-os', type=str, default='0_merged', help="Stem for merged output filenames (default: '0_merged').")
     parser.add_argument('--video-ext', '-ve', type=str, default='.MP4', help="Video file extension to search for, including the leading dot (default: '.MP4'). Case-insensitive.")
+    parser.add_argument('--overwrite', '-ow', action='store_true', help='Overwrite existing merged output files (default: skip).')
     parser.add_argument('--dry-run', '-dr', action='store_true', help='Simulate merging without writing any files (default: off).')
     parser.add_argument('--log-path', '-lp', type=Path, default=None, help='Where to write logs: a directory or a full file path; defaults to a platform-specific log directory.')
     parser.add_argument('--quiet', '-q', action='store_true', help='Reduce console verbosity to important messages only (default: show INFO-level detail).')
@@ -349,31 +381,43 @@ def main() -> None:
         logger.error(f"'{source_dir}' is not a directory.")
         return
 
-    output_dir = (args.output_dir or source_dir).resolve()
-    if not args.dry_run:
-        output_dir.mkdir(parents=True, exist_ok=True)
+    output_root = (args.output_dir or source_dir).resolve()
 
-    pairs = find_video_srt_pairs(source_dir, args.video_ext, logger)
-    if not pairs:
-        logger.error("No valid video files found; nothing to merge.")
+    session_dirs = find_session_dirs(source_dir, args.video_ext, logger)
+    if not session_dirs:
+        logger.error(f"No '{args.video_ext}' files found under '{source_dir}'.")
         return
 
     ext_lower = args.video_ext.lstrip('.').lower()
-    output_video = output_dir / f'{args.output_stem}.{ext_lower}'
-    output_srt = output_dir / f'{args.output_stem}.srt'
 
-    video_files = [v for v, _ in pairs]
-    srt_files = [s for _, s in pairs if s is not None]
+    for session_dir in session_dirs:
+        rel = session_dir.relative_to(source_dir)
+        out_dir = output_root / rel
+        logger.info(f"--- Session: '{session_dir}' ---")
 
-    merge_videos(video_files, output_video, args.dry_run, logger)
+        pairs = find_video_srt_pairs(session_dir, args.video_ext, logger)
+        if not pairs:
+            logger.warning(f"No valid video files in '{session_dir}'; skipping.")
+            continue
 
-    if srt_files:
-        missing = len(pairs) - len(srt_files)
-        if missing:
-            logger.warning(f"{missing} flight(s) have no SRT; their metadata will be absent from the merged log.")
-        merge_srt_files(srt_files, output_srt, args.dry_run, logger)
-    else:
-        logger.warning("No SRT flight logs found; only the video will be merged.")
+        if not args.dry_run:
+            out_dir.mkdir(parents=True, exist_ok=True)
+
+        output_video = out_dir / f'{args.output_stem}.{ext_lower}'
+        output_srt = out_dir / f'{args.output_stem}.srt'
+
+        video_files = [v for v, _ in pairs]
+        srt_files = [s for _, s in pairs if s is not None]
+
+        merge_videos(video_files, output_video, args.overwrite, args.dry_run, logger)
+
+        if srt_files:
+            missing = len(pairs) - len(srt_files)
+            if missing:
+                logger.warning(f"{missing} flight(s) have no SRT; their metadata will be absent from the merged log.")
+            merge_srt_files(srt_files, output_srt, args.overwrite, args.dry_run, logger)
+        else:
+            logger.warning("No SRT flight logs found in this session; only the video will be merged.")
 
 
 if __name__ == '__main__':
