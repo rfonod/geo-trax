@@ -77,6 +77,9 @@ Input:
   DJI_0002, ...) and files are typically copied directly from the drone without
   renaming, so filename order equals recording order. No SRT timestamp inspection
   is needed.
+  Some DJI drones append '_trimmed' to the last video in a series
+  (e.g. DJI_0212_trimmed.mp4) while the companion SRT keeps the base stem
+  (DJI_0212.SRT); both exact and base-stem lookups are performed automatically.
   Video files are validated with ffprobe before merging; corrupted files are skipped.
 
 Output (per discovered session, written to the mirrored path under <output_dir>):
@@ -182,14 +185,27 @@ def _is_valid_video(video_path: Path, logger: logging.Logger) -> bool:
 
 
 def _find_companion_srt(video: Path, logger: logging.Logger) -> Path | None:
-    """Return the SRT companion for a video (tries lower- and upper-case extensions)."""
-    for ext in ('.srt', '.SRT'):
-        candidate = video.with_suffix(ext)
-        if candidate.exists():
-            if candidate.stat().st_size == 0:
-                logger.warning(f"'{candidate.name}' is empty; skipping SRT for this flight.")
-                return None
-            return candidate
+    """Return the SRT companion for a video (tries lower- and upper-case extensions).
+
+    Some DJI drones append '_trimmed' to the last video file in a series
+    (e.g. DJI_0212_trimmed.mp4) while the companion SRT retains the base stem
+    (DJI_0212.SRT). Both the exact stem and the de-trimmed base stem are tried.
+    """
+    stems_to_try = [video.stem]
+    if video.stem.lower().endswith('_trimmed'):
+        stems_to_try.append(video.stem[:-len('_trimmed')])
+
+    for stem in stems_to_try:
+        for ext in ('.srt', '.SRT'):
+            candidate = video.with_name(stem + ext)
+            if candidate.exists():
+                if candidate.stat().st_size == 0:
+                    logger.warning(f"'{candidate.name}' is empty; skipping SRT for this flight.")
+                    return None
+                if stem != video.stem:
+                    logger.info(f"Using '{candidate.name}' as SRT companion for '{video.name}' (base stem match).")
+                return candidate
+
     logger.warning(f"No SRT companion found for '{video.name}'; this flight will be excluded from the SRT merge.")
     return None
 
