@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Union
 
 import yaml
+from ultralytics import YOLO
 
 from geotrax import CFG_DIR, PACKAGE_DIR
 
@@ -73,8 +74,7 @@ def load_config_all(args: argparse.Namespace, logger: logging.Logger) -> dict:
     kwargs_ultralytics['tracker'] = str(_write_tracker_yaml(kwargs_tracker, args.cfg, logger))
     kwargs_ultralytics['model'] = str(resolve_asset_path(kwargs_ultralytics['model']))
 
-    class_names_filepath = Path(kwargs_ultralytics['model']).with_suffix('.yaml')
-    kwargs_main['class_names'] = load_class_names(class_names_filepath, logger)
+    kwargs_main['class_names'] = load_class_names_from_model(Path(kwargs_ultralytics['model']), logger)
     kwargs_main['args'] = args
 
     keys_to_update = ['classes', 'conf', 'show']
@@ -145,14 +145,12 @@ def backfill_args_from_config(args: argparse.Namespace, mapping: dict) -> None:
             setattr(args, arg_name, config_value)
 
 
-def load_class_names(class_names_filepath: Path, logger: logging.Logger) -> dict:
-    """Load class names from a YAML file."""
+def load_class_names_from_model(model_path: Path, logger: logging.Logger) -> dict:
+    """Load class names embedded in a YOLO model file."""
     try:
-        with open(class_names_filepath, 'r') as f:
-            class_names = yaml.safe_load(f)
-    except FileNotFoundError:
-        logger.error(f"Class names '{class_names_filepath}' not found. Using default class names.")
-        class_names = {i: f'class_{i}' for i in range(100)}
-    else:
-        logger.info(f"Class names loaded from: '{class_names_filepath}'.")
-    return class_names
+        names = YOLO(str(model_path)).names
+        logger.info(f"Class names loaded from model: '{model_path}'.")
+        return names
+    except Exception as e:
+        logger.error(f"Failed to load class names from '{model_path}': {e}. Using default class names.")
+        return {i: f'class_{i}' for i in range(100)}
