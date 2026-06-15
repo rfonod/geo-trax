@@ -14,7 +14,7 @@ Usage:
   geotrax config copy [--output-dir DIR] [--overwrite]
 
 Subcommands:
-  show          Print where the bundled pipeline configs live and list the available presets.
+  show          Explain the config system, list available presets, and show how to use them.
   show <preset> Print the full contents of one bundled preset (default, confident, lenient, stable).
   copy          Copy the bundled presets into a local directory (default: the current directory)
                 as <name>_copy.yaml files, ready to edit and pass to any command via -c.
@@ -24,10 +24,10 @@ Options (copy):
   --overwrite             : Overwrite existing <name>_copy.yaml files in the destination.
 
 Examples:
-1. See where the bundled configs are and which presets exist:
+1. Overview of the config system — presets, how to select and customise them:
    geotrax config show
 
-2. Print the full default pipeline config:
+2. Print the full default pipeline config (or browse it on GitHub — see 'geotrax config show'):
    geotrax config show default
 
 3. Copy all presets into the current directory for editing:
@@ -72,9 +72,10 @@ def parse_cli_args() -> argparse.Namespace:
     # --- show ---
     show_p = subparsers.add_parser(
         'show',
-        help='Print the bundled config location and presets, or the full contents of one preset.',
-        description='Print where the bundled pipeline configs live and list the presets. '
-                    'Pass a preset name to print that file in full.',
+        help='Explain the config system and list presets, or print the full contents of one preset.',
+        description='Without an argument: explain the pipeline config system, list available '
+                    'presets, and show how to inspect, copy, and select them. '
+                    'With a preset name: print that preset in full.',
     )
     show_p.add_argument(
         'preset', nargs='?', default=None, choices=_PRESETS, metavar='preset',
@@ -118,16 +119,32 @@ def _run_show(preset: Optional[str]) -> None:
         print(src.read_text())
         return
 
-    print(f"Bundled pipeline configs live in:\n  {CFG_DIR}\n")
+    print("geo-trax is driven by a single pipeline config that controls every stage: detection,")
+    print("tracking, stabilization, georeferencing, visualization, and plotting. Select a preset")
+    print("with -c on any command, e.g.:")
+    print()
+    print("  geotrax extract video.mp4 -c confident")
+    print("  geotrax batch   video.mp4 -c lenient -of data/orthophotos")
+    print()
     print("Available presets:")
     width = max(len(n) for n in _PRESETS)
     for name in _PRESETS:
-        marker = '' if (CFG_DIR / f'{name}.yaml').is_file() else '  [missing]'
+        marker = '  [missing]' if not (CFG_DIR / f'{name}.yaml').is_file() else ''
         print(f"  {name:<{width}}  {_PRESET_DESCRIPTIONS[name]}{marker}")
     print()
-    print("Inspect one in full:   geotrax config show <preset>   (e.g. geotrax config show default)")
-    print("Get editable copies:   geotrax config copy            (writes <name>_copy.yaml to the")
-    print("                       current directory; see 'geotrax config copy --help' for options)")
+    print("Inspect a preset in full:")
+    print("  geotrax config show default")
+    print()
+    print("To customise, copy a preset locally, edit it, then pass it via -c:")
+    print("  geotrax config copy                        # writes *_copy.yaml to the current directory")
+    print("  geotrax extract video.mp4 -c default_copy.yaml")
+    print()
+    print("  See 'geotrax config copy --help' for output-directory and overwrite options.")
+    print()
+    print("Browse presets online (alternative to 'geotrax config show <preset>'):")
+    print("  https://github.com/rfonod/geo-trax/tree/main/geotrax/cfg")
+    print()
+    print(f"Bundled config location (installed package):\n  {CFG_DIR}")
 
 
 def _run_copy(output_dir: Path, overwrite: bool) -> None:
