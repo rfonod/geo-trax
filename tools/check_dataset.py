@@ -157,7 +157,7 @@ def check_for_excessive_values(csv_files: list, args: argparse.Namespace, logger
         speed_violations_df = pd.concat([speed_violations_df, speed_violations])
 
         acc_violations = df[df['Vehicle_Acceleration'].abs() > args.acceleration_threshold][columns]
-        acc_violations = acc_violations.loc[acc_violations.groupby('Vehicle_ID')['Vehicle_Acceleration'].idxmax()]
+        acc_violations = acc_violations.loc[acc_violations.groupby('Vehicle_ID')['Vehicle_Acceleration'].abs().idxmax()]
         acceleration_violations_df = pd.concat([acceleration_violations_df, acc_violations])
 
     logger.notice(f"Checking for excessive speed values above {args.speed_threshold} km/h in the dataset...")

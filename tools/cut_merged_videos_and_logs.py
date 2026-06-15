@@ -185,8 +185,8 @@ _FIELD_ALIASES: dict[str, list[str]] = {
     'focal_len': ['focal_len', 'focal_length', 'focal_mm'],
     'latitude':  ['latitude', 'lat'],
     'longitude': ['longitude', 'lon'],
-    'rel_alt':   ['rel_alt', 'altitude_rel', 'height'],
-    'abs_alt':   ['abs_alt', 'altitude', 'altitude_msl'],
+    'rel_alt':   ['rel_alt', 'altitude_rel', 'altitude', 'height'],
+    'abs_alt':   ['abs_alt', 'altitude_msl'],
 }
 
 
@@ -289,9 +289,10 @@ def cut_and_save_srt(
     frame_num_local = -1
 
     for line_num, line in enumerate(merged_srt):
-        if line_num % 5 != 0:
+        try:
+            frame_num_global = int(line)
+        except ValueError:
             continue
-        frame_num_global = int(line)
         if not (cut_start <= frame_num_global < cut_end):
             continue
 

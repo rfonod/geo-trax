@@ -859,7 +859,7 @@ def create_and_format_georeferenced_df(track_id, timestamps, frame_num, x_stab_o
 
         if min_traj_length > 0:
             vehicle_count_before = len(georeferenced_df['Vehicle_ID'].unique())
-            georeferenced_df = georeferenced_df.groupby('Vehicle_ID').filter(lambda x: len(x) > min_traj_length)
+            georeferenced_df = georeferenced_df.groupby('Vehicle_ID').filter(lambda x: len(x) >= min_traj_length)
             vehicle_count_after = len(georeferenced_df['Vehicle_ID'].unique())
             vehicle_count_removed = vehicle_count_before - vehicle_count_after
             if vehicle_count_removed > 0:

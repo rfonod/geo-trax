@@ -160,12 +160,19 @@ def fix_timestamp_anomalies(args: argparse.Namespace, logger: logging.Logger) ->
             cmd1 = f"python tools/recut_video_and_log.py {video_filepath_original} {cut_filepath} -o {output_filepath}"
             logger.info(f"Running: {cmd1}")
             if not args.debug:
-                subprocess.run(cmd1, shell=True, check=True)
+                try:
+                    subprocess.run(cmd1, shell=True, check=True)
+                except subprocess.CalledProcessError as e:
+                    logger.error(f"Recut failed for '{output_filepath}': {e}")
+                    continue
 
             cmd2 = f"geotrax batch {output_filepath} -y -o"
             logger.info(f"Running: {cmd2}")
             if not args.debug:
-                subprocess.run(cmd2, shell=True, check=True)
+                try:
+                    subprocess.run(cmd2, shell=True, check=True)
+                except subprocess.CalledProcessError as e:
+                    logger.error(f"Batch processing failed for '{output_filepath}': {e}")
 
 
 def parse_cli_args() -> argparse.Namespace:

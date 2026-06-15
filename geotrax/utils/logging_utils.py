@@ -97,7 +97,7 @@ def setup_logger(name: str, verbose: bool = False, log_path: Union[str, Path, No
             log_filepath = default_log_dir() / stage_filename
         else:
             log_path = Path(log_path)
-            log_filepath = log_path / stage_filename if (log_path.is_dir() or not log_path.suffix) else log_path
+            log_filepath = log_path / stage_filename if log_path.is_dir() else log_path
         log_filepath.parent.mkdir(parents=True, exist_ok=True)
         file_handler = logging.FileHandler(log_filepath)
         file_handler.setFormatter(file_formatter)
