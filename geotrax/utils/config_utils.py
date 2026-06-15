@@ -11,9 +11,13 @@ from pathlib import Path
 from typing import Union
 
 import yaml
-from ultralytics import YOLO
 
 from geotrax import CFG_DIR, PACKAGE_DIR
+
+try:
+    from ultralytics import YOLO
+except ImportError:
+    YOLO = None
 
 ROOT_DIR = PACKAGE_DIR.parent  # repository root (source checkout) or site-packages (installed)
 
@@ -147,6 +151,9 @@ def backfill_args_from_config(args: argparse.Namespace, mapping: dict) -> None:
 
 def load_class_names_from_model(model_path: Path, logger: logging.Logger) -> dict:
     """Load class names embedded in a YOLO model file."""
+    if YOLO is None:
+        logger.error("ultralytics is not installed; cannot load class names from model. Using default class names.")
+        return {i: f'class_{i}' for i in range(100)}
     try:
         names = YOLO(str(model_path)).names
         logger.info(f"Class names loaded from model: '{model_path}'.")

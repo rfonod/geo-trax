@@ -6,12 +6,13 @@
 import argparse
 import logging
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from geotrax import CFG_DIR
 from geotrax.utils.config_utils import (
-    load_class_names,
+    load_class_names_from_model,
     load_config,
     load_config_all,
     resolve_asset_path,
@@ -52,10 +53,14 @@ def test_load_config_missing_exits():
 
 @pytest.mark.parametrize('preset', ['default', 'confident', 'lenient', 'stable'])
 def test_unified_configs_load(preset):
-    args = argparse.Namespace(cfg=preset, classes=None, conf=None, show=None)
-    config = load_config_all(args, logger)
+    mock_model = MagicMock()
+    mock_model.names = {0: 'Car', 1: 'Bus', 2: 'Truck', 3: 'Motorcycle'}
+    with patch('geotrax.utils.config_utils.YOLO', return_value=mock_model):
+        args = argparse.Namespace(cfg=preset, classes=None, conf=None, show=None)
+        config = load_config_all(args, logger)
     assert set(config) == {'main', 'stabilo', 'ultralytics', 'georef'}
     assert config['main']['visualization']['viz_mode'] in (0, 1, 2)
+    assert isinstance(config['main']['class_names'], dict)
     # The active tracker block is materialized to a temp YAML file for Ultralytics.
     assert Path(config['ultralytics']['tracker']).is_file()
 
@@ -85,13 +90,16 @@ def test_resolve_asset_path_absolute_returns_unchanged(tmp_path):
     assert resolve_asset_path(absolute) == absolute
 
 
-def test_load_class_names_from_file(tmp_path):
-    names_file = tmp_path / 'names.yaml'
-    names_file.write_text('0: car\n1: bus\n')
-    assert load_class_names(names_file, logger) == {0: 'car', 1: 'bus'}
+def test_load_class_names_from_model_success():
+    mock_model = MagicMock()
+    mock_model.names = {0: 'Car', 1: 'Bus', 2: 'Truck', 3: 'Motorcycle'}
+    with patch('geotrax.utils.config_utils.YOLO', return_value=mock_model):
+        result = load_class_names_from_model(Path('dummy.pt'), logger)
+    assert result == {0: 'Car', 1: 'Bus', 2: 'Truck', 3: 'Motorcycle'}
 
 
-def test_load_class_names_missing_returns_defaults():
-    names = load_class_names(Path('no/such/names.yaml'), logger)
-    assert names[0] == 'class_0'
-    assert len(names) == 100
+def test_load_class_names_from_model_missing_returns_defaults():
+    with patch('geotrax.utils.config_utils.YOLO', side_effect=FileNotFoundError('not found')):
+        result = load_class_names_from_model(Path('no/such/model.pt'), logger)
+    assert result[0] == 'class_0'
+    assert len(result) == 100
