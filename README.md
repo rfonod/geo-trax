@@ -115,25 +115,64 @@ python -m pip install -e '.[dev]'   # pip
 # poetry install --extras dev       # Poetry
 ```
 
+## Configuration
+
+The entire pipeline is driven by a **single, self-contained pipeline config file**. Every setting — detection, tracking, stabilization, georeferencing, visualization, and plotting — lives in one YAML file; there are no linked sub-config files. The defaults ship bundled inside the installed package, so there is nothing to download. Four ready-made presets are bundled and can be selected by name with `-c <name>` (e.g. `geotrax extract video.mp4 -c confident`): `default` (balanced baseline), `confident` (higher confidence, fewer false positives), `lenient` (lower confidence, higher recall), and `stable` (full-resolution stabilization).
+
+<details>
+<summary><b>⚙️ Inspecting, selecting, and customizing the pipeline config</b></summary>
+
+Manage the bundled configs with the `geotrax config` command:
+
+```bash
+geotrax config show              # show where the bundled configs live and list the presets
+geotrax config show default      # print a preset's full contents to the terminal
+geotrax config copy              # copy the presets into the current directory as <name>_copy.yaml
+geotrax config copy -o ~/myproj  # copy into a specific directory
+```
+
+**Selecting a preset.** Pass a bundled preset name straight to `-c` — no file path needed:
+
+```bash
+geotrax extract video.mp4 -c confident   # uses the bundled 'confident' preset
+geotrax batch  video.mp4 -c stable       # uses the bundled 'stable' preset
+```
+
+`-c` is resolved as given (absolute or relative to the working directory) and then against the bundled config directory, so a bare preset name like `confident` works from anywhere, while a path like `./my_config.yaml` points to your own file.
+
+**Customizing.** Copy a preset and pass your edited copy to any command with `-c`:
+
+```bash
+geotrax config copy
+# edit default_copy.yaml ...
+geotrax extract video.mp4 -c default_copy.yaml
+```
+
+To switch the tracking algorithm, set `tracker.active` in the config (see [Tracking Algorithms](#tracking-algorithms)).
+
+</details>
+
 ## Model Training
 
 The `train/` directory contains scripts for training and exporting custom YOLOv8 detection models using the [Ultralytics](https://github.com/ultralytics/ultralytics) framework, along with a SLURM wrapper for HPC clusters. See [train/README.md](train/README.md) for full usage instructions.
 
 ## Tracking Algorithms
 
-Geo-trax supports six multi-object trackers bundled with [Ultralytics](https://github.com/ultralytics/ultralytics) (`>=8.4.63`): **BoT-SORT** (default), **ByteTrack**, **OC-SORT**, **Deep OC-SORT**, **FastTracker**, and **TrackTrack**. Selection is purely config-driven — point the `cfg_tracker` key in `geotrax/cfg/default.yaml` at the matching `geotrax/cfg/tracker/default_<name>.yaml` (each documented inline, parameter by parameter); no code changes are needed.
+Geo-trax supports six multi-object trackers bundled with [Ultralytics](https://github.com/ultralytics/ultralytics) (`>=8.4.63`): **BoT-SORT** (default), **ByteTrack**, **OC-SORT**, **Deep OC-SORT**, **FastTracker**, and **TrackTrack**. The full parameter block for all six is inlined in the `tracker:` section of the pipeline config; selection is purely config-driven — set `tracker.active` to the desired name. No code changes are needed.
+
+> 💡 Run `geotrax config show default` to print the bundled config and inspect the `tracker:` section (all six blocks, every parameter documented inline).
 
 <details>
 <summary><b>🚗 Tracker comparison and selection guidance</b></summary>
 
-| Tracker | Config | ReID | GMC¹ | Pros | Cons |
-|---------|--------|:----:|:----:|------|------|
-| **BoT-SORT** (default) | `default_botsort.yaml` | optional | ✅ | Strong all-round accuracy; motion-based with optional appearance (ReID) and in-tracker camera-motion compensation. | Slower than ByteTrack; ReID adds compute and weights. |
-| **ByteTrack** | `default_bytetrack.yaml` | ❌ | ❌ | Fastest and simplest; two-stage association recovers low-confidence detections. | No appearance or motion compensation → more ID switches under occlusion or camera motion. |
-| **OC-SORT** | `default_ocsort.yaml` | ❌ | ❌ | Observation-centric motion model; robust to non-linear motion and brief occlusions; lightweight, ReID-free. | No appearance cues; weaker on long occlusions and dense, visually similar targets. |
-| **Deep OC-SORT** | `default_deepocsort.yaml` | optional | optional | OC-SORT plus appearance embeddings and optional GMC; fewer ID switches in crowded scenes. | Heaviest OC-SORT variant when ReID is enabled; more tuning. |
-| **FastTracker** | `default_fasttrack.yaml` | ❌ | ❌ | Occlusion-aware ByteTrack variant with Kalman rollback and init-IoU suppression; good ID retention through brief occlusions at low cost. | Newer/less battle-tested; ReID-free; several occlusion knobs to tune. |
-| **TrackTrack** | `default_tracktrack.yaml` | optional | ✅ | Multi-cue cost (HMIoU + ReID + confidence + angle) with iterative assignment and track-aware initialisation. | Most parameters to tune; higher compute. |
+| Tracker | `tracker.active` | ReID | GMC¹ | Pros | Cons |
+|---------|------------------|:----:|:----:|------|------|
+| **BoT-SORT** (default) | `botsort` | optional | ✅ | Strong all-round accuracy; motion-based with optional appearance (ReID) and in-tracker camera-motion compensation. | Slower than ByteTrack; ReID adds compute and weights. |
+| **ByteTrack** | `bytetrack` | ❌ | ❌ | Fastest and simplest; two-stage association recovers low-confidence detections. | No appearance or motion compensation → more ID switches under occlusion or camera motion. |
+| **OC-SORT** | `ocsort` | ❌ | ❌ | Observation-centric motion model; robust to non-linear motion and brief occlusions; lightweight, ReID-free. | No appearance cues; weaker on long occlusions and dense, visually similar targets. |
+| **Deep OC-SORT** | `deepocsort` | optional | optional | OC-SORT plus appearance embeddings and optional GMC; fewer ID switches in crowded scenes. | Heaviest OC-SORT variant when ReID is enabled; more tuning. |
+| **FastTracker** | `fasttrack` | ❌ | ❌ | Occlusion-aware ByteTrack variant with Kalman rollback and init-IoU suppression; good ID retention through brief occlusions at low cost. | Newer/less battle-tested; ReID-free; several occlusion knobs to tune. |
+| **TrackTrack** | `tracktrack` | optional | ✅ | Multi-cue cost (HMIoU + ReID + confidence + angle) with iterative assignment and track-aware initialisation. | Most parameters to tune; higher compute. |
 
 > ¹ **GMC** (global motion compensation) corrects for camera/drone movement *inside the tracker's association step*. It runs during tracking and is independent of Geo-trax's separate [Stabilo](https://github.com/rfonod/stabilo) stage, which stabilizes the already-extracted trajectories against a reference frame as post-processing and has no effect on tracking itself.
 
@@ -141,11 +180,11 @@ Geo-trax supports six multi-object trackers bundled with [Ultralytics](https://g
 
 </details>
 
-Tracking parameters (confidence thresholds, track buffer, matching thresholds, ReID, GMC, etc.) are documented inline in each tracker config. For full details on the underlying algorithms, see the [Ultralytics tracking docs](https://docs.ultralytics.com/modes/track/).
+All tracker parameters (confidence thresholds, track buffer, matching thresholds, ReID, GMC, etc.) live in the `tracker:` section of the pipeline config alongside every other pipeline setting, with one block per tracker. Run `geotrax config copy` to get an editable local copy. For full algorithm details, see the [Ultralytics tracking docs](https://docs.ultralytics.com/modes/track/).
 
 ## Batch Processing Example
 
-Installing geo-trax provides a single `geotrax` command with one subcommand per pipeline stage: `batch` (primary entry point), `extract`, `georeference`, `visualize`, `plot`, and `aggregate`. Run `geotrax -h` for the overview and `geotrax <command> -h` for the per-command option reference (`python -m geotrax …` works identically).
+Installing geo-trax provides a single `geotrax` command with one subcommand per pipeline stage: `batch` (primary entry point), `extract`, `georeference`, `visualize`, `plot`, `aggregate`, and `config` (config management). Run `geotrax -h` for the overview and `geotrax <command> -h` for the per-command option reference (`python -m geotrax …` works identically).
 
 The `geotrax batch` command can process multiple videos in a directory, including subdirectories, or a single video file.
 

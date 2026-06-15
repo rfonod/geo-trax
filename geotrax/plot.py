@@ -19,7 +19,8 @@ Arguments:
 
 Options:
   --help, -h       : Show this help message and exit.
-  --cfg, -c        : Path to the main geo-trax configuration file (default: geotrax/cfg/default.yaml).
+  --cfg, -c        : Path to a custom pipeline config file. Defaults to the bundled config;
+                     run 'geotrax config show' to view it or 'geotrax config copy' to customize.
   --log-path, -lp  : Where to write logs: a directory or a full file path; defaults to a platform-specific log directory.
   --verbose, -v    : Set verbosity to INFO (default: WARNING).
 
@@ -79,7 +80,7 @@ import pandas as pd
 import seaborn as sns
 from tqdm import tqdm
 
-from geotrax.utils.cli_utils import add_common_args
+from geotrax.utils.cli_utils import DEFAULT_CFG, add_common_args
 from geotrax.utils.config_utils import backfill_args_from_config, load_config_all
 from geotrax.utils.constants import (
     ACC_THRESHOLD_ALERT,
@@ -737,7 +738,7 @@ def default_plot_args(**overrides) -> argparse.Namespace:
         'input': None,
         'save': None,
         'show': None,
-        'cfg': 'geotrax/cfg/default.yaml',
+        'cfg': DEFAULT_CFG,
         'log_path': None,
         'verbose': False,
         'aggregate': None,

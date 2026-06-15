@@ -22,38 +22,38 @@ Arguments:
 
 Options:
     --help, -h                : Show this help message and exit.
-    --cfg, -c <path>          : Path to the main geo-trax configuration file (default: geotrax/cfg/default.yaml).
+    --cfg, -c <path>          : Path to a custom pipeline config file. Defaults to the bundled config;
+                                run 'geotrax config show' to view it or 'geotrax config copy' to customize.
     --log-path, -lp <str>     : Where to write logs: a directory or a full file path; defaults to a platform-specific log directory.
     --verbose, -v             : Set print verbosity level to INFO (default: WARNING).
 
 Processing Options:
-    --conf, -co <float>       : Detection confidence threshold. Defaults to cfg -> cfg_ultralytics -> conf.
+    --conf, -co <float>       : Detection confidence threshold. Defaults to cfg -> ultralytics -> conf.
     --classes, -cls <int> [<int> ...] : Class IDs to extract (e.g., --classes 0 1 2).
-                              Defaults to cfg -> cfg_ultralytics -> classes.
+                              Defaults to cfg -> ultralytics -> classes.
     --cut-frame-left, -cfl <int> : Skip the first N frames. Defaults to cfg -> processing -> cut_frame_left.
     --cut-frame-right, -cfr <int> : Stop processing after this frame. Defaults to cfg -> processing -> cut_frame_right.
-    For full detection, tracking, and stabilization control (model, IoU, image size, tracker settings,
-    stabilo settings, etc.), edit geotrax/cfg/ultralytics/default.yaml, the linked tracker config, and the linked stabilo config.
+    For full detection, tracking, and stabilization control, edit cfg -> ultralytics, cfg -> tracker,
+    and cfg -> stabilo. Run 'geotrax config copy' to get an editable local copy of the pipeline config.
 
 Examples:
   1. Process a video with default settings:
         geotrax extract path/to/video.mp4
 
-  2. Use a custom config and consider only the first two vehicle classes:
-        geotrax extract path/to/video.mp4 --cfg geotrax/cfg/custom.yaml --classes 0 1
+  2. Use a custom (locally copied) pipeline config and consider only the first two vehicle classes:
+        geotrax extract path/to/video.mp4 --cfg default_copy.yaml --classes 0 1
 
   3. Skip the first 100 frames and stop processing after frame 500:
         geotrax extract path/to/video.mp4 --cut-frame-left 100 --cut-frame-right 500
 
 Notes:
-  - Detection parameters (model, confidence, IoU, image size, etc.) are controlled via
-    geotrax/cfg/ultralytics/default.yaml.
-  - Tracking parameters (algorithm, track buffer, matching thresholds, etc.) are controlled via the tracker config
-    linked under cfg_tracker in the main config (default: geotrax/cfg/tracker/default_botsort.yaml).
-  - Stabilization parameters are controlled via the stabilo config linked under cfg_stabilo in the main config
-    (default: geotrax/cfg/stabilo/default.yaml).
-  - Extraction-stage settings (stabilize/save_stab toggles, min_track_length, and the dimension_estimation
-    block) live under the 'extraction:' section of the main config; min_track_length has no CLI flag.
+  - Detection, tracking, and stabilization parameters all live in a single pipeline config file
+    (cfg -> ultralytics, cfg -> tracker, cfg -> stabilo). Run 'geotrax config copy' to copy the
+    defaults locally, then edit and pass via -c.
+  - The active tracker is chosen by cfg -> tracker -> active; the full parameter block for every
+    supported tracker is kept in the config so you can switch by changing that one line.
+  - Extraction-stage settings (stabilize/save_stab toggles, min_track_length, and the
+    dimension_estimation block) are in cfg -> extraction; min_track_length has no CLI flag.
 """
 
 import argparse
@@ -435,8 +435,8 @@ def add_processing_args(group) -> None:
     Used by both ``geotrax extract`` and ``geotrax batch`` so the two expose an identical set
     of processing options. Every flag defaults to ``None`` and is backfilled from the config.
     """
-    group.add_argument('--conf', '-co', type=float, default=None, help='Detection confidence threshold. Defaults to cfg -> cfg_ultralytics -> conf.')
-    group.add_argument('--classes', '-cls', nargs='+', type=int, default=None, help='Class IDs to extract (e.g., --classes 0 1 2). Defaults to cfg -> cfg_ultralytics -> classes.')
+    group.add_argument('--conf', '-co', type=float, default=None, help='Detection confidence threshold. Defaults to cfg -> ultralytics -> conf.')
+    group.add_argument('--classes', '-cls', nargs='+', type=int, default=None, help='Class IDs to extract (e.g., --classes 0 1 2). Defaults to cfg -> ultralytics -> classes.')
     group.add_argument('--cut-frame-left', '-cfl', type=int, default=None, help='Skip the first N frames. Defaults to cfg -> processing -> cut_frame_left.')
     group.add_argument('--cut-frame-right', '-cfr', type=int, default=None, help='Stop processing after this frame. Defaults to cfg -> processing -> cut_frame_right.')
 
@@ -454,7 +454,7 @@ def parse_cli_args() -> argparse.Namespace:
 
     processing = parser.add_argument_group('Processing arguments',
         'For full detection and tracking control (model, IoU, image size, tracker settings, etc.), '
-        'edit geotrax/cfg/ultralytics/default.yaml and the linked tracker config.')
+        "edit cfg -> ultralytics and cfg -> tracker in the pipeline config (run 'geotrax config copy').")
     add_processing_args(processing)
 
     return parser.parse_args()

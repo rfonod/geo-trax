@@ -6,6 +6,7 @@
 import argparse
 import logging
 import sys
+import tempfile
 from pathlib import Path
 from typing import Union
 
@@ -22,8 +23,8 @@ def resolve_config_path(cfg_filepath: Union[str, Path]) -> Path:
     Tries, in order: the path as given (absolute or relative to the current working directory),
     the path relative to the package parent directory, and the path inside the bundled
     configuration directory (geotrax/cfg). A missing '.yaml' suffix and a legacy leading 'cfg/'
-    component are tolerated, so e.g. 'confident', 'cfg/default.yaml', and 'tracker/default_ocsort'
-    all resolve to the bundled configs. Returns the path unchanged if no candidate exists.
+    component are tolerated, so e.g. 'confident', 'cfg/default.yaml', and 'lenient' all resolve
+    to the bundled presets. Returns the path unchanged if no candidate exists.
     """
     path = Path(cfg_filepath)
     if not path.suffix:
@@ -52,13 +53,26 @@ def resolve_asset_path(filepath: Union[str, Path]) -> Path:
 
 
 def load_config_all(args: argparse.Namespace, logger: logging.Logger) -> dict:
-    """Load all configuration files and return a nested dict."""
-    kwargs_main = load_config(args.cfg, logger)
-    kwargs_stabilo = load_config(kwargs_main['cfg_stabilo'], logger)
-    kwargs_ultralytics = load_config(kwargs_main['cfg_ultralytics'], logger)
-    kwargs_georef = load_config(kwargs_main['cfg_georef'], logger)
+    """Load the unified pipeline configuration file and return a nested dict.
 
+    The pipeline config is a single YAML file with top-level sections: folders, processing,
+    batch, extraction, stabilo, georef, visualization, plotting, ultralytics, tracker.
+    The tracker section holds an 'active' selector plus a full parameter block per supported
+    tracker; the active block is written to a temporary YAML file so Ultralytics can read it
+    as a file path (its required interface).
+    """
+    full = load_config(args.cfg, logger)
+
+    kwargs_tracker     = full.get('tracker', {})
+    kwargs_stabilo     = full.get('stabilo', {})
+    kwargs_ultralytics = dict(full.get('ultralytics', {}))
+    kwargs_georef      = full.get('georef', {})
+    kwargs_main        = {k: v for k, v in full.items()
+                          if k not in ('tracker', 'stabilo', 'ultralytics', 'georef')}
+
+    kwargs_ultralytics['tracker'] = str(_write_tracker_yaml(kwargs_tracker, args.cfg, logger))
     kwargs_ultralytics['model'] = str(resolve_asset_path(kwargs_ultralytics['model']))
+
     class_names_filepath = Path(kwargs_ultralytics['model']).with_suffix('.yaml')
     kwargs_main['class_names'] = load_class_names(class_names_filepath, logger)
     kwargs_main['args'] = args
@@ -68,16 +82,47 @@ def load_config_all(args: argparse.Namespace, logger: logging.Logger) -> dict:
         if value is not None and arg in keys_to_update:
             kwargs_ultralytics[arg] = value
             logger.info(f"The default ultralytics value for {arg} has been updated to the provided CLI argument: {value}.")
-    kwargs_ultralytics['tracker'] = str(resolve_config_path(kwargs_main['cfg_tracker']))
 
-    logger.info(f"The main configuration file and all sub-configurations therein have been loaded from: '{args.cfg}'.")
+    logger.info(f"Pipeline configuration loaded from: '{args.cfg}'.")
 
     return {
         'main': kwargs_main,
         'stabilo': kwargs_stabilo,
         'ultralytics': kwargs_ultralytics,
-        'georef': kwargs_georef
+        'georef': kwargs_georef,
     }
+
+
+def _write_tracker_yaml(tracker_section: dict, cfg_name: Union[str, Path], logger: logging.Logger) -> Path:
+    """Select the active tracker block and write it to a temporary YAML file; return its path.
+
+    The pipeline config's ``tracker`` section holds an ``active`` selector plus one parameter
+    block per supported tracker. Only the active block is passed to Ultralytics, which requires
+    a file path for the tracker config; this bridges the unified config to that interface.
+    The temp file persists until OS cleanup.
+    """
+    active = tracker_section.get('active')
+    if active is None:
+        logger.critical(f"No 'active' tracker selector found in the 'tracker' section of '{cfg_name}'.")
+        sys.exit(1)
+    if active not in tracker_section:
+        available = [k for k in tracker_section if k != 'active']
+        logger.critical(
+            f"Active tracker '{active}' has no parameter block in the 'tracker' section of "
+            f"'{cfg_name}'. Available: {available}."
+        )
+        sys.exit(1)
+
+    tracker_cfg = tracker_section[active]
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode='w', suffix='.yaml', delete=False, prefix='geotrax_tracker_', encoding='utf-8'
+        ) as tmp:
+            yaml.dump(tracker_cfg, tmp, default_flow_style=False, allow_unicode=True)
+            return Path(tmp.name)
+    except OSError as exc:
+        logger.critical(f"Failed to write temporary tracker config: {exc}")
+        sys.exit(1)
 
 
 def load_config(cfg_filepath: Union[str, Path], logger: logging.Logger) -> dict:

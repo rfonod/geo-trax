@@ -47,19 +47,20 @@ Batch Processing Options:
                           Defaults to cfg -> batch -> exclude_patterns.
 
 Shared Options:
-    --cfg, -c <path>    : Path to the main geo-trax configuration file (default: geotrax/cfg/default.yaml).
+    --cfg, -c <path>    : Path to a custom pipeline config file. Defaults to the bundled config;
+                          run 'geotrax config show' to view it or 'geotrax config copy' to customize.
     --log-path, -lp <str> : Where to write logs: a directory or a full file path; defaults to a platform-specific log directory.
     --verbose, -v       : Set print verbosity level to INFO (default: WARNING).
 
 Processing Options:
-    --conf, -co <float>   : Detection confidence threshold. Defaults to cfg -> cfg_ultralytics -> conf.
+    --conf, -co <float>   : Detection confidence threshold. Defaults to cfg -> ultralytics -> conf.
     --classes, -cls <int> [<int> ...] : Vehicle class IDs to extract (e.g., --classes 0 1 2).
-                          Defaults to cfg -> cfg_ultralytics -> classes.
+                          Defaults to cfg -> ultralytics -> classes.
     --cut-frame-left, -cfl <int> : Skip the first N frames. Defaults to cfg -> processing -> cut_frame_left.
     --cut-frame-right, -cfr <int> : Stop at this frame number. Applies to single-file input only;
                           silently ignored in batch-directory mode. Defaults to cfg -> processing -> cut_frame_right.
     For full detection and tracking control (model, IoU, image size, tracker settings, etc.),
-    edit geotrax/cfg/ultralytics/default.yaml and the linked tracker config.
+    edit cfg -> ultralytics and cfg -> tracker in the pipeline config (run 'geotrax config copy').
 
 Georeferencing Options:
     --ortho-folder, -of <path>     : Path to the folder with orthophotos (.png, .tif, .txt).
@@ -170,7 +171,8 @@ Notes:
     processed through to their last frame.
   - --dry-run does not create the log file; use it freely before committing to a long run.
   - For full detection, tracking, and stabilization control (model, IoU, image size, tracker
-    algorithm, stabilizer settings), edit the linked sub-configs in geotrax/cfg/.
+    algorithm via cfg -> tracker -> active, stabilizer settings), edit the pipeline config;
+    run 'geotrax config copy' to get an editable local copy.
 """
 
 import argparse
@@ -372,7 +374,7 @@ def parse_cli_args() -> argparse.Namespace:
 
     processing = parser.add_argument_group('Processing options',
         'For full detection and tracking control (model, IoU, image size, tracker settings, etc.), '
-        'edit geotrax/cfg/ultralytics/default.yaml and the linked tracker config.')
+        "edit cfg -> ultralytics and cfg -> tracker in the pipeline config (run 'geotrax config copy').")
     add_processing_args(processing)
 
     georef = parser.add_argument_group('Georeferencing options')

@@ -34,10 +34,6 @@ def test_resolve_default_config(given):
     assert resolve_config_path(given).resolve() == CFG_DIR / 'default.yaml'
 
 
-def test_resolve_nested_config():
-    assert resolve_config_path('tracker/default_ocsort.yaml').resolve() == CFG_DIR / 'tracker' / 'default_ocsort.yaml'
-
-
 def test_resolve_prefers_existing_local_file(tmp_path, monkeypatch):
     local = tmp_path / 'default.yaml'
     local.write_text('stabilize: false\n')
@@ -55,20 +51,29 @@ def test_load_config_missing_exits():
 
 
 @pytest.mark.parametrize('preset', ['default', 'confident', 'lenient', 'stable'])
-def test_main_configs_load_with_all_subconfigs(preset):
+def test_unified_configs_load(preset):
     args = argparse.Namespace(cfg=preset, classes=None, conf=None, show=None)
     config = load_config_all(args, logger)
     assert set(config) == {'main', 'stabilo', 'ultralytics', 'georef'}
     assert config['main']['visualization']['viz_mode'] in (0, 1, 2)
+    # The active tracker block is materialized to a temp YAML file for Ultralytics.
     assert Path(config['ultralytics']['tracker']).is_file()
 
 
 @pytest.mark.parametrize(
     'tracker', ['botsort', 'bytetrack', 'ocsort', 'deepocsort', 'fasttrack', 'tracktrack']
 )
-def test_bundled_tracker_configs(tracker):
-    config = load_config(f'tracker/default_{tracker}.yaml', logger)
-    assert config['tracker_type'] == tracker
+def test_unified_config_contains_all_tracker_blocks(tracker):
+    full = load_config('default', logger)
+    assert tracker in full['tracker']
+    assert full['tracker'][tracker]['tracker_type'] == tracker
+
+
+def test_active_tracker_is_valid():
+    full = load_config('default', logger)
+    active = full['tracker']['active']
+    assert active in full['tracker']
+    assert full['tracker'][active]['tracker_type'] == active
 
 
 def test_resolve_asset_path_missing_returns_unchanged():

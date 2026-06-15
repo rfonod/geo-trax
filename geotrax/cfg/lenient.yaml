@@ -1,21 +1,36 @@
-# This is a preset geo-trax configuration (lenient.yaml) tuned for high-recall detection.
+# geo-trax pipeline configuration — "lenient" preset (lenient.yaml).
 #
-# Detection uses a lower confidence threshold and more permissive NMS IoU, catching more
-# vehicles including low-visibility ones at the cost of more false positives.
+# Identical to default.yaml except for a lower detection confidence threshold and a higher
+# detection cap. Maximises recall — catches more vehicles including low-visibility or
+# occluded ones — at the cost of more false positives. Useful for exploratory or crowded scenes.
 #
-# All parameters in the visualization and plotting sections below match the defaults in
-# default.yaml; adjust them here to persist non-default preferences for this preset.
+# Differs from default.yaml:
+#   ultralytics.conf:    0.25 -> 0.1
+#   ultralytics.max_det: 1000 -> 1500
 #
-# Sub-configuration docs:
-#   - Stabilo  (stabilization): https://github.com/rfonod/stabilo
-#   - Ultralytics (detection):  https://github.com/ultralytics/ultralytics
+# This file ships bundled inside the installed package. You normally do not edit it in place.
+# Instead, work with a local copy:
+#   geotrax config show            # show where this file lives and which presets are available
+#   geotrax config show lenient    # print this file's full contents to the terminal
+#   geotrax config copy            # copy the presets into the current directory as <name>_copy.yaml
+# Then pass your edited copy to any command with -c, e.g.:
+#   geotrax extract video.mp4 -c lenient_copy.yaml
+#
+# Parameters marked "(CLI override)" can be temporarily overridden via the matching
+# command-line flag; the value here is the persistent default.
+#
+# Layout (top to bottom): pipeline orchestration (folders, processing, batch), pipeline
+# stages in execution order (extraction, stabilo, georef, visualization, plotting), then
+# the underlying Ultralytics detection and tracking settings.
+#
+# Tuned for DJI Mavic 3 footage at 140–150 m altitude, 4K resolution. Adjust for other hardware.
+#
+# Full parameter references:
+#   Stabilo (stabilization):  https://github.com/rfonod/stabilo
+#   Ultralytics (detection):  https://github.com/ultralytics/ultralytics
 
 
-# --- Sub-configuration file paths ---
-cfg_ultralytics: geotrax/cfg/ultralytics/lenient.yaml     # Ultralytics YOLO config with lower conf threshold
-cfg_tracker:     geotrax/cfg/tracker/default_botsort.yaml # Tracker config; switch tracking algorithm here. Choices: default_botsort.yaml, default_bytetrack.yaml, default_ocsort.yaml, default_deepocsort.yaml, default_fasttrack.yaml, default_tracktrack.yaml
-cfg_stabilo:     geotrax/cfg/stabilo/default.yaml         # Stabilo stabilizer config
-cfg_georef:      geotrax/cfg/georef/default.yaml          # Georeferencing config
+# ── Pipeline orchestration ────────────────────────────────────────────────────
 
 # --- Shared data folders (CLI override) ---
 # Persistent defaults for the orthophoto / master-frame / segmentation folders; null keeps the
@@ -26,9 +41,19 @@ folders:
   segmentation_folder: null  # Folder with lane segmentation CSVs (and overlay PNGs); null = '<ortho_folder>/segmentations' — CLI: --segmentation-folder
 
 # --- Frame range; shared by extraction and visualization (CLI override) ---
+# These control how many frames to process. Override with --cut-frame-left / --cut-frame-right.
 processing:
   cut_frame_left: 0     # Skip this many frames at the start; [0, inf) — CLI: --cut-frame-left
   cut_frame_right: null # Stop at this frame number (null = process the entire video) — CLI: --cut-frame-right
+
+# --- Batch processing (CLI override) ---
+# Defaults for the batch orchestrator's directory scan ('geotrax batch' on a folder).
+batch:
+  folders_exclude: ['results']  # Sub-folder names to skip when scanning for videos; 'results' holds pipeline output (e.g. annotated mode videos) that must not be re-ingested as input — CLI: --folders-exclude
+  exclude_patterns: null        # Skip videos whose filename contains any of these substrings (null = none) — CLI: --exclude-patterns
+
+
+# ── Pipeline stages ───────────────────────────────────────────────────────────
 
 # --- Extraction stage ---
 # Stabilization, short-track removal, and vehicle dimension estimation for 'geotrax extract'.
@@ -48,7 +73,87 @@ extraction:
       3: 1.80       # Motorcycle
       -1: 1.70      # Unknown / unassigned class
 
+# --- Stabilization settings ---
+# Parameters for Stabilo video stabilization. Optimized for ORB + BF matching with
+# MAGSAC++ estimation on high-altitude BEV drone imagery at ~150 m altitude.
+# Full parameter reference: https://github.com/rfonod/stabilo
+stabilo:
+  # Image pre-processing
+  clahe: false          # Apply Contrast Limited Adaptive Histogram Equalization before feature detection; [true, false]
+  downsample_ratio: 0.5 # Resize input frames by this factor before processing; lower = faster but fewer features; (0.0, 1.0]
+
+  # Feature detector and descriptor
+  detector_name: 'orb'  # Feature detector/descriptor; choices: [orb, sift, rsift, brisk, kaze, akaze]
+  max_features: 2000    # Maximum keypoints to detect per frame; higher = more robust but slower; [0, inf)
+  ref_multiplier: 2.0   # Multiplier applied to max_features for the reference frame only; (0.0, inf)
+
+  # Feature matching and filtering
+  matcher_name: 'bf'    # Matching strategy; choices: [bf (brute-force), flann]
+  filter_type: 'ratio'  # Post-match filter; choices: [none, ratio (Lowe), distance]
+  filter_ratio: 0.9     # Lowe ratio-test threshold; lower = stricter (fewer but better matches); (0.0, 1.0]
+
+  # Transformation estimation
+  transformation_type: 'projective'  # Geometric model to estimate; choices: [projective, affine]
+  ransac_method: 38                  # RANSAC method; [4: LMEDS, 8: RANSAC, 16: RHO, 32: DEGENSAC, 33: DEGENSAC (alt.), 35: LO-RANSAC, 36: GC-RANSAC, 37: PROSAC, 38: MAGSAC++]
+  ransac_epipolar_threshold: 2.0     # Reprojection error threshold [px] for RANSAC inlier classification; (0.0, inf)
+  ransac_max_iter: 5000              # Maximum RANSAC iterations; (0, inf]
+  ransac_confidence: 0.999999        # Required probability that the best model is correct; (0.0, 1.0]
+
+  # Foreground mask
+  mask_use: true            # Exclude detected vehicle bounding boxes from feature extraction; [true, false]
+  mask_margin_ratio: 0.15   # Extra margin around each bounding box mask as a fraction of its size; [0.0, 1.0]
+
+  # Detector-specific thresholds (used if threshold analysis was not performed)
+  brisk_threshold: 130  # BRISK response threshold; lower = more keypoints; (0, 255]
+  kaze_threshold: 0.01  # KAZE response threshold; lower = more keypoints; (0.0, inf]
+  akaze_threshold: 0.01 # AKAZE response threshold; lower = more keypoints; (0.0, inf]
+
+  # Computation
+  gpu: false       # Use GPU-accelerated operations where available; [true, false]
+
+  # Diagnostics
+  viz: false       # Retain keypoints and match visualizations in memory (for debugging); [true, false]
+  benchmark: false # Enable timing benchmarks per frame; [true, false]
+
+  # Warning thresholds
+  min_good_match_count_warning: 20    # Warn if filtered match count falls below this; [0, inf]
+  min_inliers_match_count_warning: 10 # Warn if RANSAC inlier count falls below this; [0, inf]
+
+# --- Georeferencing settings ---
+# Parameters for the homography-based georeferencing stage ('geotrax georeference').
+georef:
+  # Coordinate reference systems and orthophoto geometry
+  transformation:
+    source_crs: epsg:4326    # CRS of the georeferenced orthophoto (e.g. epsg:4326 = WGS 84); string
+    target_crs: epsg:5186    # Target projected CRS for local-coordinate output (e.g. epsg:5186 = Korea 2000); string
+    cutout_width_px: 15000   # Original orthophoto cutout width [px]; used to derive geographic resolution when geo_source is 'center-text-file'; null falls back to the provided orthophoto width; [0, inf) or null
+
+  # Feature matching (MAGSAC++ based image registration against orthophotos)
+  matching:
+    max_features: 250000           # Maximum number of features to detect; [0, inf)
+    filter_ratio: 0.55             # Lowe ratio-test threshold; lower = stricter (fewer but better matches); (0.0, 1.0]
+    ransac_method: 38              # RANSAC method (same options as stabilization above)
+    ransac_epipolar_threshold: 3.0 # Reprojection error threshold [px] for RANSAC inlier classification; (0.0, inf)
+    ransac_max_iter: 10000         # Maximum RANSAC iterations; (0, inf]
+    ransac_confidence: 0.999999    # Required probability that the best model is correct; (0.0, 1.0]
+    rsift_eps: 0.00000001          # Epsilon added before RootSIFT L1-normalisation to avoid division by zero; > 0.0, keep very small (e.g. 1e-8)
+
+  # Trajectory kinematics filtering and output quality thresholds
+  filtering:
+    filter_type: gaussian   # Smoothing filter applied to speed before differentiation; choices: [gaussian, savgol]
+    kernel_size: 14         # Smoothing kernel / window size [frames]; larger = smoother speed/acceleration; [1, inf)
+    min_traj_length: 15     # Minimum number of georeferenced points required to keep a trajectory; shorter ones are discarded; [0, inf)
+    visibility_margin: 4    # Distance [px] from any frame edge below which a vehicle is flagged as partially visible; [0, inf)
+
+  # Processing settings (CLI override)
+  processing:
+    ref_frame: 0          # Video frame index used as the registration anchor; must match the stabilization reference frame; [0, inf) — CLI: --ref-frame
+    use_master: true      # Use a pre-computed master→orthophoto homography for faster, more robust matching — CLI: --no-master (disables)
+    recompute: false      # Force recomputation of the master→orthophoto homography even if a cached version exists — CLI: --recompute
+    geo_source: null      # Orthophoto parameter source; null = auto-detect from available files; choices: [null, metadata-tif, text-file, center-text-file] — CLI: --geo-source
+
 # --- Visualization settings (CLI override) ---
+# These control the annotated-video output from 'geotrax visualize'. Override any key via its CLI flag.
 visualization:
   save: true              # Save annotated output video to file — CLI: --save / --no-save
   show: false             # Open a live preview window during processing — CLI: --show / --no-show
@@ -68,6 +173,7 @@ visualization:
   class_filter: []        # Vehicle class IDs to exclude from visualization (e.g. [1, 2] hides bus and truck) — CLI: --class-filter
 
 # --- Plotting settings (CLI override) ---
+# These control the output from 'geotrax plot'. Override any key via its CLI flag.
 plotting:
   save: true                # Save plots as PDF files — CLI: --plot-save / --no-plot-save
   show: false               # Show plots in an interactive window — CLI: --plot-show / --no-plot-show
@@ -77,11 +183,254 @@ plotting:
   skip_filenames_with: ['bus', 'ids', 'transf']  # Skip result files whose stem contains any of these substrings
   aggregate: false          # When the input is a folder, merge trajectories from all videos sharing the same location ID into one plot per location — CLI: --plot-aggregate / --no-plot-aggregate
   plot_points: false        # Plot discrete trajectory points instead of connected lines — CLI: --plot-points / --no-plot-points
-  use_segmentations: false  # Produce an extra trajectory plot on the lane segmentation overlay PNG alongside the plain-orthophoto plot (pre-generate overlays with tools/viz_segmentations.py) — CLI: --plot-segmentations / --no-plot-segmentations
+  use_segmentations: false  # Produce an extra trajectory plot on the lane segmentation overlay PNG alongside the plain-orthophoto plot — CLI: --plot-segmentations / --no-plot-segmentations
   class_filter: []          # Vehicle class IDs to exclude from plots (e.g. [1] hides bus) — CLI: --plot-class-filter
 
-# --- Batch processing (CLI override) ---
-# Defaults for the batch orchestrator's directory scan ('geotrax batch' on a folder).
-batch:
-  folders_exclude: ['results']  # Sub-folder names to skip when scanning for videos; 'results' holds pipeline output (e.g. annotated mode videos) that must not be re-ingested as input — CLI: --folders-exclude
-  exclude_patterns: null        # Skip videos whose filename contains any of these substrings (null = none) — CLI: --exclude-patterns
+
+# ── Ultralytics detection & tracking ─────────────────────────────────────────
+
+# --- YOLO detection settings ---
+# Full parameter reference: https://github.com/ultralytics/ultralytics
+ultralytics:
+  task: detect # (str) YOLO task; i.e. detect, segment, semantic, classify, pose, obb
+  mode: track  # (str) YOLO mode; i.e. train, val, predict, export, track, benchmark
+
+  # Model
+  model: models/yolov8s_merger8_exp1.pt # (str) path to model weights file
+  data:         # (str, optional) path to data file, e.g. coco8.yaml
+  imgsz: 1920   # (int | list) inference image size (square int, or [h,w])
+  device:       # (int | str | list) device: 0/[0,1,2,3] for CUDA, 'cpu'/'mps', or -1/[-1,-1] to auto-select idle GPUs
+
+  # Detection / inference
+  conf: 0.1           # (float) object confidence threshold for detection; [0.0, 1.0]
+  iou: 0.7            # (float) IoU threshold for NMS; [0.0, 1.0]
+  max_det: 1500       # (int) maximum number of detections per image; [1, inf)
+  classes: [0,1,2,3]  # (int | list[int]) filter by class id(s); 0=car, 1=bus, 2=truck, 3=motorcycle
+  augment: false      # (bool) apply test-time augmentation during prediction
+  agnostic_nms: true  # (bool) class-agnostic NMS
+  half: false         # (bool) use half precision (FP16) if supported
+  dnn: false          # (bool) use OpenCV DNN for ONNX inference
+  vid_stride: 1       # (int) read every Nth frame for video sources
+  stream_buffer: false # (bool) true buffers all frames; false keeps the most recent frame
+  visualize: false    # (bool) visualize model features during prediction
+  end2end:            # (bool, optional) use end2end head (YOLO26, YOLOv10)
+
+  # Output / display
+  show: false          # (bool) show images/videos in a window if supported
+  save: false          # (bool) save predict results
+  save_frames: false   # (bool) save individual frames from video predictions
+  save_txt: false      # (bool) save results as .txt files (xywh format)
+  save_conf: true      # (bool) save confidence scores with results
+  save_crop: false     # (bool) save cropped prediction regions to files
+  show_labels: true    # (bool) draw class labels on images
+  show_conf: true      # (bool) draw confidence values on images
+  show_boxes: true     # (bool) draw bounding boxes on images
+  line_width: 2        # (int, optional) bounding-box line width; auto-scales if not set
+  embed:               # (list[int], optional) return feature embeddings from given layer indices
+  retina_masks: false  # (bool) use high-resolution segmentation masks (segment only)
+
+  # Export
+  format: torchscript  # (str) export target format; e.g. torchscript|onnx|openvino|engine|coreml|...
+  keras: false         # (bool) TF SavedModel only; enable Keras layers during export
+  optimize: false      # (bool) TorchScript: mobile optimizations
+  int8: false          # (bool) INT8/PTQ where supported; needs calibration data/fraction
+  dynamic: false       # (bool) dynamic shapes for torchscript, onnx, openvino, engine, coreml
+  simplify: false      # (bool) ONNX/engine only; run graph simplifier for cleaner ONNX before conversion
+  opset:               # (int, optional) ONNX/engine only; opset version; leave unset for tested default
+  workspace: 4         # (float, optional) TensorRT engine only; workspace size in GiB
+  nms: false           # (bool) fuse NMS into exported model when backend supports
+
+  # Val/Test
+  val: true            # (bool) run validation/testing during training
+  split: val           # (str) dataset split to evaluate: 'val', 'test', or 'train'
+  save_json: false     # (bool) save results to COCO JSON (detect/segment/pose) or PNG masks (semantic)
+  plots: true          # (bool) save plots and images during train/val
+
+  # Training
+  epochs: 200          # (int) number of epochs to train for
+  time:                # (float, optional) max training hours; overrides epochs if set
+  patience: 50         # (int) early stop after N epochs without improvement
+  batch: 8             # (int | float) batch size as int, or 0.0–1.0 for AutoBatch fraction of GPU memory
+  save_period: -1      # (int) save checkpoint every N epochs; disabled if < 1
+  cache: false         # (bool | str) cache images in RAM ('ram') or on 'disk'; false disables
+  workers: 8           # (int) dataloader workers (per RANK if DDP)
+  project:             # (str, optional) project name for results root
+  name:                # (str, optional) experiment name; results saved in 'project/name'
+  exist_ok: true       # (bool) overwrite existing 'project/name' if true
+  pretrained: true     # (bool | str) use pretrained weights (bool) or load from path (str)
+  optimizer: auto      # (str) optimizer: SGD, MuSGD, Adam, Adamax, AdamW, NAdam, RAdam, RMSProp, or auto
+  verbose: false       # (bool) print verbose logs during training/val
+  seed: 0              # (int) random seed for reproducibility
+  deterministic: true  # (bool) enable deterministic ops; reproducible but may be slower
+  single_cls: false    # (bool) treat all classes as a single class
+  rect: false          # (bool) rectangular batches for train; rectangular batching for val
+  cos_lr: false        # (bool) cosine learning rate scheduler
+  close_mosaic: 10     # (int) disable mosaic augmentation for final N epochs (0 to keep enabled)
+  resume: false        # (bool) resume training from last checkpoint in the run dir
+  amp: true            # (bool) Automatic Mixed Precision (AMP) training
+  fraction: 1.0        # (float) fraction of training dataset to use (1.0 = all)
+  profile: false       # (bool) profile ONNX/TensorRT speeds during training for loggers
+  freeze:              # (int | list, optional) freeze first N layers (int) or specific layer indices (list)
+  multi_scale: 0.0     # (float) multi-scale range as a fraction of imgsz
+  compile: false       # (bool | str) enable torch.compile() backend='inductor'
+
+  # Segmentation
+  overlap_mask: true   # (bool) merge instance masks into one mask during training
+  mask_ratio: 4        # (int) mask downsample ratio (segment only)
+
+  # Classification
+  dropout: 0.0         # (float) dropout for classification head (classify only)
+
+  # Hyperparameters
+  lr0: 0.01            # (float) initial learning rate (SGD=1e-2, Adam/AdamW=1e-3)
+  lrf: 0.01            # (float) final LR fraction; final LR = lr0 * lrf
+  momentum: 0.937      # (float) SGD momentum or Adam beta1
+  weight_decay: 0.0005 # (float) weight decay (L2 regularization)
+  warmup_epochs: 3.0   # (float) warmup epochs (fractions allowed)
+  warmup_momentum: 0.8 # (float) initial momentum during warmup
+  warmup_bias_lr: 0.1  # (float) bias learning rate during warmup
+  box: 7.5             # (float) box loss gain
+  cls: 0.5             # (float) classification loss gain
+  cls_pw: 0.0          # (float) class weights power for class imbalance (0.0=disable, 1.0=full inverse)
+  dfl: 1.5             # (float) distribution focal loss gain
+  pose: 12.0           # (float) pose loss gain (pose tasks)
+  kobj: 1.0            # (float) keypoint objectness loss gain (pose tasks)
+  rle: 1.0             # (float) rle loss gain (pose tasks)
+  angle: 1.0           # (float) oriented angle loss gain (obb tasks)
+  nbs: 64              # (int) nominal batch size used for loss normalization
+  hsv_h: 0.015         # (float) HSV hue augmentation fraction
+  hsv_s: 0.7           # (float) HSV saturation augmentation fraction
+  hsv_v: 0.4           # (float) HSV value (brightness) augmentation fraction
+  degrees: 0.0         # (float) rotation degrees (+/-)
+  translate: 0.1       # (float) translation fraction (+/-)
+  scale: 0.5           # (float | tuple) scale gain (+/-) as float, or explicit (min, max) tuple
+  shear: 0.0           # (float) shear degrees (+/-)
+  perspective: 0.0     # (float) perspective fraction (0–0.001 typical)
+  flipud: 0.0          # (float) vertical flip probability
+  fliplr: 0.5          # (float) horizontal flip probability
+  bgr: 0.0             # (float) RGB↔BGR channel swap probability
+  mosaic: 1.0          # (float) mosaic augmentation probability
+  mixup: 0.0           # (float) MixUp augmentation probability
+  cutmix: 0.0          # (float) CutMix augmentation probability
+  copy_paste: 0.0      # (float) segmentation copy-paste probability
+  copy_paste_mode: flip # (str) copy-paste strategy: flip or mixup
+  auto_augment: randaugment # (str) classification auto augmentation: randaugment, autoaugment, augmix
+  erasing: 0.4         # (float) random erasing probability for classification (0.0–1.0)
+
+  cfg:                 # (str, optional) path to a config.yaml that overrides Ultralytics defaults
+
+# --- Tracking settings ---
+# A single 'active' selector chooses which tracker drives 'geotrax extract'. The complete
+# parameter set for all six supported trackers is kept below, so you can switch algorithm by
+# changing one line. Only the active tracker's block is used; the others are ignored.
+# Full reference: https://docs.ultralytics.com/modes/track/
+tracker:
+  active: botsort  # Active tracking algorithm; choices: [botsort, bytetrack, ocsort, deepocsort, fasttrack, tracktrack]
+
+  # BoT-SORT — strong all-round accuracy; motion-based with optional appearance (ReID) and in-tracker GMC.
+  botsort:
+    tracker_type: botsort    # Tracker backend; botsort enables GMC and optional ReID; [botsort, bytetrack, ocsort, deepocsort, fasttrack, tracktrack]
+    track_high_thresh: 0.25  # Detection confidence threshold for first-stage (high-confidence) association; [0.0, 1.0]
+    track_low_thresh: 0.1    # Detection confidence threshold for second-stage (low-confidence) recovery; [0.0, 1.0]
+    new_track_thresh: 0.25   # Minimum confidence to initialise a new track; higher reduces false track initiations; [0.0, 1.0]
+    track_buffer: 30         # Frames to keep a lost track alive before deletion; higher tolerates longer occlusions; [1, inf)
+    match_thresh: 0.8        # IoU/cost threshold for track-detection assignment; higher = stricter matching; [0.0, 1.0]
+    fuse_score: true         # Fuse detection confidence with the IoU cost matrix; improves weak-detection robustness; [true, false]
+    # BoT-SORT specific
+    gmc_method: sparseOptFlow  # Global motion compensation method; choices: [sparseOptFlow, orb, sift, ecc, none]
+    # ReID (appearance-based re-identification)
+    proximity_thresh: 0.5    # Minimum IoU for tracks to be considered proximate enough for ReID comparison; [0.0, 1.0]
+    appearance_thresh: 0.8   # Minimum cosine similarity for ReID match acceptance; higher reduces identity swaps; [0.0, 1.0]
+    with_reid: false         # Enable ReID model; requires additional model weights and increases compute; [true, false]
+    model: auto              # ReID model name or path; "auto" uses detector-derived features if available; string
+
+  # ByteTrack — fastest and simplest; two-stage association, no ReID/GMC.
+  bytetrack:
+    tracker_type: bytetrack  # Tracker backend; bytetrack is faster but lacks ReID/GMC; [botsort, bytetrack, ocsort, deepocsort, fasttrack, tracktrack]
+    track_high_thresh: 0.25  # Detection confidence threshold for first-stage (high-confidence) association; [0.0, 1.0]
+    track_low_thresh: 0.1    # Detection confidence threshold for second-stage (low-confidence) recovery; [0.0, 1.0]
+    new_track_thresh: 0.25   # Minimum confidence to initialise a new track; higher reduces false track initiations; [0.0, 1.0]
+    track_buffer: 30         # Frames to keep a lost track alive before deletion; higher tolerates longer occlusions; [1, inf)
+    match_thresh: 0.8        # IoU/cost threshold for track-detection assignment; higher = stricter matching; [0.0, 1.0]
+    fuse_score: true         # Fuse detection confidence with the IoU cost matrix; improves weak-detection robustness; [true, false]
+
+  # OC-SORT — observation-centric, motion-only, ReID-free; robust to occlusion and non-linear motion.
+  ocsort:
+    tracker_type: ocsort     # Tracker backend; [botsort, bytetrack, ocsort, deepocsort, fasttrack, tracktrack]
+    track_high_thresh: 0.25  # Detection confidence threshold for first-stage (high-confidence) association; [0.0, 1.0]
+    track_low_thresh: 0.1    # Detection confidence threshold for second-stage recovery; only used when use_byte=true; [0.0, 1.0]
+    new_track_thresh: 0.25   # Minimum confidence to initialise a new track; higher reduces false track initiations; [0.0, 1.0]
+    track_buffer: 30         # Frames to keep a lost track alive before deletion; higher tolerates longer occlusions; [1, inf)
+    match_thresh: 0.8        # IoU/cost threshold for track-detection assignment; higher = stricter matching; [0.0, 1.0]
+    fuse_score: true         # Fuse detection confidence with the IoU cost matrix; improves weak-detection robustness; [true, false]
+    # OC-SORT specific
+    delta_t: 3       # Temporal window [frames] for velocity-direction estimation in the OCM module; higher smooths more; [1, inf)
+    inertia: 0.2     # Weight of the velocity-consistency cost in association; higher penalises direction changes; [0.0, 1.0]
+    use_byte: false  # Enable a ByteTrack-style low-confidence second association pass; [true, false]
+
+  # Deep OC-SORT — OC-SORT plus appearance (ReID) features and optional GMC; fewer ID switches in crowds.
+  deepocsort:
+    tracker_type: deepocsort  # Tracker backend; [botsort, bytetrack, ocsort, deepocsort, fasttrack, tracktrack]
+    track_high_thresh: 0.3    # Detection confidence threshold for first-stage (high-confidence) association; [0.0, 1.0]
+    track_low_thresh: 0.1     # Detection confidence threshold for second-stage recovery; only used when use_byte=true; [0.0, 1.0]
+    new_track_thresh: 0.3     # Minimum confidence to initialise a new track; higher reduces false track initiations; [0.0, 1.0]
+    track_buffer: 30          # Frames to keep a lost track alive before deletion; higher tolerates longer occlusions; [1, inf)
+    match_thresh: 0.8         # IoU/cost threshold for track-detection assignment; higher = stricter matching; [0.0, 1.0]
+    fuse_score: true          # Fuse detection confidence with the IoU cost matrix; improves weak-detection robustness; [true, false]
+    # OC-SORT specific (inherited)
+    delta_t: 3       # Temporal window [frames] for velocity-direction estimation in the OCM module; higher smooths more; [1, inf)
+    inertia: 0.2     # Weight of the velocity-consistency cost in association; higher penalises direction changes; [0.0, 1.0]
+    use_byte: false  # Enable a ByteTrack-style low-confidence second association pass; [true, false]
+    # Deep OC-SORT specific
+    gmc_method: none         # Global motion compensation method; choices: [sparseOptFlow, orb, sift, ecc, none] — enable for moving-camera scenes
+    with_reid: false         # Enable the ReID appearance model; requires extra weights and increases compute; [true, false]
+    model: auto              # ReID model name or path; "auto" uses detector-derived features if available; string
+    proximity_thresh: 0.5    # Minimum IoU for tracks to be considered proximate enough for ReID comparison; [0.0, 1.0]
+    appearance_thresh: 0.9   # Minimum appearance (cosine) similarity for ReID match acceptance; higher reduces identity swaps; [0.0, 1.0]
+    alpha_fixed_emb: 0.95    # Base EMA factor for updating track embeddings; higher = slower embedding update; [0.0, 1.0]
+
+  # FastTracker — occlusion-aware ByteTrack variant with Kalman rollback and init-IoU suppression; ReID-free.
+  fasttrack:
+    tracker_type: fasttrack  # Tracker backend; [botsort, bytetrack, ocsort, deepocsort, fasttrack, tracktrack]
+    track_high_thresh: 0.25  # Detection confidence threshold for first-stage (high-confidence) association; [0.0, 1.0]
+    track_low_thresh: 0.1    # Detection confidence threshold for second-stage (low-confidence) recovery; [0.0, 1.0]
+    new_track_thresh: 0.25   # Minimum confidence to initialise a new track; higher reduces false track initiations; [0.0, 1.0]
+    track_buffer: 30         # Frames to keep a lost track alive before deletion; higher tolerates longer occlusions; [1, inf)
+    match_thresh: 0.8        # IoU/cost threshold for track-detection assignment; higher = stricter matching; [0.0, 1.0]
+    fuse_score: true         # Fuse detection confidence with the IoU cost matrix; improves weak-detection robustness; [true, false]
+    # FastTracker specific (occlusion handling)
+    reset_velocity_offset_occ: 5    # History frames to roll back for restoring Kalman velocity at occlusion onset; [0, inf)
+    reset_pos_offset_occ: 3         # History frames to roll back for restoring Kalman position at occlusion onset; [0, inf)
+    enlarge_bbox_occ: 1.1           # One-shot bbox-height scale while occluded (widens the search region); [1.0, inf)
+    dampen_motion_occ: 0.5          # Velocity dampening factor applied while occluded; [0.0, 1.0]
+    active_occ_to_lost_thresh: 10   # Max consecutive occluded frames before a track is marked lost; [1, inf)
+    occ_cover_thresh: 0.7           # Fraction of a track's area covered by another to declare occlusion; [0.0, 1.0]
+    occ_reappear_window: 40         # Frames a recently-occluded lost track stays re-findable; [1, inf)
+    init_iou_suppress: 0.7          # Suppress new-track init if IoU with any active track >= this (1.0 disables); [0.0, 1.0]
+
+  # TrackTrack — multi-cue cost (HMIoU + ReID + confidence + angle) with iterative assignment; optional ReID/GMC.
+  tracktrack:
+    tracker_type: tracktrack  # Tracker backend; [botsort, bytetrack, ocsort, deepocsort, fasttrack, tracktrack]
+    track_high_thresh: 0.6    # Detection confidence threshold for first-stage (high-confidence) association; [0.0, 1.0]
+    track_low_thresh: 0.25    # Detection confidence threshold for second-stage (low-confidence) recovery; [0.0, 1.0]
+    new_track_thresh: 0.7     # Minimum confidence to initialise a new track via track-aware initialisation (TAI); [0.0, 1.0]
+    track_buffer: 30          # Frames to keep a lost track alive before deletion; higher tolerates longer occlusions; [1, inf)
+    match_thresh: 0.7         # Initial matching threshold for iterative assignment; higher = stricter matching; [0.0, 1.0]
+    lost_match_thr: 0.0       # Relaxed rebind-cost gate for still-Lost tracks; 0 disables the second pass; raise (e.g. 0.9) for long-occlusion scenes; [0.0, 1.0]
+    # Association weights
+    iou_weight: 0.5    # Weight of the HMIoU distance in the cost matrix; [0.0, 1.0]
+    reid_weight: 0.5   # Weight of the cosine distance (HMIoU fallback if no ReID) in the cost matrix; [0.0, 1.0]
+    conf_weight: 0.1   # Weight of the confidence distance in the cost matrix; [0.0, 1.0]
+    angle_weight: 0.05 # Weight of the corner-angle distance in the cost matrix; [0.0, 1.0]
+    # Iterative assignment
+    penalty_p: 0.2     # Cost penalty applied to low-confidence detections; [0.0, 1.0]
+    penalty_q: 0.4     # Cost penalty applied to deleted/recovered detections; [0.0, 1.0]
+    reduce_step: 0.05  # Threshold reduction applied per iteration; [0.0, 1.0]
+    # Track-Aware Initialisation (TAI)
+    tai_thr: 0.55      # IoU threshold for TAI non-maximum suppression; [0.0, 1.0]
+    min_track_len: 3   # Minimum history length before a track is confirmed; [1, inf)
+    # Global motion compensation
+    gmc_method: sparseOptFlow  # Global motion compensation method; choices: [sparseOptFlow, orb, sift, ecc, none]
+    # ReID (appearance-based re-identification)
+    with_reid: false   # Enable the ReID appearance model; requires extra weights and increases compute; [true, false]
+    model: auto        # ReID model name or path; "auto" uses detector-derived features if available; string

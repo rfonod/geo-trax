@@ -19,8 +19,10 @@ Options:
     -h, --help                          : Show this help message and exit.
     -a, --annotations <path>            : Directory to save the annotation .txt files. Defaults to
                                           '<source>/../pre-labels'.
-    -c, --cfg <path>                    : Path to the ultralytics configuration YAML file
-                                          (default: geotrax/cfg/ultralytics/annotator/default.yaml).
+    -c, --cfg <path>                    : Pipeline config (default: the bundled geotrax/cfg/default.yaml)
+                                          or a flat Ultralytics YAML. The annotator uses the config's
+                                          'ultralytics:' detection settings; a bundled preset name
+                                          (default, confident, lenient, stable) also works.
     -v, --save-viz                      : Save images with colored bounding boxes overlaid.
     -z, --viz-dir <path>                : Directory to save visualization images. Defaults to
                                           '<annotations>/visualizations' when --save-viz is set.
@@ -29,6 +31,11 @@ Options:
                                           only (default: 0.0).
     -f, --conf <float>                  : Override the confidence threshold from the config file.
     -i, --iou <float>                   : Override the IoU threshold for NMS from the config file.
+    -sz, --imgsz <int>                  : Override the inference image size [px]; higher detects
+                                          smaller/farther vehicles at the cost of speed.
+    -ag, --augment / --no-augment       : Enable/disable test-time augmentation; can improve recall.
+    -md, --max-det <int>                : Override the maximum number of detections per image.
+    -an, --agnostic-nms / --no-...      : Enable/disable class-agnostic NMS.
     -k, --classes <ID> [<ID> ...]       : Restrict inference to the specified class IDs.
     -t, --class-conf <ID=THRESH> [...]  : Per-class confidence thresholds as CLASS_ID=THRESHOLD
                                           pairs (e.g. -t 0=0.3 1=0.5). Classes not listed fall
@@ -37,6 +44,9 @@ Options:
                                           visualizations.
     -s, --save-conf                     : Append the detection confidence score to each annotation
                                           line: class_id x_center y_center width height confidence.
+    -o, --overwrite                     : Regenerate and overwrite existing annotation files. By
+                                          default, images that already have an annotation file are
+                                          skipped (and reported) so prior/edited labels are preserved.
     -hc, --hide-conf                    : Hide confidence scores on visualizations.
     -hl, --hide-labels                  : Hide class labels on visualizations.
     -w, --line-width <int>              : Line thickness for bounding boxes in visualizations
@@ -54,8 +64,8 @@ Examples:
   3. Save visualizations to a custom directory, without confidence scores and with thick lines:
      python tools/annotate_frames.py path/to/images/ -v -z path/to/viz/ -hc -w 3
 
-  4. Override confidence and IoU thresholds:
-     python tools/annotate_frames.py path/to/images/ --conf 0.4 --iou 0.5
+  4. Override confidence, IoU, resolution, and enable test-time augmentation:
+     python tools/annotate_frames.py path/to/images/ --conf 0.2 --iou 0.5 --imgsz 2560 --augment
 
   5. Restrict inference to class IDs 0 and 2 with per-class confidence thresholds:
      python tools/annotate_frames.py path/to/images/ -k 0 2 -t 0=0.3 2=0.6
@@ -63,8 +73,34 @@ Examples:
   6. Generate masked images with enlarged bounding boxes:
      python tools/annotate_frames.py path/to/images/ --save-masked --margin 0.2
 
+     # Re-run and overwrite previously generated annotations (default skips existing ones):
+     python tools/annotate_frames.py path/to/images/ --overwrite
+
+  7. Annotate with a locally copied, edited config (e.g. higher resolution for small vehicles):
+     geotrax config copy                          # writes default_copy.yaml to the current directory
+     # edit the 'ultralytics:' section (imgsz, conf, iou, augment, classes) ...
+     python tools/annotate_frames.py path/to/images/ -c default_copy.yaml
+
+Tuning:
+  - The detection settings come from the config's 'ultralytics:' section. The bundled default
+    baseline is conf=0.25, iou=0.7, imgsz=1920, classes=[0,1,2,3] (the four geo-trax vehicle
+    classes). This is a starting point — for annotation you will often want to experiment:
+      * imgsz   : higher (e.g. 2560) detects smaller/farther vehicles at the cost of speed.
+      * conf    : lower (e.g. 0.2) increases recall (more candidate boxes to review/correct).
+      * iou     : NMS overlap threshold for merging duplicate boxes.
+      * augment : test-time augmentation; can help recall on hard frames.
+      * classes : restrict or widen the detected class set.
+  - Quick one-off overrides: -f/--conf, -i/--iou, -sz/--imgsz, -ag/--augment, -md/--max-det,
+    -an/--agnostic-nms, -k/--classes. For persistent changes, run 'geotrax config copy', edit the
+    'ultralytics:' section of the copy, and pass it via -c.
+
 Notes:
   - Generates YOLO-format .txt files: class_id x_center y_center width height (normalized to [0,1]).
+  - Images with no detections still get an output: an empty .txt (a valid YOLO "background" label)
+    and, when requested, a plain visualization / masked image. With --overwrite this also clears any
+    stale boxes a previous run may have written for that image.
+  - Existing annotations are preserved: images whose .txt file already exists in the output
+    directory are skipped (and the count is reported). Pass --overwrite to regenerate them.
   - The --margin parameter only affects masked images, not annotation coordinates or visualizations.
   - Per-class thresholds (--class-conf) are applied as a post-inference filter on top of the base
     --conf threshold. Both annotations and visualizations reflect only the surviving detections.
@@ -82,7 +118,8 @@ import cv2
 from ultralytics import YOLO
 from ultralytics.utils.checks import check_yolo
 
-from geotrax.utils.config_utils import load_config
+from geotrax.utils.cli_utils import DEFAULT_CFG
+from geotrax.utils.config_utils import load_config, resolve_asset_path
 from geotrax.utils.logging_utils import setup_logger
 
 
@@ -108,11 +145,25 @@ def run_annotator(args: argparse.Namespace, logger: logging.Logger) -> None:
         logger.error("Error loading the configuration.")
         return
 
+    # Use the 'ultralytics:' section of a geo-trax pipeline config; fall back to a flat
+    # Ultralytics YAML if the user supplies one directly.
+    config = config.get('ultralytics', config)
+    config['mode'] = 'predict'  # the pipeline config uses mode: track; the annotator only predicts
+    config['model'] = str(resolve_asset_path(config['model']))  # resolve models/... from any working directory
+
     # Apply CLI overrides to config
     if args.conf is not None:
         config['conf'] = args.conf
     if args.iou is not None:
         config['iou'] = args.iou
+    if args.imgsz is not None:
+        config['imgsz'] = args.imgsz
+    if args.augment is not None:
+        config['augment'] = args.augment
+    if args.max_det is not None:
+        config['max_det'] = args.max_det
+    if args.agnostic_nms is not None:
+        config['agnostic_nms'] = args.agnostic_nms
     if args.classes is not None:
         config['classes'] = args.classes
 
@@ -136,14 +187,18 @@ def run_annotator(args: argparse.Namespace, logger: logging.Logger) -> None:
     det_results = model(args.source, **config, stream=True)
 
     logger.info(f"Annotating images in '{args.source}'...")
+    written = skipped = 0
     for result in det_results:
-        all_class_ids = result.boxes.cls.int().tolist()  # noqa
-        if not all_class_ids:
+        annotation_path = output_dir / f"{Path(result.path).stem}.txt"
+        if annotation_path.exists() and not args.overwrite:
+            logger.info(f"Annotation already exists, skipping '{annotation_path.name}' (use --overwrite to regenerate).")
+            skipped += 1
             continue
 
         # Apply per-class confidence filtering (post-inference).
-        # Filters result.boxes in place so that visualizations and masked images are consistent.
+        # Filters result.boxes so that annotations, visualizations, and masked images stay consistent.
         if class_conf:
+            all_class_ids = result.boxes.cls.int().tolist()
             confs = result.boxes.conf.tolist()
             keep_indices = [
                 i for i, (cls_id, conf_val) in enumerate(zip(all_class_ids, confs))
@@ -151,21 +206,22 @@ def run_annotator(args: argparse.Namespace, logger: logging.Logger) -> None:
             ]
             result.boxes = result.boxes[keep_indices]
 
+        # Images with no (surviving) detections are still written: an empty annotation file is a
+        # valid YOLO "background" label, and the saved visualization / masked image is just the plain
+        # frame. This also ensures --overwrite clears stale boxes from a previous run.
         class_ids = result.boxes.cls.int().tolist()
-        if not class_ids:
-            continue
-
         boxes_xywhn = result.boxes.xywhn
         boxes_xywh = result.boxes.xywh
         box_confs = result.boxes.conf.tolist()
 
-        # Save YOLO-format annotations
-        with open(output_dir / f"{Path(result.path).stem}.txt", "w") as f:
+        # Save YOLO-format annotations (empty file when there are no detections)
+        with open(annotation_path, "w") as f:
             for box, class_id, conf_val in zip(boxes_xywhn, class_ids, box_confs):
                 line = f"{class_id} {box[0]:.6f} {box[1]:.6f} {box[2]:.6f} {box[3]:.6f}"
                 if args.save_conf:
                     line += f" {conf_val:.6f}"
                 f.write(line + "\n")
+        written += 1
 
         # Save visualization with colored bounding boxes
         if args.save_viz:
@@ -190,7 +246,9 @@ def run_annotator(args: argparse.Namespace, logger: logging.Logger) -> None:
                 cv2.rectangle(img, (x, y), (x + w, y + h), (0, 0, 0), -1)
             cv2.imwrite(str(masked_dir / Path(result.path).name), img)
 
-    logger.notice(f"Annotations saved to '{output_dir}'.")
+    logger.notice(f"Annotations saved to '{output_dir}' ({written} written, {skipped} skipped).")
+    if skipped:
+        logger.notice(f"{skipped} existing annotation(s) were left unchanged — pass --overwrite to regenerate them.")
     if args.save_viz:
         logger.notice(f"Visualizations saved to '{viz_dir}'.")
     if args.save_masked:
@@ -223,8 +281,9 @@ def parse_cli_args() -> argparse.Namespace:
     # Output paths
     parser.add_argument('--annotations', '-a', type=Path,
                         help='Directory to save annotation .txt files (default: <source>/../pre-labels)')
-    parser.add_argument('--cfg', '-c', type=Path, default='geotrax/cfg/ultralytics/annotator/default.yaml',
-                        help='Path to the ultralytics configuration YAML file')
+    parser.add_argument('--cfg', '-c', type=Path, default=DEFAULT_CFG,
+                        help="Pipeline config (a bundled preset name or a path) or a flat Ultralytics YAML; "
+                             "the annotator uses its 'ultralytics:' detection settings.")
 
     # Output modes
     parser.add_argument('--save-viz', '-v', action='store_true',
@@ -237,12 +296,22 @@ def parse_cli_args() -> argparse.Namespace:
                         help='Margin factor to enlarge bounding boxes for masked images only (default: 0.0)')
     parser.add_argument('--save-conf', '-s', action='store_true',
                         help='Append detection confidence to each annotation line')
+    parser.add_argument('--overwrite', '-o', action='store_true',
+                        help='Regenerate and overwrite existing annotation files (default: skip images already annotated)')
 
-    # Inference overrides
+    # Inference overrides (each overrides the matching key in the config's 'ultralytics:' section)
     parser.add_argument('--conf', '-f', type=float, default=None,
                         help='Override the confidence threshold from the config file')
     parser.add_argument('--iou', '-i', type=float, default=None,
                         help='Override the IoU threshold for NMS from the config file')
+    parser.add_argument('--imgsz', '-sz', type=int, default=None,
+                        help='Override the inference image size [px]; higher detects smaller/farther vehicles, slower')
+    parser.add_argument('--augment', '-ag', action=argparse.BooleanOptionalAction, default=None,
+                        help='Enable/disable test-time augmentation (--augment / --no-augment); can improve recall')
+    parser.add_argument('--max-det', '-md', type=int, default=None,
+                        help='Override the maximum number of detections per image')
+    parser.add_argument('--agnostic-nms', '-an', action=argparse.BooleanOptionalAction, default=None,
+                        help='Enable/disable class-agnostic NMS (--agnostic-nms / --no-agnostic-nms)')
     parser.add_argument('--classes', '-k', type=int, nargs='+', metavar='CLASS_ID',
                         help='Restrict inference to the given class IDs (e.g. -k 0 1 2)')
     parser.add_argument('--class-conf', '-t', nargs='+', metavar='CLASS_ID=THRESHOLD',

@@ -23,7 +23,8 @@ Arguments:
 
 Options:
     --help, -h                     : Show this help message and exit.
-    --cfg, -c <path>               : Path to the main geo-trax configuration file (default: geotrax/cfg/default.yaml).
+    --cfg, -c <path>               : Path to a custom pipeline config file. Defaults to the bundled config;
+                                     run 'geotrax config show' to view it or 'geotrax config copy' to customize.
     --log-path, -lp <str>          : Where to write logs: a directory or a full file path; defaults to a platform-specific log directory.
     --verbose, -v                  : Set print verbosity level to INFO (default: WARNING).
 
@@ -59,10 +60,10 @@ Examples:
      geotrax georeference path/to/video.mp4 -gs metadata-tif -nm
 
 Notes:
-  - Orthophotos must be georeferenced; their coordinate system must match the source_crs configured
-    in geotrax/cfg/georef/default.yaml (default: EPSG:4326 / WGS84).
-  - Additional options (image matching, CRS, kinematic filtering, etc.) can be configured in
-    geotrax/cfg/georef/default.yaml; no CLI overrides exist for those settings.
+  - Orthophotos must be georeferenced; their coordinate system must match
+    cfg -> georef -> transformation -> source_crs (default: EPSG:4326 / WGS84).
+  - Additional options (image matching, CRS, kinematic filtering, etc.) live under cfg -> georef
+    in the pipeline config; no CLI overrides exist for those settings.
   - The master frame approach registers reference->master and master->ortho separately, improving homography
     robustness by leveraging a stable high-quality reference image. Use --no-master only when master frames
     are unavailable.

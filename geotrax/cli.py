@@ -19,6 +19,7 @@ Commands:
     aggregate    : Stage 3 - merge georeferenced results across drones/flights.
     visualize    : Overlay extracted tracks on the video (original/stabilized/reference frame).
     plot         : Plot trajectories and kinematic/dimension distributions.
+    config       : Pipeline config management: show bundled configs or copy them locally for editing.
 
 Options:
     --help, -h     : Show this help message and exit.
@@ -28,11 +29,14 @@ Examples:
   1. Process a video end-to-end without georeferencing:
         geotrax batch path/to/video.mp4 --no-geo
 
-  2. Run only the extraction stage with a custom config:
+  2. Run only the extraction stage with a custom pipeline config:
         geotrax extract path/to/video.mp4 -c path/to/custom.yaml
 
   3. Render annotated videos for multiple visualization modes:
         geotrax visualize path/to/video.mp4 --save --viz-mode 0 1 2
+
+  4. Copy the bundled pipeline config presets locally for editing:
+        geotrax config copy
 """
 
 import importlib
@@ -49,6 +53,7 @@ COMMANDS = {
     'aggregate': ('geotrax.aggregate', 'Stage 3: merge georeferenced results across drones/flights'),
     'visualize': ('geotrax.visualize', 'Overlay extracted tracks on the video'),
     'plot': ('geotrax.plot', 'Plot trajectories and distributions'),
+    'config': ('geotrax.config', 'Pipeline config management: show bundled configs or copy them locally for editing'),
 }
 
 

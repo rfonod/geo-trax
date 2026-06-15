@@ -19,7 +19,8 @@ Arguments:
 
 Options:
   --help, -h          : Show this help message and exit.
-  --cfg, -c <path>    : Path to the main geo-trax configuration file (default: geotrax/cfg/default.yaml).
+  --cfg, -c <path>    : Path to a custom pipeline config file. Defaults to the bundled config;
+                        run 'geotrax config show' to view it or 'geotrax config copy' to customize.
   --log-path, -lp <str> : Where to write logs: a directory or a full file path; defaults to a platform-specific log directory.
   --verbose, -v       : Set print verbosity level to INFO (default: WARNING).
 
