@@ -17,7 +17,7 @@ from geotrax.utils.logging_utils import (
     NOTICE_LEVEL,
     ColoredFormatter,
     FileFormatter,
-    bcolors,
+    BColors,
     setup_logger,
 )
 
@@ -28,5 +28,5 @@ __all__ = [
     "check_if_results_exist", "convert_to_serializable", "detect_delimiter",
     "determine_location_id", "determine_suffix_and_fourcc", "get_ortho_folder",
     "get_video_dimensions",
-    "ColoredFormatter", "FileFormatter", "NOTICE_LEVEL", "bcolors", "setup_logger",
+    "ColoredFormatter", "FileFormatter", "NOTICE_LEVEL", "BColors", "setup_logger",
 ]

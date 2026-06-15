@@ -11,7 +11,7 @@ from typing import Union
 from geotrax.utils.constants import MACOS, WINDOWS
 
 
-class bcolors:
+class BColors:
     """Color palette for terminal output."""
     HEADER = '\033[95m'
     OKBLUE = '\033[94m'
@@ -33,13 +33,13 @@ class ColoredFormatter(logging.Formatter):
     def format(self, record):
         message = super().format(record)
         if record.levelno == NOTICE_LEVEL:
-            message = f"{bcolors.OKCYAN}{message}{bcolors.ENDC}"
+            message = f"{BColors.OKCYAN}{message}{BColors.ENDC}"
         elif record.levelno == logging.WARNING:
-            message = f"{bcolors.WARNING}{message}{bcolors.ENDC}"
+            message = f"{BColors.WARNING}{message}{BColors.ENDC}"
         elif record.levelno == logging.ERROR:
-            message = f"{bcolors.FAIL}{message}{bcolors.ENDC}"
+            message = f"{BColors.FAIL}{message}{BColors.ENDC}"
         elif record.levelno == logging.CRITICAL:
-            message = f"{bcolors.FAIL}{bcolors.BOLD}{message}{bcolors.ENDC}"
+            message = f"{BColors.FAIL}{BColors.BOLD}{message}{BColors.ENDC}"
         return message
 
 
@@ -47,13 +47,14 @@ class FileFormatter(logging.Formatter):
     """Custom formatter for log output to file."""
     def format(self, record):
         message = super().format(record)
-        for color in vars(bcolors).values():
+        for color in vars(BColors).values():
             if isinstance(color, str):
                 message = message.replace(color, '')
         return message
 
 
 def notice(self, message, *args, **kwargs):
+    """Log a message at the custom NOTICE level (between INFO and WARNING)."""
     if self.isEnabledFor(NOTICE_LEVEL):
         self._log(NOTICE_LEVEL, message, args, **kwargs)
 logging.Logger.notice = notice
@@ -104,6 +105,6 @@ def setup_logger(name: str, verbose: bool = False, log_path: Union[str, Path, No
         logger.addHandler(file_handler)
         print(f"Saving logs to: {log_filepath}")  # console-only notice; not written to the log file itself
 
-    logger._original_formatters = {h: h.formatter for h in logger.handlers}
+    logger._original_formatters = {h: h.formatter for h in logger.handlers}  # used by suppress/restore_logging_format in check_dataset.py
 
     return logger

@@ -73,9 +73,7 @@ from geotrax.utils.logging_utils import setup_logger
 
 
 def aggregate_results(args: argparse.Namespace, logger: logging.Logger) -> None:
-    """
-    Aggregate the georeferenced results by day, location, and flight session.
-    """
+    """Aggregate the georeferenced results by day, location, and flight session."""
     input_path = args.input
     output_path = args.output or input_path.parent / 'DATASET'
     logger.info(f"Starting aggregation process. Input folder: {input_path}, Output folder: {output_path}")
@@ -180,9 +178,7 @@ def aggregate_results(args: argparse.Namespace, logger: logging.Logger) -> None:
 
 
 def parse_cli_args() -> argparse.Namespace:
-    """
-    Parse command-line arguments.
-    """
+    """Parse command-line arguments."""
     parser = argparse.ArgumentParser(description='Aggregate georeferenced tracking results')
     parser.add_argument('input', type=Path, help='Path to the PROCESSED folder of georeferenced results.')
 
@@ -194,9 +190,7 @@ def parse_cli_args() -> argparse.Namespace:
 
 
 def main() -> None:
-    """
-    Command-line entry point.
-    """
+    """Command-line entry point."""
     args = parse_cli_args()
     logger = setup_logger(__name__, args.verbose, args.log_path)
 

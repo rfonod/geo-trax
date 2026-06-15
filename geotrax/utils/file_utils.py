@@ -126,10 +126,10 @@ def determine_suffix_and_fourcc() -> Tuple[str, str]:
 def get_video_dimensions(video_path: Path) -> Tuple[int, int]:
     """Get the width and height of the video."""
     reader = cv2.VideoCapture(str(video_path))
-    w_I = int(reader.get(cv2.CAP_PROP_FRAME_WIDTH))
-    h_I = int(reader.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    frame_w = int(reader.get(cv2.CAP_PROP_FRAME_WIDTH))
+    frame_h = int(reader.get(cv2.CAP_PROP_FRAME_HEIGHT))
     reader.release()
-    return w_I, h_I
+    return frame_w, frame_h
 
 
 def check_if_results_exist(file: Path, result_type: str, viz_mode: int = None, ext: str = None) -> Tuple[bool, Path]:

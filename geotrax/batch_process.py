@@ -186,7 +186,7 @@ from geotrax.utils.cli_utils import add_common_args
 from geotrax.utils.config_utils import backfill_args_from_config, load_config
 from geotrax.utils.constants import VIDEO_FORMATS
 from geotrax.utils.file_utils import check_if_results_exist, determine_suffix_and_fourcc
-from geotrax.utils.logging_utils import bcolors, setup_logger
+from geotrax.utils.logging_utils import BColors, setup_logger
 from geotrax.visualize import add_visualization_args, resolve_viz_modes, visualize_results
 
 # Stage labels: used both as display text and as the dispatch key in should_process_file
@@ -214,7 +214,7 @@ def process_input(args: argparse.Namespace, logger: logging.Logger) -> None:
         if input_path.is_file() and input_path.suffix.lower() in VIDEO_FORMATS:
             process_file(input_path, args, logger)
         elif input_path.is_dir():
-            logger.notice(f"{bcolors.OKGREEN}Batch processing all videos in: '{input_path}'{bcolors.ENDC}")
+            logger.notice(f"Batch processing all videos in: '{input_path}'")
             args.cut_frame_right = None
             potential_files_to_process = [file for file in input_path.rglob('*') if file.is_file() and file.suffix.lower() in VIDEO_FORMATS]
             files_to_process = filter_files_to_process(potential_files_to_process, args, logger)
@@ -343,7 +343,7 @@ def handle_existing_results(file: Path, args: argparse.Namespace, logger: loggin
         logger.warning(f"'{file}' - {action} results already exist and overwrite not allowed.")
         return False
     elif exists and args.overwrite and not args.yes:
-        user_input = input(f"{bcolors.BOLD}Overwrite {action} results for: '{file}'? [y/n]: {bcolors.ENDC}").lower()
+        user_input = input(f"{BColors.BOLD}Overwrite {action} results for: '{file}'? [y/n]: {BColors.ENDC}").lower()
         return user_input == 'y'
     return True
 
@@ -397,5 +397,5 @@ def main() -> None:
     process_input(args, logger)
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()

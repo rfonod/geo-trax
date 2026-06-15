@@ -938,5 +938,5 @@ def main() -> None:
     georeference(args, logger)
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()
