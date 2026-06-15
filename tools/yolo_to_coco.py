@@ -210,5 +210,5 @@ def main() -> None:
     convert_annotations(args, logger)
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()

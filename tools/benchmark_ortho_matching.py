@@ -3,7 +3,7 @@
 # Author: Robert Fonod (robert.fonod@ieee.org)
 
 """
-ortho_matching_benchmark.py - Orthophoto Matching Accuracy Benchmark Tool
+benchmark_ortho_matching.py - Orthophoto Matching Accuracy Benchmark Tool
 
 This script evaluates orthophoto matching accuracy by computing reprojection errors between ground truth
 labels and homography-transformed coordinates. It benchmarks the impact of orthophoto resolution on
@@ -14,7 +14,7 @@ and generates comprehensive statistics for performance evaluation. It also provi
 capabilities for ground truth label verification.
 
 Usage:
-  python tools/ortho_matching_benchmark.py <data> [options]
+  python tools/benchmark_ortho_matching.py <data> [options]
 
 Arguments:
   data : Path to benchmark data folder containing images, orthos, and ground truth labels.
@@ -32,13 +32,13 @@ Options:
 
 Examples:
 1. Run benchmark and visualize ground truths:
-   python tools/ortho_matching_benchmark.py path/to/data -v
+   python tools/benchmark_ortho_matching.py path/to/data -v
 
 2. Skip benchmark and only visualize ground truths:
-   python tools/ortho_matching_benchmark.py path/to/data -sb -v
+   python tools/benchmark_ortho_matching.py path/to/data -sb -v
 
 3. Custom resolution range with overwrite:
-   python tools/ortho_matching_benchmark.py path/to/data -mr 1000 -xr 10000 -rs 500 -o
+   python tools/benchmark_ortho_matching.py path/to/data -mr 1000 -xr 10000 -rs 500 -o
 
 Input:
 - Data folder structure:
@@ -347,7 +347,7 @@ def main() -> None:
     run_benchmark(args, logger)
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()
 
 

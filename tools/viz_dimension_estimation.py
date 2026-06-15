@@ -15,7 +15,7 @@ For a selected vehicle ID, it renders two diagnostic plots:
 
 This tool was developed in the context of the Songdo (Korea) intersection experiment
 (DOI: 10.1016/j.trc.2025.105205) to validate and compare the azimuth-based estimator
-against the naive bounding-box baseline (see compute_naive_bb_dimensions.py).
+against the naive bounding-box baseline (see compute_bb_dimensions_naive.py).
 
 Usage:
   python tools/viz_dimension_estimation.py <source> [options]

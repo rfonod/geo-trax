@@ -3,7 +3,7 @@
 # Author: Robert Fonod (robert.fonod@ieee.org)
 
 """
-recut_video_and_csv.py - Video and Flight Log Re-cutting Tool
+recut_video_and_log.py - Video and Flight Log Re-cutting Tool
 
 This script re-cuts video files and their corresponding flight logs according to specified frame ranges.
 It performs keyframe-aligned cutting to avoid re-encoding and maintains synchronization between video
@@ -13,10 +13,10 @@ The tool reads cut specifications from a text file and applies them to both the 
 associated flight log, adjusting frame numbers and timestamps accordingly.
 
 Usage:
-  python tools/recut_video_and_csv.py <input_video> <cuts> [options]
+  python tools/recut_video_and_log.py <input_video> <cuts> [options]
 
 Alternate Usage (no cuts file):
-    python tools/recut_video_and_csv.py <input_video> --start <frame> --end <frame> [--rotate <deg>] [options]
+    python tools/recut_video_and_log.py <input_video> --start <frame> --end <frame> [--rotate <deg>] [options]
 
 Arguments:
   input_video : Path to the input video file to be cut.
@@ -45,16 +45,16 @@ Cut File Format:
 
 Examples:
 1. Basic video cutting:
-   python tools/recut_video_and_csv.py video.MP4 cuts.txt
+   python tools/recut_video_and_log.py video.MP4 cuts.txt
 
 2. Cut with custom output path:
-   python tools/recut_video_and_csv.py video.MP4 cuts.txt --output cut_video.MP4
+   python tools/recut_video_and_log.py video.MP4 cuts.txt --output cut_video.MP4
 
 3. Debug mode with verification:
-   python tools/recut_video_and_csv.py video.MP4 cuts.txt --debug
+   python tools/recut_video_and_log.py video.MP4 cuts.txt --debug
 
 4. Cut specified directly via CLI (no cuts file):
-    python tools/recut_video_and_csv.py video.MP4 --start 120 --end 540 --rotate 90 --output cut_video.MP4
+    python tools/recut_video_and_log.py video.MP4 --start 120 --end 540 --rotate 90 --output cut_video.MP4
 
 Input:
 - Video file (any format supported by ffmpeg)
@@ -449,5 +449,5 @@ def main() -> None:
     process_cutting(filepaths, logger, cuts=cuts, debug=args.debug, exact_cut=args.exact_cut, bitrate=args.bitrate)
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()

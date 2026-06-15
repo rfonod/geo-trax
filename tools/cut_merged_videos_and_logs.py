@@ -731,6 +731,8 @@ def main() -> None:
     if args.cleanup:
         _cleanup_merged_files(merged_videos, args.dry_run, logger)
 
+    logger.notice(f"Done: {'(dry-run) ' if args.dry_run else ''}processed {len(merged_videos)} merged video session(s).")
 
-if __name__ == "__main__":
+
+if __name__ == '__main__':
     main()

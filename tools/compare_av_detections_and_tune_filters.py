@@ -3,13 +3,13 @@
 # Author: Robert Fonod (robert.fonod@ieee.org)
 
 """
-av_comparison_and_filter_tuning.py - AV Trajectory Comparison and Filter Tuning
+compare_av_detections_and_tune_filters.py - AV Trajectory Comparison and Filter Tuning
 
 Compares autonomous vehicle trajectories from Stanford dataset against extracted trajectories.
 Supports smoothing parameter tuning and comprehensive error analysis with visualization.
 
 Usage:
-  python tools/av_comparison_and_filter_tuning.py --data <path> [options]
+  python tools/compare_av_detections_and_tune_filters.py --data <path> [options]
 
 Arguments:
   --data <path> : Path to folder containing AV trajectories and results.
@@ -27,13 +27,13 @@ Options:
 
 Examples:
 1. Basic comparison with visualization:
-   python tools/av_comparison_and_filter_tuning.py --data data/ --show
+   python tools/compare_av_detections_and_tune_filters.py --data data/ --show
 
 2. Parameter tuning with plots saved:
-   python tools/av_comparison_and_filter_tuning.py --data data/ --tune --save
+   python tools/compare_av_detections_and_tune_filters.py --data data/ --tune --save
 
 3. Global coordinates with Savitzky-Golay filter:
-   python tools/av_comparison_and_filter_tuning.py --data data/ --coords global --filter savitzky_golay
+   python tools/compare_av_detections_and_tune_filters.py --data data/ --coords global --filter savitzky_golay
 
 Input:
 - AV dataset: av_trajectories/ subfolder with RTK-GNSS data

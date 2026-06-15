@@ -61,8 +61,7 @@ from geotrax.utils.logging_utils import setup_logger
 def find_source_id(dataset_filepath: Path, vehicle_id: int, processed_folder: Union[Path, None] = None) -> tuple:
     """
     Trace an aggregated-dataset vehicle ID back to its original ID and source video, by
-    reversing the per-drone ID offset applied during aggregation. (Adapted from
-    tools/find_source_id.py.)
+    reversing the per-drone ID offset applied during aggregation.
     """
     if not dataset_filepath.exists():
         print(f"Input folder '{dataset_filepath}' does not exist.")

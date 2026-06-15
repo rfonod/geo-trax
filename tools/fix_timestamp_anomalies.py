@@ -3,7 +3,7 @@
 # Author: Robert Fonod (robert.fonod@ieee.org)
 
 """
-fix_timestamp_annomalies.py - Timestamp Anomaly Correction Tool
+fix_timestamp_anomalies.py - Timestamp Anomaly Correction Tool
 
 This script automatically fixes timestamp anomalies detected in drone flight logs by cutting videos
 and flight logs at anomaly frames. It implements a cutting strategy that preserves video integrity 
@@ -14,7 +14,7 @@ ensuring minimum video duration requirements are met. It renames original files 
 generates cut specification files, and automatically reprocesses the resulting video segments.
 
 Usage:
-  python tools/fix_timestamp_annomalies.py <input> [options]
+  python tools/fix_timestamp_anomalies.py <input> [options]
 
 Arguments:
   input : Path to file containing flight log anomalies (created by tools/find_cut_video_issues.py).
@@ -28,10 +28,10 @@ Options:
 
 Examples:
 1. Fix anomalies using default processed folder location:
-   python tools/fix_timestamp_annomalies.py flight_log_anomalies.csv
+   python tools/fix_timestamp_anomalies.py flight_log_anomalies.csv
 
 2. Production run with custom processed folder:
-   python tools/fix_timestamp_annomalies.py flight_log_anomalies.csv --processed-folder /data/PROCESSED/
+   python tools/fix_timestamp_anomalies.py flight_log_anomalies.csv --processed-folder /data/PROCESSED/
 
 Input:
 - CSV file with anomaly data containing columns:
@@ -57,7 +57,7 @@ Notes:
 - Processes anomalies from tools/find_cut_video_issues.py output
 - Maintains file naming conventions and sequence numbers
 - Prevents conflicts with existing higher sequence numbers
-- Uses tools/recut_video_and_csv.py and 'geotrax batch' for processing
+- Uses tools/recut_video_and_log.py and 'geotrax batch' for processing
 - Debug mode shows operations without modifying files
 - Automatically handles backup file creation and restoration
 """
@@ -65,6 +65,7 @@ Notes:
 import argparse
 import logging
 import os
+import subprocess
 from pathlib import Path
 
 import pandas as pd
@@ -75,10 +76,8 @@ MIN_VIDEO_DURATION = 15  # do not cut videos shorter than 15 seconds
 FPS = 30 # used to calculate the minimum video duration and add margins to the cuts
 
 
-def fix_timetamp_annomalies(args: argparse.Namespace, logger: logging.Logger) -> None:
-    """
-    Fix timestamp anomalies found in in the flight logs.
-    """
+def fix_timestamp_anomalies(args: argparse.Namespace, logger: logging.Logger) -> None:
+    """Fix timestamp anomalies found in the flight logs."""
 
     df_anomalies = pd.read_csv(args.input)
     df_anomalies = df_anomalies[['location_id', 'video_path', 'timestamp_max_abs_diff', 'timestamp_anomaly_location', 'timestamp_anomaly_frame']]
@@ -158,15 +157,15 @@ def fix_timetamp_annomalies(args: argparse.Namespace, logger: logging.Logger) ->
         for cut in cuts:
             cut_filepath = cut[0]
             output_filepath = cut_filepath.with_name(cut_filepath.stem.split('_')[-2] + video_filepath.suffix)
-            cmd1 = f"python tools/recut_video_and_csv.py {video_filepath_original} {cut_filepath} -o {output_filepath}"
+            cmd1 = f"python tools/recut_video_and_log.py {video_filepath_original} {cut_filepath} -o {output_filepath}"
             logger.info(f"Running: {cmd1}")
             if not args.debug:
-                os.system(cmd1)
+                subprocess.run(cmd1, shell=True, check=True)
 
             cmd2 = f"geotrax batch {output_filepath} -y -o"
             logger.info(f"Running: {cmd2}")
             if not args.debug:
-                os.system(cmd2)
+                subprocess.run(cmd2, shell=True, check=True)
 
 
 def parse_cli_args() -> argparse.Namespace:
@@ -186,8 +185,8 @@ def main() -> None:
     args = parse_cli_args()
     logger = setup_logger(Path(__file__).stem, verbose=not args.quiet, log_path=args.log_path)
 
-    fix_timetamp_annomalies(args, logger)
+    fix_timestamp_anomalies(args, logger)
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()

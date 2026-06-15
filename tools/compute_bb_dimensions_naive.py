@@ -3,7 +3,7 @@
 # Author: Robert Fonod (robert.fonod@ieee.org)
 
 """
-compute_naive_bb_dimensions.py - Naive Bounding-Box Vehicle Dimension Estimator
+compute_bb_dimensions_naive.py - Naive Bounding-Box Vehicle Dimension Estimator
 
 Estimates vehicle pixel-space dimensions (length and width) from bounding box
 tracking results using a naive approach: for each tracked vehicle, the longer
@@ -13,7 +13,7 @@ This serves as a baseline for comparison against the main geo-trax pipeline's
 sophisticated azimuth-based dimension estimator (see geotrax/extract.py).
 
 Usage:
-  python tools/compute_naive_bb_dimensions.py <directory> [options]
+  python tools/compute_bb_dimensions_naive.py <directory> [options]
 
 Arguments:
   directory : Path to directory containing tracking result files and vehicle ID files.
@@ -29,13 +29,13 @@ Options:
 
 Examples:
 1. Estimate AV vehicle dimensions from Songdo experiment results:
-   python tools/compute_naive_bb_dimensions.py data/results/ --av
+   python tools/compute_bb_dimensions_naive.py data/results/ --av
 
 2. Estimate bus dimensions using bus ID files:
-   python tools/compute_naive_bb_dimensions.py data/results/
+   python tools/compute_bb_dimensions_naive.py data/results/
 
 3. Custom frame size and visibility margin:
-   python tools/compute_naive_bb_dimensions.py data/results/ --frame-size 1080 1920 --visibility-margin 8
+   python tools/compute_bb_dimensions_naive.py data/results/ --frame-size 1080 1920 --visibility-margin 8
 
 Input:
 - Tracking result files (*.txt) with MOT-style columns: frame, id, x, y, width, height, ...
@@ -258,5 +258,5 @@ def main() -> None:
     estimate_dimensions(args, logger)
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()

@@ -5,7 +5,7 @@ This directory contains a short drone video clip, `U_video_cut.mp4` (5 seconds),
 The video clip is sourced from the [Songdo Traffic](https://doi.org/10.5281/zenodo.13828383) dataset. It was created by extracting the first 5 seconds from `U_D10_2022-10-07_PM5_60s.mp4` using the following command:
 
 ```bash
-python tools/recut_video_and_csv.py data/sample_videos/U_D10_2022-10-07_PM5_60s.mp4 -s 0 -e 150 -o data/U_video_cut.mp4 -ec
+python tools/recut_video_and_log.py data/sample_videos/U_D10_2022-10-07_PM5_60s.mp4 -s 0 -e 150 -o data/U_video_cut.mp4 -ec
 ```
 
 ## Reproducing Results
