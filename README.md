@@ -12,7 +12,7 @@
 
 ![Geo-trax pipeline diagram: raw drone video → detection → tracking → stabilization → georeferencing → dataset](assets/geo-trax_pipeline.svg)
 
-🔍 This diagram shows a high-level overview of the Geo-trax processing pipeline — from raw drone footage to georeferenced vehicle trajectories; it also highlights optional human annotation and auxiliary vision-data generation steps.
+🔍 The core pipeline (solid box) transforms raw drone video into stabilized, pixel-coordinate vehicle trajectories. Optional extensions include: georeferencing to real-world coordinates via orthophoto image registration; vision dataset creation through (pre-)annotation of sampled frames for custom detector training; and bundled visualization, analysis, and probe vehicle validation tools, applicable to both pixel-coordinate and georeferenced outputs.
 
 ## Features
 
