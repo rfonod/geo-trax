@@ -15,13 +15,14 @@ python tools/<name>.py ... -q      # suppress INFO logging
 
 ## Specificity legend
 
-Roughly half of these scripts were built for the **Songdo** field experiment and hardcode
-experiment-specific values; the rest are reusable as-is. Each tool below is tagged:
+A few of these scripts hardcode **Songdo** experiment-specific values (or rigidly assume its
+directory layout) in their *code*; the rest are reusable as-is even where the docstring cites
+Songdo as the motivating example. Each tool below is tagged:
 
 | Tag | Meaning |
 |-----|---------|
-| 🟢 **General** | Reusable on any compatible dataset. |
-| 🔵 **Songdo** | Assumes the Songdo experiment — hardcoded drone/AV IDs, dates, GSD, intersection names, or EPSG:5186. Adapt before reuse elsewhere. |
+| 🟢 **General** | Reusable on any compatible dataset (a Songdo mention in the docstring is just context). |
+| 🔵 **Songdo** | The code hardcodes Songdo specifics — drone/AV IDs, dates, GSD, session time windows, EPSG:5186, or the Songdo `PROCESSED/` directory layout. Adapt before reuse elsewhere. |
 | 🧪 **Research** | One-off analysis backing the paper; low general reuse. |
 
 🔵/🧪 tools relate to the Songdo deployment described in
@@ -54,18 +55,18 @@ These chains show how the tools compose around the `geotrax` stages:
 
 | Script | Purpose | Tag |
 |--------|---------|-----|
-| [`merge_videos_and_logs.py`](#merge_videos_and_logspy) | Merge per-flight DJI videos + SRT logs into one merged pair per session | 🔵 |
-| [`cut_merged_videos_and_logs.py`](#cut_merged_videos_and_logspy) | Cut merged video/SRT into per-location clips + per-cut CSV logs | 🔵 |
+| [`merge_videos_and_logs.py`](#merge_videos_and_logspy) | Merge per-flight DJI videos + SRT logs into one merged pair per session | 🟢 |
+| [`cut_merged_videos_and_logs.py`](#cut_merged_videos_and_logspy) | Cut merged video/SRT into per-location clips + per-cut CSV logs | 🟢 |
 | [`recut_video_and_log.py`](#recut_video_and_logpy) | Re-cut a video + its CSV log by frame range (keyframe-aligned or exact) | 🟢 |
 | [`find_cut_video_issues.py`](#find_cut_video_issuespy) | Detect spatial, temporal, and camera anomalies in flight logs | 🔵 |
 | [`fix_timestamp_anomalies.py`](#fix_timestamp_anomaliespy) | Auto-repair timestamp anomalies by recutting at the anomaly frame | 🔵 |
-| [`interpolate_missing_timestamps.py`](#interpolate_missing_timestampspy) | Fill NaN timestamps using 29.97 fps frame timing | 🟢 |
+| [`interpolate_missing_timestamps.py`](#interpolate_missing_timestampspy) | Fill NaN timestamps from the frame rate (given or inferred) | 🟢 |
 
 ### 2. Training-data & annotation creation
 
 | Script | Purpose | Tag |
 |--------|---------|-----|
-| [`sample_frames.py`](#sample_framespy) | Randomly sample frames from drone videos for annotation (global or balanced) | 🔵 |
+| [`sample_frames.py`](#sample_framespy) | Randomly sample frames from drone videos for annotation (global or balanced) | 🟢 |
 | [`annotate_frames.py`](#annotate_framespy) | Run YOLO on images → YOLO-format labels (+ optional viz / masked images) | 🟢 |
 | [`yolo_to_coco.py`](#yolo_to_cocopy) | Convert YOLO normalized labels → COCO JSON with absolute pixel coordinates | 🟢 |
 | [`fix_json_annotations.py`](#fix_json_annotationspy) | Clean/convert COCO-like JSON (strip image data, normalize paths, HBB↔OBB) | 🟢 |
@@ -77,8 +78,8 @@ These chains show how the tools compose around the `geotrax` stages:
 | Script | Purpose | Tag |
 |--------|---------|-----|
 | [`find_master_frames.py`](#find_master_framespy) | Select optimal reference (master) frames for georeferencing from flight logs | 🟢 |
-| [`subset_orthophoto.py`](#subset_orthophotopy) | Extract square PNG subsets from a large GeoTIFF orthophoto per location | 🔵 |
-| [`viz_segmentations.py`](#viz_segmentationspy) | Overlay lane and road-section segmentation polygons on orthophotos | 🔵 |
+| [`subset_orthophoto.py`](#subset_orthophotopy) | Extract square PNG subsets from a large GeoTIFF orthophoto per location | 🟢 |
+| [`viz_segmentations.py`](#viz_segmentationspy) | Overlay lane and road-section segmentation polygons on orthophotos | 🟢 |
 | [`benchmark_ortho_matching.py`](#benchmark_ortho_matchingpy) | Benchmark orthophoto-matching reprojection error across resolutions | 🧪 |
 
 ### 4. Detection, tracking & dimension evaluation
@@ -108,9 +109,10 @@ Turn raw DJI drone footage and flight logs into clean, per-location clips for th
 
 ### `merge_videos_and_logs.py`
 
-🔵 **Songdo** — Merges multiple per-flight DJI video files and their SRT flight logs from a
+🟢 **General** — Merges multiple per-flight DJI video files and their SRT flight logs from a
 session directory into a single `0_merged.mp4` / `0_merged.srt` pair, handling the DJI counter
-reset and `_trimmed` conventions. Can process one session or sweep an entire experiment tree.
+reset and `_trimmed` conventions. Configurable video extension and output stem; can process one
+session or sweep an entire tree. (Developed for Songdo, but assumes only DJI conventions.)
 
 ```bash
 python tools/merge_videos_and_logs.py /path/to/RAW --output-dir /path/to/PROCESSED
@@ -119,9 +121,9 @@ python tools/merge_videos_and_logs.py /path/to/RAW --output-dir /path/to/PROCESS
 
 ### `cut_merged_videos_and_logs.py`
 
-🔵 **Songdo** — Cuts merged video + SRT files into per-location clips per a cuts specification,
-converting SRT records into per-clip CSV flight logs. Optional JSON location map for automatic
-labelling, `--dry-run` preview, and `--cleanup` to delete the merged sources afterwards.
+🟢 **General** — Cuts merged video + SRT files into per-location clips per a cuts specification,
+converting SRT records into per-clip CSV flight logs. Location names come from a user-supplied
+JSON map (not hardcoded); also `--dry-run` preview and `--cleanup` to delete merged sources.
 
 ```bash
 python tools/cut_merged_videos_and_logs.py /path/to/PROCESSED \
@@ -142,8 +144,9 @@ python tools/recut_video_and_log.py video.MP4 --start 120 --end 540 --rotate 90 
 ### `find_cut_video_issues.py`
 
 🔵 **Songdo** — Scans flight logs under a `PROCESSED/` tree for spatial, temporal, and
-camera-parameter anomalies (each with a tunable `*-diff-threshold`). Writes stats and an
-anomalies CSV (consumed by `fix_timestamp_anomalies.py`) plus optional visualizations.
+camera-parameter anomalies (each with a tunable `*-diff-threshold`). The temporal check uses a
+hardcoded Songdo session schedule (`SESSION2TIME_WINDOW`, AM1–PM5) and defaults to `epsg:5186`.
+Writes stats and an anomalies CSV (consumed by `fix_timestamp_anomalies.py`) plus visualizations.
 
 ```bash
 python tools/find_cut_video_issues.py /path/to/PROCESSED -s -f -viz -sv -tc
@@ -162,13 +165,15 @@ python tools/fix_timestamp_anomalies.py flight_log_anomalies.csv \
 
 ### `interpolate_missing_timestamps.py`
 
-🟢 **General** — Fills NaN values in a CSV `timestamp` column using a 29.97 fps frame-timing
-model, forward from the last valid timestamp or `--backward` from the next. Writes a new
+🟢 **General** — Fills NaN values in a CSV `timestamp` column from the video frame rate —
+given via `--fps` or inferred from the spacing of the existing timestamps — forward from the
+previous valid timestamp or `--backward` from the next. Works for any constant frame rate
+(missing values are anchored to original timestamps to avoid rounding drift). Writes a new
 `*_interpolated.CSV`, leaving the original untouched.
 
 ```bash
-python tools/interpolate_missing_timestamps.py flight_log.CSV
-python tools/interpolate_missing_timestamps.py flight_log.CSV --backward
+python tools/interpolate_missing_timestamps.py flight_log.CSV            # infer fps
+python tools/interpolate_missing_timestamps.py flight_log.CSV --fps 30 --backward
 ```
 
 ---
@@ -179,8 +184,9 @@ Build and convert the datasets used to train or evaluate the YOLO detection mode
 
 ### `sample_frames.py`
 
-🔵 **Songdo** — Randomly samples frames from drone videos for manual annotation: global random
-sampling or `--balanced` (equal frames per video). Filter by SRT/CSV metadata (e.g.
+🟢 **General** — Randomly samples frames from drone videos for manual annotation: global random
+sampling or `--balanced` (equal frames per video). The `--name-filter` (default `merged`) is
+overridable, metadata fields are arbitrary; filter by SRT/CSV metadata (e.g.
 `--srt-filter rel_alt:130:160`) and skip takeoff/landing with `--skip-start`/`--skip-end`.
 Output filenames encode the source relative path for traceability.
 
@@ -263,9 +269,10 @@ python tools/find_master_frames.py /path/to/PROCESSED -of /path/to/master_frames
 
 ### `subset_orthophoto.py`
 
-🔵 **Songdo** — Extracts square PNG subsets from a large GeoTIFF orthophoto, centred on
-coordinates from a JSON location dictionary, downscaled by `--scale-factor`. Writes pixel
-coordinate text files alongside each crop.
+🟢 **General** — Extracts square PNG subsets from a large GeoTIFF orthophoto, centred on
+coordinates from a user-supplied JSON location dictionary, downscaled by `--scale-factor`
+(crop size and scale are overridable defaults). Writes pixel-coordinate text files alongside
+each crop.
 
 ```bash
 python tools/subset_orthophoto.py --orthophoto-filepath ortho.tif \
@@ -274,9 +281,10 @@ python tools/subset_orthophoto.py --orthophoto-filepath ortho.tif \
 
 ### `viz_segmentations.py`
 
-🔵 **Songdo** — Overlays lane and road-section segmentation polygons onto orthophotos. Reads CSV
-files with `Section`, `Lane`, and corner-coordinate columns, drawing red lane contours and blue
-section-ID labels. CSVs and output default to `<ortho_folder>/segmentations/`.
+🟢 **General** — Overlays lane and road-section segmentation polygons onto orthophotos. Reads any
+CSV in the geo-trax segmentation format (`Section`, `Lane`, and corner-coordinate columns),
+drawing red lane contours and blue section-ID labels. CSVs and output default to
+`<ortho_folder>/segmentations/`.
 
 ```bash
 python tools/viz_segmentations.py data/orthophotos/ -sf data/segmentations/ -o data/output/
