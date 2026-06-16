@@ -17,8 +17,8 @@ Arguments:
 
 Options:
   -h, --help                  : Show this help message and exit.
-  -ii, --input_images <path>  : Relative path to images w.r.t. the output labels directory (default: '../images').
-  -ol, --output_labels <path> : Path to save COCO annotations (default: same as input_labels).
+  -ii, --input-images <path>  : Relative path to images w.r.t. the output labels directory (default: '../images').
+  -ol, --output-labels <path> : Path to save COCO annotations (default: same as input_labels).
   -cm, --class-map <ID=Name> [...] : Class ID-to-label pairs entered directly on the CLI
                                 (e.g. -cm 0=Car 1=Bus 2=Truck). Takes priority over all other sources.
   -mf, --map-file <path>      : YAML or JSON file mapping class IDs to labels
@@ -26,7 +26,7 @@ Options:
   -c, --cfg <path>            : Pipeline config used to resolve the model when neither --class-map
                                 nor --map-file is provided (default: bundled geotrax/cfg/default.yaml).
                                 A bundled preset name (default, confident, lenient, stable) also works.
-  -dp, --decimal_places <int> : Decimal places for rounding bounding-box coordinates (default: 2).
+  -dp, --decimal-places <int> : Decimal places for rounding bounding-box coordinates (default: 2).
   -lp, --log-path <str>       : Where to write logs: a directory or a full file path; defaults to a platform-specific log directory.
   -q, --quiet                 : Reduce console verbosity to important messages only (default: show INFO-level detail).
 
@@ -225,9 +225,9 @@ def parse_cli_args() -> argparse.Namespace:
 
     parser.add_argument("input_labels", type=Path,
                         help="Directory containing YOLO format annotation files (.txt)")
-    parser.add_argument("--input_images", "-ii", type=Path, default='../images',
+    parser.add_argument("--input-images", "-ii", type=Path, default='../images',
                         help="Relative path to images with respect to the input labels directory (default: '../images')")
-    parser.add_argument("--output_labels", "-ol", type=Path,
+    parser.add_argument("--output-labels", "-ol", type=Path,
                         help="Path to save COCO annotations (default: same as input_labels)")
 
     map_group = parser.add_argument_group("class map (first match wins)")
@@ -239,7 +239,7 @@ def parse_cli_args() -> argparse.Namespace:
                            help="Pipeline config whose 'ultralytics.model' is used as the class name source "
                                 "(default: bundled geotrax/cfg/default.yaml; a preset name also works)")
 
-    parser.add_argument("--decimal_places", "-dp", type=int, default=2,
+    parser.add_argument("--decimal-places", "-dp", type=int, default=2,
                         help="Decimal places for rounding bounding-box coordinates (default: 2)")
     parser.add_argument("--log-path", "-lp", type=Path, default=None,
                         help="Where to write logs: a directory or a full file path; defaults to a platform-specific log directory.")

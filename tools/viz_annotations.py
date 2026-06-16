@@ -18,8 +18,8 @@ Options:
   -h, --help                : Show this help message and exit.
   -a, --annotations <path>  : Annotations directory (default: auto-detect).
   -s, --save                : Save visualizations instead of displaying (default: False).
-  -lw, --line_width <int>   : Bounding box line width (default: 3).
-  -n, --N <int>             : Number of top annotated frames to process (default: 10).
+  -lw, --line-width <int>   : Bounding box line width (default: 3).
+  -n, --top-n <int>         : Number of top annotated frames to process (default: 10).
   -t, --type <int> [<int>]  : Vehicle class IDs to visualize (default: all).
   -lp, --log-path <str>     : Where to write logs: a directory or a full file path; defaults to a platform-specific log directory.
   -q, --quiet               : Reduce console verbosity to important messages only (default: show INFO-level detail).
@@ -61,7 +61,7 @@ def run_visualizer(args: argparse.Namespace, logger: logging.Logger) -> None:
             annotations_dir = args.annotations
         else:
             annotations_dir = args.image_path.parent / 'labels'
-        top_N_annotations = find_max_annotations(annotations_dir, args.N, args.type)
+        top_N_annotations = find_max_annotations(annotations_dir, args.top_n, args.type)
         for annotation_file, _ in top_N_annotations:
             image_file = args.image_path / f'{annotation_file.stem}.jpg'
             visualize_annotations(image_file, annotation_file, args.line_width, logger, args.save, args.type)
@@ -152,8 +152,8 @@ def parse_cli_args() -> argparse.Namespace:
     parser.add_argument('image_path', type=Path, help='Path to the image to be visualized or to the directory containing the images')
     parser.add_argument('--annotations', '-a', type=Path, help='Path to the annotations directory (default: <image_path>/../labels)')
     parser.add_argument('--save', '-s', action='store_true', help='Save the visualization')
-    parser.add_argument('--line_width', '-lw', type=int, default=3, help='Width of the bounding box line')
-    parser.add_argument('--N', '-n', type=int, default=10, help='If folder input, number of top image frames to find (default: 10)')
+    parser.add_argument('--line-width', '-lw', type=int, default=3, help='Width of the bounding box line (default: 3)')
+    parser.add_argument('--top-n', '-n', type=int, default=10, help='If folder input, number of top annotated frames to process (default: 10)')
     parser.add_argument('--type', '-t', nargs="+", type=int, help='Type of vehicle to find (default: all)')
     parser.add_argument('--log-path', '-lp', type=Path, default=None, help='Where to write logs: a directory or a full file path; defaults to a platform-specific log directory.')
     parser.add_argument('--quiet', '-q', action='store_true', help='Reduce console verbosity to important messages only (default: show INFO-level detail).')

@@ -14,21 +14,21 @@ mean hover locations, and applies selection criteria based on spatial proximity 
 detection coverage to identify the best master frames for each intersection location.
 
 Usage:
-  python tools/find_master_frames.py <input_folder> <output_folder> [options]
+  python tools/find_master_frames.py <input_folder> [options]
 
 Arguments:
   input_folder  : Path to the folder containing videos, flight logs, and optional detection/tracking results.
-  output_folder : Path to the output folder to save results (e.g., ../ORTHOPHOTOS/master_frames).
 
 Options:
   -h, --help                                : Show this help message and exit.
+  -of, --output-folder <path>               : Output folder for results (default: same as input_folder).
   -s, --save                                : Save extracted reference-frame stats and the best master frames list (default: False).
   -smf, --save-master-frames                : Save best master frames extracted from videos (existing files overwritten) (default: False).
   -f, --force                               : Force re-extraction of flight log data (ignore existing data) (default: False).
   -rf, --ref-frame <int>                    : Reference frame used for stabilization/georeferencing (default: 0).
   -viz, --visualize                         : Visualize the best master frame selection (default: False).
   -sv, --save-viz                           : Save the best master frames visualization to PDF (default: False).
-  -n, --best_n <int>                        : Number of reference frames to consider for selection (default: 20).
+  -n, --best-n <int>                        : Number of reference frames to consider for selection (default: 20).
   -m, --match-pattern <str>                 : Glob pattern to match files in folder, case-sensitive (default: '??.CSV').
   -c, --cfg <path>                          : Pipeline config used to resolve the output folder and filename postfixes.
                                               Defaults to the bundled config (geotrax/cfg/default.yaml).
@@ -42,13 +42,13 @@ Options:
 
 Examples:
 1. Basic master frame selection with saved results and visualization:
-   python tools/find_master_frames.py /path/to/PROCESSED /path/to/ORTHOPHOTOS/master_frames -s -smf -sv -f
+   python tools/find_master_frames.py /path/to/PROCESSED -of /path/to/ORTHOPHOTOS/master_frames -s -smf -sv -f
 
 2. Selection with custom parameters and tracking data:
-   python tools/find_master_frames.py /path/to/PROCESSED /path/to/output --best_n 10 --ref-frame 5
+   python tools/find_master_frames.py /path/to/PROCESSED -of /path/to/output --best-n 10 --ref-frame 5
 
 3. Analysis with custom frame dimensions and CRS:
-   python tools/find_master_frames.py /path/to/PROCESSED /path/to/output -fw 1920 -fh 1080 -tcrs epsg:32633
+   python tools/find_master_frames.py /path/to/PROCESSED -fw 1920 -fh 1080 -tcrs epsg:32633
 
 Input:
 - PROCESSED folder containing drone flight logs in CSV format
@@ -101,6 +101,8 @@ def find_master_frames(args: argparse.Namespace, logger: logging.Logger) -> None
     folder_name = out_cfg.get('folder', DEFAULT_OUTPUT['folder'])
     if args.folders_exclude == [DEFAULT_OUTPUT['folder']] and folder_name != DEFAULT_OUTPUT['folder']:
         args.folders_exclude = [folder_name]
+
+    args.output_folder = args.output_folder or args.input_folder
 
     ref_frames_filepath = args.output_folder / 'reference_frame_stats.csv'
     if ref_frames_filepath.exists() and not args.force:
@@ -377,18 +379,18 @@ def parse_cli_args() -> argparse.Namespace:
     """
     parser = argparse.ArgumentParser(description='Find the best master frame for georeferencing.')
 
-    # Input and output paths
+    # Input path
     parser.add_argument("input_folder", type=Path, help="Path to the folder containing the videos and flight logs and optional detection/tracking results.")
-    parser.add_argument("output_folder", type=Path, help="Path to the output folder to save the results (e.g., ../ORTHOPHOTOS/master_frames).")
 
     # Optional arguments
+    parser.add_argument("--output-folder", "-of", type=Path, default=None, help="Output folder for results (default: same as input_folder).")
     parser.add_argument("--save", "-s", action="store_true", help="Save the extracted reference frame stats and the list of best master frames.")
     parser.add_argument("--save-master-frames", "-smf", action="store_true", help="Save the best master frames extracted from the videos (existing files will be overwritten).")
     parser.add_argument("--force", "-f", action="store_true", help="Force the extraction of the flight log data (do not use the existing data).")
     parser.add_argument("--ref-frame", "-rf", type=int, default=0, help="Use custom reference frame that is used for stabilization/georeferencing.")
     parser.add_argument("--visualize", "-viz", action="store_true", help="Visualize the best master frame selection.")
     parser.add_argument("--save-viz", "-sv", action="store_true", help="Save the best master frames visualization.")
-    parser.add_argument("--best_n", "-n", type=int, default=20, help="Number of reference frames to consider for the best master frame selection.")
+    parser.add_argument("--best-n", "-n", type=int, default=20, help="Number of reference frames to consider for the best master frame selection (default: 20).")
     parser.add_argument("--cfg", "-c", type=Path, default=DEFAULT_CFG, help="Pipeline config used to resolve the output folder and filename postfixes. Defaults to the bundled config.")
     parser.add_argument("--match-pattern", "-m", type=str, default='??.CSV', help="Pattern to match (case-sensitive) the files in the folder.")
     parser.add_argument("--folders-exclude", "-fe", type=str, nargs='+', default=[DEFAULT_OUTPUT['folder']], help="Folders to exclude from the search (default: [output.folder from config]).")

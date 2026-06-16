@@ -9,10 +9,10 @@ Compares autonomous vehicle trajectories from Stanford dataset against extracted
 Supports smoothing parameter tuning and comprehensive error analysis with visualization.
 
 Usage:
-  python tools/compare_av_detections_and_tune_filters.py --data <path> [options]
+  python tools/compare_av_detections_and_tune_filters.py <data> [options]
 
 Arguments:
-  --data <path> : Path to folder containing AV trajectories and results.
+  data : Path to folder containing AV trajectories and results.
 
 Options:
   --help, -h            : Show this help message and exit.
@@ -29,13 +29,13 @@ Options:
 
 Examples:
 1. Basic comparison with visualization:
-   python tools/compare_av_detections_and_tune_filters.py --data data/ --show
+   python tools/compare_av_detections_and_tune_filters.py data/ --show
 
 2. Parameter tuning with plots saved:
-   python tools/compare_av_detections_and_tune_filters.py --data data/ --tune --save
+   python tools/compare_av_detections_and_tune_filters.py data/ --tune --save
 
 3. Global coordinates with Savitzky-Golay filter:
-   python tools/compare_av_detections_and_tune_filters.py --data data/ --coords global --filter savitzky_golay
+   python tools/compare_av_detections_and_tune_filters.py data/ --coords global --filter savitzky_golay
 
 Input:
 - AV dataset: av_trajectories/ subfolder with RTK-GNSS data
@@ -1161,7 +1161,7 @@ def save_show_plot(plt, file_name, args):
 def parse_cli_args() -> argparse.Namespace:
     """Parse command-line arguments."""
     parser = argparse.ArgumentParser(description="Compare AV trajectories and tune smoothing filters")
-    parser.add_argument("--data", type=Path, required=True, help="Path to AV trajectory data folder")
+    parser.add_argument("data", type=Path, help="Path to AV trajectory data folder")
     parser.add_argument("--save", action="store_true", help="Save plots as PDF files")
     parser.add_argument("--show", action="store_true", help="Display plots interactively")
     parser.add_argument("--coords", type=str, default="local", choices=["local", "global"], help="Plot coordinates")

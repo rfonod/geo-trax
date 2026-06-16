@@ -21,7 +21,7 @@ Arguments:
 
 Options:
   -h, --help                   : Show this help message and exit.
-  --N, -n <int>                : Number of top annotation files to find (default: 10).
+  -n, --top-n <int>            : Number of top annotation files to find (default: 10).
   -t, --type <int> [<int> ...] : Specific vehicle class IDs to count (default: all types).
   -lp, --log-path <str>        : Where to write logs: a directory or a full file path; defaults to a platform-specific log directory.
   -q, --quiet                  : Reduce console verbosity to important messages only (default: show INFO-level detail).
@@ -31,7 +31,7 @@ Examples:
    python tools/find_max_annotations.py /path/to/annotations/
 
 2. Find top 5 annotation files:
-   python tools/find_max_annotations.py /path/to/annotations/ -N 5
+   python tools/find_max_annotations.py /path/to/annotations/ -n 5
 
 3. Find top files with specific vehicle types (e.g., cars and trucks):
    python tools/find_max_annotations.py /path/to/annotations/ --type 0 1
@@ -62,7 +62,7 @@ from geotrax.utils.logging_utils import setup_logger
 
 def show_top_annotations(args: argparse.Namespace, logger: logging.Logger) -> None:
     """Find and report the top annotation files by annotation count."""
-    top_N_annotations = find_max_annotations(args.source, args.N, args.type)
+    top_N_annotations = find_max_annotations(args.source, args.top_n, args.type)
     for i, (annotation_file, count) in enumerate(top_N_annotations):
         logger.notice(f'Annotation {i+1:<2} :: {annotation_file} ({count} annotations)')
 
@@ -100,7 +100,7 @@ def parse_cli_args() -> argparse.Namespace:
     """Parse command-line arguments."""
     parser = argparse.ArgumentParser(description='Find the first N image annotations that contain the most vehicle annotations.')
     parser.add_argument('source', type=Path, help='Path to a directory containing the annotations in YOLO format')
-    parser.add_argument('--N', '-n', type=int, default=10, help='Number of top image frames to find (default: 10)')
+    parser.add_argument('--top-n', '-n', type=int, default=10, help='Number of top annotation files to find (default: 10)')
     parser.add_argument('--type', '-t', nargs="+", type=int, help='Type of vehicle to find (default: all)')
     parser.add_argument('--log-path', '-lp', type=Path, default=None, help='Where to write logs: a directory or a full file path; defaults to a platform-specific log directory.')
     parser.add_argument('--quiet', '-q', action='store_true', help='Reduce console verbosity to important messages only (default: show INFO-level detail).')
