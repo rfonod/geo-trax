@@ -30,7 +30,9 @@ Options:
   -sv, --save-viz                           : Save the best master frames visualization to PDF (default: False).
   -n, --best_n <int>                        : Number of reference frames to consider for selection (default: 20).
   -m, --match-pattern <str>                 : Glob pattern to match files in folder, case-sensitive (default: '??.CSV').
-  -fe, --folders-exclude <str> [<str> ...]  : Folders to exclude from the search (default: ['results']).
+  -c, --cfg <path>                          : Pipeline config used to resolve the output folder and filename postfixes.
+                                              Defaults to the bundled config (geotrax/cfg/default.yaml).
+  -fe, --folders-exclude <str> [<str> ...]  : Folders to exclude from the search (default: [output.folder from config]).
   -b, --bounding-box-cols <int> [<int> ...] : Bounding-box columns in detection/tracking results (default: [2, 3, 4, 5]).
   -tcrs, --target-crs <str>                 : Target CRS for local coordinates (default: 'epsg:5186').
   -fw, --frame-width <int>                  : Video frame width in pixels (default: 3840).
@@ -82,7 +84,9 @@ import pandas as pd
 import tqdm
 from shapely.geometry import Point
 
-from geotrax.utils.file_utils import detect_delimiter, determine_location_id
+from geotrax.utils.cli_utils import DEFAULT_CFG
+from geotrax.utils.config_utils import load_config
+from geotrax.utils.file_utils import DEFAULT_OUTPUT, detect_delimiter, determine_location_id, get_output_dir
 from geotrax.utils.logging_utils import setup_logger
 
 VIDEO_SUFFIX = '.MP4' # video file format to report in the output file
@@ -92,6 +96,12 @@ def find_master_frames(args: argparse.Namespace, logger: logging.Logger) -> None
     """
     Find the best master frame for georeferencing.
     """
+    out_cfg = load_config(args.cfg, logger).get('output', DEFAULT_OUTPUT)
+    args.output_cfg = out_cfg
+    folder_name = out_cfg.get('folder', DEFAULT_OUTPUT['folder'])
+    if args.folders_exclude == [DEFAULT_OUTPUT['folder']] and folder_name != DEFAULT_OUTPUT['folder']:
+        args.folders_exclude = [folder_name]
+
     ref_frames_filepath = args.output_folder / 'reference_frame_stats.csv'
     if ref_frames_filepath.exists() and not args.force:
         logger.warning(f"Reference frame data already exists in {ref_frames_filepath}. Use --force to overwrite.")
@@ -224,7 +234,9 @@ def get_objects_and_area_covered(flight_log: Path, args: argparse.Namespace) -> 
     """
     Get the number of objects and the area covered by the objects in the reference frame.
     """
-    detection_file = flight_log.parent / 'results' / (flight_log.stem + '.txt')
+    output_cfg = getattr(args, 'output_cfg', DEFAULT_OUTPUT)
+    tracks_postfix = output_cfg.get('tracks_postfix', DEFAULT_OUTPUT['tracks_postfix'])
+    detection_file = get_output_dir(flight_log, output_cfg) / f"{flight_log.stem}{tracks_postfix}.txt"
     if not detection_file.exists():
         return 'N/A', 'N/A'
 
@@ -377,8 +389,9 @@ def parse_cli_args() -> argparse.Namespace:
     parser.add_argument("--visualize", "-viz", action="store_true", help="Visualize the best master frame selection.")
     parser.add_argument("--save-viz", "-sv", action="store_true", help="Save the best master frames visualization.")
     parser.add_argument("--best_n", "-n", type=int, default=20, help="Number of reference frames to consider for the best master frame selection.")
+    parser.add_argument("--cfg", "-c", type=Path, default=DEFAULT_CFG, help="Pipeline config used to resolve the output folder and filename postfixes. Defaults to the bundled config.")
     parser.add_argument("--match-pattern", "-m", type=str, default='??.CSV', help="Pattern to match (case-sensitive) the files in the folder.")
-    parser.add_argument("--folders-exclude", "-fe", type=str, nargs='+', default=['results'], help="Folders to exclude from the search (e.g, 'results' as these may already contain georeferenced data).")
+    parser.add_argument("--folders-exclude", "-fe", type=str, nargs='+', default=[DEFAULT_OUTPUT['folder']], help="Folders to exclude from the search (default: [output.folder from config]).")
     parser.add_argument("--bounding-box-cols", "-b", type=int, nargs='+', default=[2, 3, 4, 5], dest="bbox_cols", help="Columns of the bounding box in the detection/tracking results.")
     parser.add_argument("--target-crs", "-tcrs", default='epsg:5186', help="Target CRS for local coordinates")
     parser.add_argument("--frame-width", "-fw", type=int, default=3840, help="Default width of the video frames.")

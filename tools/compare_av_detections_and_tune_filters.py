@@ -22,6 +22,8 @@ Options:
   -t, --tune            : Enable smoothing parameter tuning (default: False).
   -f, --filter <str>    : Filter type: gaussian or savitzky_golay (default: gaussian).
   -d, --debug           : Enable debug mode for additional output (default: False).
+  -c, --cfg <path>      : Pipeline config used to resolve the output folder and filename postfixes.
+                          Defaults to the bundled config (geotrax/cfg/default.yaml).
   -lp, --log-path <str> : Where to write logs: a directory or a full file path; defaults to a platform-specific log directory.
   -q, --quiet           : Reduce console verbosity to important messages only (default: show INFO-level detail).
 
@@ -70,13 +72,14 @@ from scipy.ndimage import gaussian_filter1d
 from scipy.signal import savgol_filter
 from stabilo import Stabilizer
 
-from geotrax.utils.logging_utils import setup_logger
-
 try:
-    from geotrax.utils.file_utils import detect_delimiter
+    from geotrax.utils.cli_utils import DEFAULT_CFG
+    from geotrax.utils.config_utils import load_config
+    from geotrax.utils.file_utils import DEFAULT_OUTPUT, detect_delimiter
+    from geotrax.utils.logging_utils import setup_logger
 except ImportError as e:
     print(
-        "\033[91mCould not import 'detect_delimiter' from 'utils.file_utils'.\n"
+        "\033[91mCould not import from 'geotrax.utils'.\n"
         "Make sure you have installed the geo-trax package in editable mode:\n"
         "    python -m pip install -e .\n"
         "from the project root directory.\033[0m"
@@ -150,7 +153,8 @@ def evaluate_av_data(args: argparse.Namespace, logger: logging.Logger) -> None:
     df_stanford_geo = get_on_board_av_data(args.data / 'av_trajectories')
 
     # get the AV trajectory and speed from our dataset
-    df_extracted_geo, df_extracted_img = get_extracted_av_data(args.data / 'results', logger)
+    folder_name = args.out_cfg.get('folder', DEFAULT_OUTPUT['folder'])
+    df_extracted_geo, df_extracted_img = get_extracted_av_data(args.data / folder_name, logger, out_cfg=args.out_cfg)
 
     if args.tune:
         tune_smoothing_parameters(df_stanford_geo, df_extracted_geo, args, logger)
@@ -213,11 +217,15 @@ def get_on_board_av_data(av_trajectories_folder) -> pd.DataFrame:
     return df_av
 
 
-def get_extracted_av_data(results_folder, logger) -> Union[pd.DataFrame, pd.DataFrame]:
+def get_extracted_av_data(results_folder, logger, out_cfg=None) -> Union[pd.DataFrame, pd.DataFrame]:
     # check if data is a directory
     if not results_folder.is_dir():
         logger.critical(f"Data {results_folder} is not a directory.")
         sys.exit(1)
+
+    cfg = out_cfg or DEFAULT_OUTPUT
+    geo_postfix = cfg.get('georeferenced_postfix', DEFAULT_OUTPUT['georeferenced_postfix'])
+    tracks_postfix = cfg.get('tracks_postfix', DEFAULT_OUTPUT['tracks_postfix'])
 
     # get the filepaths of the extracted vehicle trajectories
     available_filenames = [file.name for file in results_folder.glob('*.csv')]
@@ -230,7 +238,12 @@ def get_extracted_av_data(results_folder, logger) -> Union[pd.DataFrame, pd.Data
         df_geo = pd.read_csv(results_filepath, delimiter=',', header=0)
 
         # filter out av data
-        video_name = filename.split('.')[0]
+        csv_stem = filename[:-4]  # strip '.csv'
+        if geo_postfix and csv_stem.endswith(geo_postfix):
+            base_stem = csv_stem[:-len(geo_postfix)]
+        else:
+            base_stem = csv_stem
+        video_name = base_stem.split('.')[0]
         id_av = video2id[video_name]
         df_geo = df_geo[(df_geo['Vehicle_ID'] == id_av) & (df_geo['Visibility'] == 1)]
 
@@ -246,7 +259,7 @@ def get_extracted_av_data(results_folder, logger) -> Union[pd.DataFrame, pd.Data
         dfs_geo.append(df_geo)
 
         # read the txt file if it exists
-        tracks_filepath = results_folder / filename.replace('.csv', '.txt')
+        tracks_filepath = results_folder / f"{base_stem}{tracks_postfix}.txt"
         if tracks_filepath.is_file():
             delimiter = detect_delimiter(tracks_filepath)
             df_img = pd.read_csv(
@@ -516,7 +529,8 @@ def compute_positional_and_speed_errors(df_stanford, df_extracted, args, logger)
 
     # save the errors to a file
     if args.save and not args.tune:
-        with open(args.data / 'results' / 'plots' / 'AV_positional_and_speed_errors_per_video.tex', 'w') as f:
+        _folder = getattr(args, 'out_cfg', DEFAULT_OUTPUT).get('folder', DEFAULT_OUTPUT['folder'])
+        with open(args.data / _folder / 'plots' / 'AV_positional_and_speed_errors_per_video.tex', 'w') as f:
             for video in sorted(video_error_stats.keys()):
                 (
                     positional_error_mean,
@@ -528,7 +542,7 @@ def compute_positional_and_speed_errors(df_stanford, df_extracted, args, logger)
                 ) = video_error_stats[video]
                 f.write(f'    {video[-2:]} & ${positional_error_mean:.3f} \pm {positional_error_std:.3f}$ & ${speed_error_mean:.3f} \pm {speed_error_std:.3f}$ & {round(trajectory_length, 2):.2f} & {round(trajectory_duration, 2):.2f}\\\\ \n')
 
-        with open(args.data / 'results' / 'plots' / 'AV_positional_and_speed_errors_per_intersection.tex', 'w') as f:
+        with open(args.data / _folder / 'plots' / 'AV_positional_and_speed_errors_per_intersection.tex', 'w') as f:
             for intersection in sorted(intersection_error_stats.keys()):
                 positional_error_mean, positional_error_std, speed_error_mean, speed_error_std = (
                     intersection_error_stats[intersection]
@@ -1135,7 +1149,8 @@ def plot_sampling_diff(df_stanford, df_extracted, args):
 def save_show_plot(plt, file_name, args):
     plt.tight_layout()
     if args.save:
-        img_filepath = args.data / 'results' / 'plots' / f'AV_{file_name}.pdf'
+        folder_name = getattr(args, 'out_cfg', DEFAULT_OUTPUT).get('folder', DEFAULT_OUTPUT['folder'])
+        img_filepath = args.data / folder_name / 'plots' / f'AV_{file_name}.pdf'
         if not img_filepath.parent.is_dir():
             img_filepath.parent.mkdir(parents=True)
         plt.savefig(str(img_filepath), bbox_inches='tight', pad_inches=0)
@@ -1154,6 +1169,7 @@ def parse_cli_args() -> argparse.Namespace:
     parser.add_argument("--filter", "-f", default="gaussian",
                         choices=["gaussian", "savitzky_golay"], help="Filter type")
     parser.add_argument("--debug", "-d", action="store_true", help="Enable debug mode")
+    parser.add_argument("--cfg", "-c", type=Path, default=DEFAULT_CFG, help="Pipeline config used to resolve the output folder and filename postfixes. Defaults to the bundled config.")
     parser.add_argument("--log-path", "-lp", type=Path, default=None, help="Where to write logs: a directory or a full file path; defaults to a platform-specific log directory.")
     parser.add_argument("--quiet", "-q", action="store_true", help="Reduce console verbosity to important messages only (default: show INFO-level detail).")
     return parser.parse_args()
@@ -1164,6 +1180,7 @@ def main() -> None:
     args = parse_cli_args()
     logger = setup_logger(Path(__file__).stem, verbose=not args.quiet, log_path=args.log_path)
 
+    args.out_cfg = load_config(args.cfg, logger).get('output', DEFAULT_OUTPUT)
     evaluate_av_data(args, logger)
 
 

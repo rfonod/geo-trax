@@ -49,6 +49,10 @@ Batch Processing Options:
 Shared Options:
     --cfg, -c <path>    : Path to a custom pipeline config file. Defaults to the bundled config;
                           run 'geotrax config show' to view it or 'geotrax config copy' to customize.
+    --output-folder, -of <str> : Root folder for pipeline outputs (bare name or absolute path).
+                          A bare name creates a sub-folder next to each input video; an absolute
+                          path is shared across all inputs in the batch. Also sets the base for
+                          plots/. Defaults to cfg -> output -> folder (historical default: 'results').
     --log-path, -lp <str> : Where to write logs: a directory or a full file path; defaults to a platform-specific log directory.
     --verbose, -v       : Set print verbosity level to INFO (default: WARNING).
 
@@ -63,7 +67,7 @@ Processing Options:
     edit cfg -> ultralytics and cfg -> tracker in the pipeline config (run 'geotrax config copy').
 
 Georeferencing Options:
-    --ortho-folder, -of <path>     : Path to the folder with orthophotos (.png, .tif, .txt).
+    --ortho-folder, -orf <path>    : Path to the folder with orthophotos (.png, .tif, .txt).
                           Defaults to cfg -> folders -> ortho_folder, then 'ORTHOPHOTOS' at the
                           same level as 'PROCESSED' in input.
     --geo-source, -gs <choice>     : Georeferencing parameter source: metadata-tif, text-file, or
@@ -149,7 +153,7 @@ Examples:
         geotrax batch data/video.mp4 --viz-only --save --show-lanes --viz-mode 1
 
   5. Re-run georeferencing only with a forced homography recompute:
-        geotrax batch data/video.mp4 --geo-only -of --recompute
+        geotrax batch data/video.mp4 --geo-only -orf --recompute
 
   6. Batch-process a directory, overwrite all existing results without prompts, save videos:
         geotrax batch path/to/PROCESSED/ --overwrite --yes
@@ -187,7 +191,7 @@ from geotrax.plot import add_plotting_args, default_plot_args, generate_plots
 from geotrax.utils.cli_utils import add_common_args
 from geotrax.utils.config_utils import backfill_args_from_config, load_config
 from geotrax.utils.constants import VIDEO_FORMATS
-from geotrax.utils.file_utils import check_if_results_exist, determine_suffix_and_fourcc
+from geotrax.utils.file_utils import DEFAULT_OUTPUT, check_if_results_exist, determine_suffix_and_fourcc
 from geotrax.utils.logging_utils import BColors, setup_logger
 from geotrax.visualize import add_visualization_args, resolve_viz_modes, visualize_results
 
@@ -206,15 +210,19 @@ def process_input(args: argparse.Namespace, logger: logging.Logger) -> None:
         logger.critical(f"File or directory '{input_path}' not found.")
         return
 
-    batch_cfg = load_config(args.cfg, logger)['batch']
+    full_cfg = load_config(args.cfg, logger)
+    batch_cfg = full_cfg['batch']
+    out_cfg_raw = full_cfg.get('output', DEFAULT_OUTPUT)
     backfill_args_from_config(args, {
         'folders_exclude': batch_cfg['folders_exclude'],
         'exclude_patterns': batch_cfg['exclude_patterns'],
+        'output_folder': out_cfg_raw.get('folder', DEFAULT_OUTPUT['folder']),
     })
+    out_cfg = {**out_cfg_raw, 'folder': args.output_folder}
 
     try:
         if input_path.is_file() and input_path.suffix.lower() in VIDEO_FORMATS:
-            process_file(input_path, args, logger)
+            process_file(input_path, args, logger, out_cfg)
         elif input_path.is_dir():
             logger.notice(f"Batch processing all videos in: '{input_path}'")
             args.cut_frame_right = None
@@ -225,7 +233,7 @@ def process_input(args: argparse.Namespace, logger: logging.Logger) -> None:
             pbar = tqdm(files_to_process, unit="video")
             for file in files_to_process:
                 pbar.set_description(f"Processing: '{file}'")
-                process_file(file, args, logger)
+                process_file(file, args, logger, out_cfg)
                 pbar.update(1)
     except KeyboardInterrupt:
         logger.error("Batch processing interrupted by user.")
@@ -246,6 +254,7 @@ def run_plotting(path: Path, args: argparse.Namespace, logger: logging.Logger) -
             save=args.plot_save,
             show=args.plot_show,
             cfg=args.cfg,
+            output_folder=args.output_folder,
             log_path=args.log_path,
             verbose=args.verbose,
             aggregate=args.plot_aggregate,
@@ -258,20 +267,20 @@ def run_plotting(path: Path, args: argparse.Namespace, logger: logging.Logger) -
         generate_plots(plot_args, logger)
 
 
-def process_file(file: Path, args: argparse.Namespace, logger: logging.Logger) -> None:
+def process_file(file: Path, args: argparse.Namespace, logger: logging.Logger, out_cfg: dict = None) -> None:
     """
     Process the file if it is a video file and not in the results directory.
     """
     try:
         logger.info(f"Processing: '{file}'")
         if not args.viz_only and not args.geo_only and not args.plot_only:
-            process_step(file, args, logger, ACTION_EXTRACT, detect_track_stabilize)
+            process_step(file, args, logger, ACTION_EXTRACT, detect_track_stabilize, out_cfg)
 
         if not args.viz_only and not args.no_geo and not args.plot_only:
-            process_step(file, args, logger, ACTION_GEOREF, georeference)
+            process_step(file, args, logger, ACTION_GEOREF, georeference, out_cfg)
 
         if (args.save is not False or args.show is not False) and not args.plot_only:
-            process_step(file, args, logger, ACTION_VISUALIZE, visualize_results)
+            process_step(file, args, logger, ACTION_VISUALIZE, visualize_results, out_cfg)
 
         if (args.plot_save is not False or args.plot_show is not False) and not args.viz_only and not args.geo_only and not args.input.is_dir():
             run_plotting(file, args, logger)
@@ -280,11 +289,11 @@ def process_file(file: Path, args: argparse.Namespace, logger: logging.Logger) -
         logger.error(f"Error with {file}: {e}")
 
 
-def process_step(file: Path, args: argparse.Namespace, logger: logging.Logger, action: str, func) -> None:
+def process_step(file: Path, args: argparse.Namespace, logger: logging.Logger, action: str, func, out_cfg: dict = None) -> None:
     """
     Process a specific step (processing, georeferencing, visualizing) for the file.
     """
-    if should_process_file(file, args, logger, action):
+    if should_process_file(file, args, logger, action, out_cfg):
         logger.info(f"{action}: '{file}'")
         if not args.dry_run:
             args.source = file
@@ -310,11 +319,11 @@ def filter_files_to_process(files: list, args: argparse.Namespace, logger: loggi
     return filtered_files
 
 
-def should_process_file(file: Path, args: argparse.Namespace, logger: logging.Logger, action: str) -> bool:
+def should_process_file(file: Path, args: argparse.Namespace, logger: logging.Logger, action: str, out_cfg: dict = None) -> bool:
     """
     Determine if the video should be processed, georeferenced, or visualized based on the existing results and user input.
     """
-    txt_exists = check_if_results_exist(file, "processed")[0]
+    txt_exists = check_if_results_exist(file, "processed", output_cfg=out_cfg)[0]
     processing_steps = "detection, tracking, and stabilization"
 
     if action == ACTION_EXTRACT:
@@ -323,7 +332,7 @@ def should_process_file(file: Path, args: argparse.Namespace, logger: logging.Lo
         if not txt_exists:
             logger.error(f"'{file}' - No {processing_steps} results found. Skipping georeferencing.")
             return False
-        csv_exists = check_if_results_exist(file, "georeferenced")[0]
+        csv_exists = check_if_results_exist(file, "georeferenced", output_cfg=out_cfg)[0]
         return handle_existing_results(file, args, logger, csv_exists, action)
     elif action == ACTION_VISUALIZE:
         if not txt_exists:
@@ -332,7 +341,7 @@ def should_process_file(file: Path, args: argparse.Namespace, logger: logging.Lo
         # Results count as present only if every mode the visualizer will render exists
         suffix = determine_suffix_and_fourcc()[0]
         viz_modes = resolve_viz_modes(args, logger)
-        vid_exists = all(check_if_results_exist(file, "visualized", mode, suffix)[0] for mode in viz_modes)
+        vid_exists = all(check_if_results_exist(file, "visualized", mode, suffix, output_cfg=out_cfg)[0] for mode in viz_modes)
         return handle_existing_results(file, args, logger, vid_exists, action)
     return False
 

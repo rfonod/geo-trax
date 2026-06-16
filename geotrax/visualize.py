@@ -21,6 +21,8 @@ Options:
   --help, -h          : Show this help message and exit.
   --cfg, -c <path>    : Path to a custom pipeline config file. Defaults to the bundled config;
                         run 'geotrax config show' to view it or 'geotrax config copy' to customize.
+  --output-folder, -of <str> : Root folder for outputs (bare name or absolute path).
+                        Defaults to cfg -> output -> folder (historical default: 'results').
   --log-path, -lp <str> : Where to write logs: a directory or a full file path; defaults to a platform-specific log directory.
   --verbose, -v       : Set print verbosity level to INFO (default: WARNING).
 
@@ -63,9 +65,9 @@ Examples:
    geotrax visualize path/to/video.mp4 --show --viz-mode 1 --hide-speed
 
 Notes:
-- The script reads tracking results from '<source_stem>.txt' located in the 'results' subdirectory,
-  where '<source_stem>' is the input video filename without extension. This file is produced by 'geotrax extract'.
-- For --viz-mode 1 or 2, transformation matrices are read from '<source_stem>_vid_transf.txt' in the same 'results' subdirectory.
+- The script reads tracking results from '<stem><tracks_postfix>.txt' in the output folder (default: 'results/').
+  Output folder and postfixes are configured via cfg -> output; use --output-folder to redirect at runtime.
+- For --viz-mode 1 or 2, transformation matrices are read from '<stem><stab_transform_postfix>.txt' in the same folder.
 - Press 'q' during visualization to stop (with --show).
 """
 
@@ -84,7 +86,13 @@ from tqdm import tqdm
 from geotrax.utils.cli_utils import add_common_args
 from geotrax.utils.config_utils import backfill_args_from_config, load_config, load_config_all
 from geotrax.utils.data_utils import VizColors
-from geotrax.utils.file_utils import check_if_results_exist, detect_delimiter, determine_suffix_and_fourcc
+from geotrax.utils.file_utils import (
+    build_result_path,
+    check_if_results_exist,
+    detect_delimiter,
+    determine_suffix_and_fourcc,
+    get_output_dir,
+)
 from geotrax.utils.logging_utils import setup_logger
 
 
@@ -95,6 +103,7 @@ def visualize_results(args: argparse.Namespace, logger: logging.Logger) -> None:
     config = load_config_all(args, logger)['main']
     viz = config['visualization']
     proc = config['processing']
+    out_cfg_raw = config.get('output', {})
     backfill_args_from_config(args, {
         'save': viz['save'],
         'show': viz['show'],
@@ -112,7 +121,9 @@ def visualize_results(args: argparse.Namespace, logger: logging.Logger) -> None:
         'class_filter': viz['class_filter'],
         'cut_frame_left': proc['cut_frame_left'],
         'cut_frame_right': proc['cut_frame_right'],
+        'output_folder': out_cfg_raw.get('folder', 'results'),
     })
+    out_cfg = {**out_cfg_raw, 'folder': args.output_folder}
     if not args.save and not args.show:
         logger.warning("Neither --save nor --show is enabled. Visualization will run but produce no output. "
                        "Set 'save' or 'show' in the config file, or pass --save / --show on the command line.")
@@ -122,11 +133,11 @@ def visualize_results(args: argparse.Namespace, logger: logging.Logger) -> None:
     viz_modes = normalize_viz_modes(args.viz_mode, logger)
     for viz_mode in viz_modes:
         args.viz_mode = viz_mode
-        tracks_txt_filepath, transforms_filepath, tracks_csv_filepath = get_and_verify_filepaths(args, logger)
+        tracks_txt_filepath, transforms_filepath, tracks_csv_filepath = get_and_verify_filepaths(args, logger, out_cfg)
         tracks, tracks_plotting = read_tracks(tracks_txt_filepath, class_names, args, logger)
         transforms = read_transforms(transforms_filepath, logger)
         speed_lane_data = read_georeferenced_results(tracks_csv_filepath, tracks, logger)
-        vid_reader, vid_writer, pbar = initialize_streams(args, logger)
+        vid_reader, vid_writer, pbar = initialize_streams(args, logger, out_cfg)
 
         frame_num = 0
         try:
@@ -245,7 +256,7 @@ def process_frames(tracks: pd.DataFrame, tracks_plotting: pd.DataFrame, transfor
         pbar.update()
 
 
-def get_and_verify_filepaths(args: argparse.Namespace, logger: logging.Logger) -> tuple:
+def get_and_verify_filepaths(args: argparse.Namespace, logger: logging.Logger, output_cfg: dict = None) -> tuple:
     """
     Get and verify the filepaths for the provided video and tracking and georeferenced results.
     """
@@ -255,20 +266,20 @@ def get_and_verify_filepaths(args: argparse.Namespace, logger: logging.Logger) -
         logger.critical(f"Video file '{video_filepath}' not found.")
         sys.exit(1)
 
-    tracks_txt_exist, tracks_txt_filepath = check_if_results_exist(args.source, 'processed')
+    tracks_txt_exist, tracks_txt_filepath = check_if_results_exist(args.source, 'processed', output_cfg=output_cfg)
     if not tracks_txt_exist:
         logger.critical(f"Tracking results file '{tracks_txt_filepath}' not found. Make sure you have run the extraction stage ('geotrax extract').")
         sys.exit(1)
 
     if args.viz_mode == 1:
-        transforms_exist, transforms_filepath = check_if_results_exist(args.source, 'video_transformations')
+        transforms_exist, transforms_filepath = check_if_results_exist(args.source, 'video_transformations', output_cfg=output_cfg)
         if not transforms_exist:
             logger.critical(f"Transformation file '{transforms_filepath}' not found. Make sure you have enabled stabilization and run the extraction stage ('geotrax extract').")
             sys.exit(1)
     else:
         transforms_filepath = None
 
-    tracks_csv_exist, tracks_csv_filepath = check_if_results_exist(args.source, 'georeferenced')
+    tracks_csv_exist, tracks_csv_filepath = check_if_results_exist(args.source, 'georeferenced', output_cfg=output_cfg)
     if not tracks_csv_exist:
         logger.warning(f"Georeferenced file '{tracks_csv_filepath}' not found. Speed estimates will not be visualized.")
         tracks_csv_filepath = None
@@ -371,7 +382,7 @@ def read_georeferenced_results(tracks_csv_filepath: Path, tracks: pd.DataFrame, 
     return georeferenced_data
 
 
-def initialize_streams(args: argparse.Namespace, logger: logging.Logger) -> tuple:
+def initialize_streams(args: argparse.Namespace, logger: logging.Logger, output_cfg: dict = None) -> tuple:
     """
     Initialize video reader, writer, and progress bar.
     """
@@ -387,7 +398,9 @@ def initialize_streams(args: argparse.Namespace, logger: logging.Logger) -> tupl
         fps = vid_reader.get(cv2.CAP_PROP_FPS) # int() might be required, floats might produce error in MP4 codec
 
         suffix, fourcc = determine_suffix_and_fourcc()
-        vid_file = f"{str(args.source.parent / 'results' / args.source.stem)}_mode_{args.viz_mode}.{suffix}"
+        out_path = build_result_path(args.source, 'visualized', output_cfg, args.viz_mode, suffix)
+        get_output_dir(args.source, output_cfg).mkdir(parents=True, exist_ok=True)
+        vid_file = str(out_path)
 
         vid_writer = cv2.VideoWriter(vid_file, cv2.VideoWriter_fourcc(*fourcc), fps, (frame_width, frame_height))
     else:

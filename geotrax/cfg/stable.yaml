@@ -39,6 +39,22 @@ folders:
   master_folder: null        # Folder with master frame files (.png); null = '<ortho_folder>/master_frames' — CLI: --master-folder
   segmentation_folder: null  # Folder with lane segmentation CSVs (and overlay PNGs); null = '<ortho_folder>/segmentations' — CLI: --segmentation-folder
 
+# --- Output destination & naming (CLI override for folder) ---
+# Controls where pipeline outputs are written and how they are named. Defaults reproduce the
+# historical 'results/' layout. 'folder' accepts a bare name (creates a sub-folder next to each
+# input video) or an absolute path (shared across all inputs in a batch; not recommended when
+# video filenames are not unique — outputs from different videos with the same name will
+# overwrite each other). Each *_postfix is inserted between the video stem (the filename
+# without its extension, e.g. 'video_file' for 'video_file.mp4') and the file extension.
+# The plots/ sub-folder is always created inside the configured output folder.
+output:
+  folder: results                      # Output root; bare name or absolute path — CLI: --output-folder / -of
+  tracks_postfix: ''                   # Pixel-coord tracking results → '<stem><postfix>.txt'
+  georeferenced_postfix: ''            # Georeferenced trajectories  → '<stem><postfix>.csv'
+  stab_transform_postfix: _vid_transf  # Stabilization homographies  → '<stem><postfix>.txt'
+  geo_transform_postfix: _geo_transf   # Georeferencing homography   → '<stem><postfix>.txt'
+  visualization_postfix: ''            # Annotated video             → '<stem><postfix>_mode_<X>.<ext>'
+
 # --- Frame range; shared by extraction and visualization (CLI override) ---
 # These control how many frames to process. Override with --cut-frame-left / --cut-frame-right.
 processing:

@@ -21,11 +21,13 @@ Options:
   --help, -h       : Show this help message and exit.
   --cfg, -c        : Path to a custom pipeline config file. Defaults to the bundled config;
                      run 'geotrax config show' to view it or 'geotrax config copy' to customize.
+  --output-folder, -of <str> : Root folder where pipeline outputs (incl. plots/) are read from and
+                     written to. Defaults to cfg -> output -> folder (historical default: 'results').
   --log-path, -lp  : Where to write logs: a directory or a full file path; defaults to a platform-specific log directory.
   --verbose, -v    : Set verbosity to INFO (default: WARNING).
 
 Plot Background Options:
-  --ortho-folder, -of <path>         : Path to the folder with orthophoto images (.png) used as
+  --ortho-folder, -orf <path>        : Path to the folder with orthophoto images (.png) used as
                                        plot backgrounds for georeferenced trajectories. Defaults to
                                        cfg -> folders -> ortho_folder, then 'ORTHOPHOTOS' at the same
                                        level as 'PROCESSED' in 'input'.
@@ -58,13 +60,13 @@ Examples:
    geotrax plot /path/to/video.mp4
 
 2. Plot georeferenced trajectories from a CSV file, overlaid on the orthophoto:
-   geotrax plot /path/to/results/video.csv -of /path/to/orthophotos/
+   geotrax plot /path/to/results/video.csv -orf /path/to/orthophotos/
 
 3. Aggregate and plot all results from a folder:
    geotrax plot /path/to/videos/ -pa
 
 4. Plot with lane segmentation overlays as backgrounds, excluding buses:
-   geotrax plot /path/to/videos/ -of /path/to/orthophotos/ -osf /path/to/segmentations/ -pseg -pcf 1
+   geotrax plot /path/to/videos/ -orf /path/to/orthophotos/ -osf /path/to/segmentations/ -pseg -pcf 1
 """
 
 import argparse
@@ -89,7 +91,13 @@ from geotrax.utils.constants import (
     VIDEO_FORMATS,
 )
 from geotrax.utils.data_utils import PlotColors
-from geotrax.utils.file_utils import detect_delimiter, determine_location_id, get_ortho_folder
+from geotrax.utils.file_utils import (
+    DEFAULT_OUTPUT,
+    detect_delimiter,
+    determine_location_id,
+    get_ortho_folder,
+    get_output_dir,
+)
 from geotrax.utils.logging_utils import setup_logger
 
 colors = PlotColors()
@@ -101,6 +109,7 @@ def generate_plots(args: argparse.Namespace, logger: logging.Logger) -> None:
     config = load_config_all(args, logger)['main']
     plot_cfg = config['plotting']
     folders = config['folders']
+    out_cfg_raw = config.get('output', {})
     backfill_args_from_config(args, {
         'save': plot_cfg['save'],
         'show': plot_cfg['show'],
@@ -110,7 +119,10 @@ def generate_plots(args: argparse.Namespace, logger: logging.Logger) -> None:
         'class_filter': plot_cfg['class_filter'],
         'ortho_folder': Path(folders['ortho_folder']) if folders['ortho_folder'] else None,
         'segmentation_folder': Path(folders['segmentation_folder']) if folders['segmentation_folder'] else None,
+        'output_folder': out_cfg_raw.get('folder', DEFAULT_OUTPUT['folder']),
     })
+    out_cfg = {**out_cfg_raw, 'folder': args.output_folder}
+    config['output'] = out_cfg
     colors.set_colors(plot_cfg['colors'])
     files = determine_files_to_process(args.input, config['plotting']['skip_filenames_with'], logger)
     ortho_folder = get_ortho_folder(args.input, args.ortho_folder, logger, critical=False)
@@ -268,10 +280,14 @@ def get_filepaths(file: Path, ortho_folder: Union[Path, None], config: dict, log
     """
     Get the file paths for the image, geo, orthophoto, and segmentation overlay files.
     """
+    out_cfg = config.get('output', {})
     filepath_img, filepath_geo, filepath_ortho, filepath_seg = None, None, None, None
     if file.suffix.lower() in VIDEO_FORMATS:
-        filepath_img = file.parent / 'results' / file.name.replace(file.suffix, '.txt')
-        filepath_geo = file.parent / 'results' / file.name.replace(file.suffix, '.csv')
+        out_dir = get_output_dir(file, out_cfg)
+        tracks_postfix = out_cfg.get('tracks_postfix', DEFAULT_OUTPUT['tracks_postfix'])
+        geo_postfix = out_cfg.get('georeferenced_postfix', DEFAULT_OUTPUT['georeferenced_postfix'])
+        filepath_img = out_dir / f"{file.stem}{tracks_postfix}.txt"
+        filepath_geo = out_dir / f"{file.stem}{geo_postfix}.csv"
         if not filepath_img.is_file():
             filepath_img = None
         if not filepath_geo.is_file():
@@ -739,6 +755,7 @@ def default_plot_args(**overrides) -> argparse.Namespace:
         'save': None,
         'show': None,
         'cfg': DEFAULT_CFG,
+        'output_folder': None,
         'log_path': None,
         'verbose': False,
         'aggregate': None,
@@ -790,7 +807,7 @@ def parse_cli_args() -> argparse.Namespace:
     add_common_args(optional)
 
     georef = parser.add_argument_group('Plot background arguments')
-    georef.add_argument("--ortho-folder", "-of", type=Path, default=None, help="Path to the folder with orthophoto images (.png) used as plot backgrounds for georeferenced trajectories. Defaults to cfg -> folders -> ortho_folder, then 'ORTHOPHOTOS' at the same level as 'PROCESSED' in 'input'.")
+    georef.add_argument("--ortho-folder", "-orf", type=Path, default=None, help="Path to the folder with orthophoto images (.png) used as plot backgrounds for georeferenced trajectories. Defaults to cfg -> folders -> ortho_folder, then 'ORTHOPHOTOS' at the same level as 'PROCESSED' in 'input'.")
     georef.add_argument("--segmentation-folder", "-osf", type=Path, default=None, help="Path to the folder containing lane segmentation CSV files (used during georeferencing for lane assignment) and, when --plot-segmentations is enabled, the corresponding overlay PNG files used as plot backgrounds. Defaults to cfg -> folders -> segmentation_folder, then '<ortho-folder>/segmentations'.")
 
     plotting = parser.add_argument_group('Plotting arguments')

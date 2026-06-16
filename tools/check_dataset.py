@@ -18,6 +18,8 @@ Options:
   -h, --help                             : Show this help message and exit.
   -at, --acceleration-threshold <float>  : Acceleration threshold in m/s² (default: 12).
   -st, --speed-threshold <float>         : Speed threshold in km/h (default: 130).
+  -c, --cfg <path>                       : Pipeline config used to resolve the output folder name where georeferenced CSVs are located.
+                                           Defaults to the bundled config (geotrax/cfg/default.yaml).
   -lp, --log-path <str>                  : Where to write logs: a directory or a full file path; defaults to a platform-specific log directory.
   -q, --quiet                            : Reduce console verbosity to important messages only (default: show INFO-level detail).
 
@@ -55,10 +57,13 @@ from typing import Union
 import pandas as pd
 import tqdm
 
+from geotrax.utils.cli_utils import DEFAULT_CFG
+from geotrax.utils.config_utils import load_config
+from geotrax.utils.file_utils import DEFAULT_OUTPUT
 from geotrax.utils.logging_utils import setup_logger
 
 
-def find_source_id(dataset_filepath: Path, vehicle_id: int, processed_folder: Union[Path, None] = None) -> tuple:
+def find_source_id(dataset_filepath: Path, vehicle_id: int, processed_folder: Union[Path, None] = None, folder_name: str = None) -> tuple:
     """
     Trace an aggregated-dataset vehicle ID back to its original ID and source video, by
     reversing the per-drone ID offset applied during aggregation.
@@ -75,7 +80,8 @@ def find_source_id(dataset_filepath: Path, vehicle_id: int, processed_folder: Un
         return None, None
 
     date, location_id, flight_session = dataset_filepath.stem.split('_')[0:3]
-    search_space = f"{date}/D*/{flight_session}/results/{location_id}*.csv"
+    folder = folder_name or DEFAULT_OUTPUT['folder']
+    search_space = f"{date}/D*/{flight_session}/{folder}/{location_id}*.csv"
     csv_files = list(processed_folder.rglob(search_space))
     if not csv_files:
         print(f"No CSV files found in '{processed_folder}'.")
@@ -133,11 +139,13 @@ def validate_speed_acceleration(args: argparse.Namespace, logger: logging.Logger
     """
     Check the dataset for high speed and acceleration values.
     """
+    out_cfg = load_config(args.cfg, logger).get('output', DEFAULT_OUTPUT)
+    folder_name = out_cfg.get('folder', DEFAULT_OUTPUT['folder'])
     csv_files = determine_files_to_process(args.input, logger)
-    check_for_excessive_values(csv_files, args, logger)
+    check_for_excessive_values(csv_files, args, logger, folder_name=folder_name)
 
 
-def check_for_excessive_values(csv_files: list, args: argparse.Namespace, logger: logging.Logger) -> None:
+def check_for_excessive_values(csv_files: list, args: argparse.Namespace, logger: logging.Logger, folder_name: str = None) -> None:
     """
     Check for excessive speed and acceleration values in the dataset files.
     """
@@ -161,13 +169,13 @@ def check_for_excessive_values(csv_files: list, args: argparse.Namespace, logger
         acceleration_violations_df = pd.concat([acceleration_violations_df, acc_violations])
 
     logger.notice(f"Checking for excessive speed values above {args.speed_threshold} km/h in the dataset...")
-    report_violations(speed_violations_df, 'speed', logger)
+    report_violations(speed_violations_df, 'speed', logger, folder_name=folder_name)
 
     logger.notice(f"Checking for excessive absolute acceleration values above {args.acceleration_threshold} m/s^2 in the dataset...")
-    report_violations(acceleration_violations_df, 'acceleration', logger)
+    report_violations(acceleration_violations_df, 'acceleration', logger, folder_name=folder_name)
 
 
-def report_violations(violations_df: pd.DataFrame, violation_type: str, logger: logging.Logger) -> None:
+def report_violations(violations_df: pd.DataFrame, violation_type: str, logger: logging.Logger, folder_name: str = None) -> None:
     """
     Report violations found in the dataset.
     """
@@ -182,7 +190,7 @@ def report_violations(violations_df: pd.DataFrame, violation_type: str, logger: 
         violations_df = violations_df.sort_values(by='Vehicle_Speed', ascending=False)
 
     for index, row in violations_df.iterrows():
-        source_id, source_video = find_source_id(Path(row['Dataset']), row['Vehicle_ID'])
+        source_id, source_video = find_source_id(Path(row['Dataset']), row['Vehicle_ID'], folder_name=folder_name)
         violations_df.at[index, 'Dataset'] = row['Dataset'].name
         if source_id is None:
             continue
@@ -243,6 +251,7 @@ def parse_cli_args() -> argparse.Namespace:
     parser.add_argument("input", type=Path, help="Path to CSV file or directory containing CSV files")
     parser.add_argument("--acceleration-threshold", "-at", type=float, default=12, help="Acceleration threshold in m/s² (default: 12)")
     parser.add_argument("--speed-threshold", "-st", type=float, default=130, help="Speed threshold in km/h (default: 130)")
+    parser.add_argument("--cfg", "-c", type=Path, default=DEFAULT_CFG, help="Pipeline config used to resolve the output folder name where georeferenced CSVs are located. Defaults to the bundled config.")
     parser.add_argument("--log-path", "-lp", type=Path, default=None, help="Where to write logs: a directory or a full file path; defaults to a platform-specific log directory.")
     parser.add_argument("--quiet", "-q", action="store_true", help="Reduce console verbosity to important messages only (default: show INFO-level detail).")
 

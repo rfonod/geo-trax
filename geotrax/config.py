@@ -124,7 +124,7 @@ def _run_show(preset: Optional[str]) -> None:
     print("with -c on any command, e.g.:")
     print()
     print("  geotrax extract video.mp4 -c confident")
-    print("  geotrax batch   video.mp4 -c lenient -of data/orthophotos")
+    print("  geotrax batch   video.mp4 -c lenient -orf data/orthophotos")
     print()
     print("Available presets:")
     width = max(len(n) for n in _PRESETS)

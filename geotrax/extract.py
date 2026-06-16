@@ -24,6 +24,8 @@ Options:
     --help, -h                : Show this help message and exit.
     --cfg, -c <path>          : Path to a custom pipeline config file. Defaults to the bundled config;
                                 run 'geotrax config show' to view it or 'geotrax config copy' to customize.
+    --output-folder, -of <str> : Root folder for outputs (bare name or absolute path).
+                                Defaults to cfg -> output -> folder (historical default: 'results').
     --log-path, -lp <str>     : Where to write logs: a directory or a full file path; defaults to a platform-specific log directory.
     --verbose, -v             : Set print verbosity level to INFO (default: WARNING).
 
@@ -54,6 +56,8 @@ Notes:
     supported tracker is kept in the config so you can switch by changing that one line.
   - Extraction-stage settings (stabilize/save_stab toggles, min_track_length, and the
     dimension_estimation block) are in cfg -> extraction; min_track_length has no CLI flag.
+  - Output filename postfixes (e.g. _vid_transf suffix) are set in cfg -> output; use
+    --output-folder / cfg -> output -> folder to redirect where outputs are written.
 """
 
 import argparse
@@ -75,7 +79,12 @@ from ultralytics.utils.files import increment_path
 
 from geotrax.utils.cli_utils import add_common_args
 from geotrax.utils.config_utils import backfill_args_from_config, load_config_all
-from geotrax.utils.file_utils import check_if_results_exist, convert_to_serializable, get_video_dimensions
+from geotrax.utils.file_utils import (
+    check_if_results_exist,
+    convert_to_serializable,
+    get_output_dir,
+    get_video_dimensions,
+)
 from geotrax.utils.logging_utils import setup_logger
 
 
@@ -85,14 +94,17 @@ def detect_track_stabilize(args: argparse.Namespace, logger: logging.Logger) -> 
     """
     config = load_config_all(args, logger)
     proc = config['main']['processing']
+    out_cfg_raw = config['main'].get('output', {})
     backfill_args_from_config(args, {
         'cut_frame_left': proc['cut_frame_left'],
         'cut_frame_right': proc['cut_frame_right'],
+        'output_folder': out_cfg_raw.get('folder', 'results'),
     })
+    out_cfg = {**out_cfg_raw, 'folder': args.output_folder}
     model = load_detector(config['ultralytics'], logger)
     tracks, transforms = track_with_model(model, config, logger)
     tracks = postprocess_tracks(tracks, config, logger)
-    save_results(tracks, transforms, config, logger)
+    save_results(tracks, transforms, config, logger, out_cfg)
 
 
 def track_with_model(model: Union[YOLO, RTDETR], config: Dict, logger: logging.Logger) -> Tuple[np.ndarray, np.ndarray]:
@@ -392,13 +404,16 @@ def estimate_vehicle_dimensions(tracks: np.ndarray, config: Dict) -> np.ndarray:
     return tracks
 
 
-def save_results(tracks: np.ndarray, transforms: np.ndarray, config: Dict, logger: logging.Logger) -> None:
+def save_results(tracks: np.ndarray, transforms: np.ndarray, config: Dict, logger: logging.Logger, out_cfg: Dict) -> None:
     """
     Save the detection, tracking, and stabilization results to files.
     """
-    save_dir = increment_path(config['main']['args'].source.parent.resolve() / 'results', exist_ok=True, mkdir=True)
-    tracks_txt_file = save_dir / f'{config["main"]["args"].source.stem}.txt'
-    transf_txt_file = save_dir / f'{config["main"]["args"].source.stem}_vid_transf.txt'
+    source = config['main']['args'].source
+    save_dir = increment_path(get_output_dir(source, out_cfg), exist_ok=True, mkdir=True)
+    tracks_postfix = out_cfg.get('tracks_postfix', '')
+    stab_postfix = out_cfg.get('stab_transform_postfix', '_vid_transf')
+    tracks_txt_file = save_dir / f'{source.stem}{tracks_postfix}.txt'
+    transf_txt_file = save_dir / f'{source.stem}{stab_postfix}.txt'
     info_yaml_file = config['main']['args'].source.with_suffix('.yaml')
 
     try:

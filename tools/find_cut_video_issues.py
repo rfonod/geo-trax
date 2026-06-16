@@ -28,7 +28,9 @@ Options:
   -viz, --visualize                        : Visualize flight logs and anomalies (default: False).
   -sv, --save-viz                          : Save visualization to a PDF file (default: False).
   -m, --match-pattern <str>                : Glob pattern to match flight logs (default: '??.CSV').
-  -fe, --folders-exclude <str> [<str> ...] : Folders to exclude from the search (default: ['results']).
+  -c, --cfg <path>                         : Pipeline config used to resolve the output folder and filename postfixes.
+                                             Defaults to the bundled config (geotrax/cfg/default.yaml).
+  -fe, --folders-exclude <str> [<str> ...] : Folders to exclude from the search (default: [output.folder from config]).
   -tcrs, --target-crs <str>                : Target CRS for local coordinates (default: 'epsg:5186').
   -tc, --track-check                       : Check that all frames are present in the tracking results and vice versa (default: False).
   -lp, --log-path <str>                    : Where to write logs: a directory or a full file path; defaults to a platform-specific log directory.
@@ -93,7 +95,9 @@ import pandas as pd
 import tqdm
 from matplotlib.patches import Circle
 
-from geotrax.utils.file_utils import detect_delimiter, determine_location_id
+from geotrax.utils.cli_utils import DEFAULT_CFG
+from geotrax.utils.config_utils import load_config
+from geotrax.utils.file_utils import DEFAULT_OUTPUT, detect_delimiter, determine_location_id, get_output_dir
 from geotrax.utils.logging_utils import setup_logger
 
 VIDEO_SUFFIX = '.MP4' # Video file format to report in the output file
@@ -115,6 +119,11 @@ def find_cut_video_issues(args: argparse.Namespace, logger: logging.Logger) -> N
     """
     Find the issues with the cut videos.
     """
+    out_cfg = load_config(args.cfg, logger).get('output', DEFAULT_OUTPUT)
+    folder_name = out_cfg.get('folder', DEFAULT_OUTPUT['folder'])
+    if args.folders_exclude == [DEFAULT_OUTPUT['folder']] and folder_name != DEFAULT_OUTPUT['folder']:
+        args.folders_exclude = [folder_name]
+
     flight_logs_stats_filepath = args.output_folder / 'flight_log_stats.csv'
     if flight_logs_stats_filepath.exists() and not args.force:
         logger.warning(f"Flight logs stats already exist in {flight_logs_stats_filepath}. Use --force to overwrite.")
@@ -122,7 +131,7 @@ def find_cut_video_issues(args: argparse.Namespace, logger: logging.Logger) -> N
         df_flight_logs_stats = pd.read_csv(flight_logs_stats_filepath)
     else:
         flight_logs_filepaths = find_all_flight_logs(args.input_folder, args.match_pattern, args.folders_exclude, logger)
-        df_flight_logs_stats = extract_flight_logs_stats(flight_logs_filepaths, args.input_folder, args.ref_frame, args.target_crs, args.timestamp_diff_threshold, args.track_check, logger)
+        df_flight_logs_stats = extract_flight_logs_stats(flight_logs_filepaths, args.input_folder, args.ref_frame, args.target_crs, args.timestamp_diff_threshold, args.track_check, logger, out_cfg=out_cfg)
         if args.save:
             save_flight_logs(df_flight_logs_stats, flight_logs_stats_filepath, logger)
 
@@ -150,7 +159,7 @@ def find_all_flight_logs(input_folder: Path, match_pattern: str, folders_exclude
     return flight_logs
 
 
-def extract_flight_logs_stats(flight_logs: list, input_folder: Path, ref_frame: int, target_crs: str, timestamp_diff_threshold: float, track_check: bool, logger: logging.Logger) -> pd.DataFrame:
+def extract_flight_logs_stats(flight_logs: list, input_folder: Path, ref_frame: int, target_crs: str, timestamp_diff_threshold: float, track_check: bool, logger: logging.Logger, out_cfg: dict = None) -> pd.DataFrame:
     """
     Extract the flight logs stats.
     """
@@ -187,7 +196,9 @@ def extract_flight_logs_stats(flight_logs: list, input_folder: Path, ref_frame: 
 
         # check if the all frame numbers are present in the tracking results (if tracking has been performed)
         if track_check:
-            tracking_results_filepath = flight_log.parent / 'results' / (flight_log.stem + '.txt')
+            cfg = out_cfg or DEFAULT_OUTPUT
+            tracks_postfix = cfg.get('tracks_postfix', DEFAULT_OUTPUT['tracks_postfix'])
+            tracking_results_filepath = get_output_dir(flight_log, cfg) / f"{flight_log.stem}{tracks_postfix}.txt"
             if tracking_results_filepath.exists():
                 tracking_frames = np.loadtxt(tracking_results_filepath, delimiter=detect_delimiter(tracking_results_filepath), usecols=0, dtype=int)
                 missing_in_tracking = set(frame) - set(tracking_frames)
@@ -449,8 +460,9 @@ def parse_cli_args() -> argparse.Namespace:
     parser.add_argument("--ref-frame", "-rf", type=int, default=0, help="Reference frame used for stabilization/georeferencing.")
     parser.add_argument("--visualize", "-viz", action="store_true", help="Visualize the flight logs and anomalies.")
     parser.add_argument("--save-viz", "-sv", action="store_true", help="Save the visualization to a PDF file.")
+    parser.add_argument("--cfg", "-c", type=Path, default=DEFAULT_CFG, help="Pipeline config used to resolve the output folder and filename postfixes. Defaults to the bundled config.")
     parser.add_argument("--match-pattern", "-m", type=str, default='??.CSV', help="Pattern to match the flight logs.")
-    parser.add_argument("--folders-exclude", "-fe", type=str, nargs='+', default=['results'], help="Folders to exclude from the search (e.g, 'results' as these may contain non-flight log .CSV files).")
+    parser.add_argument("--folders-exclude", "-fe", type=str, nargs='+', default=[DEFAULT_OUTPUT['folder']], help="Folders to exclude from the search (default: [output.folder from config]).")
     parser.add_argument("--target-crs", "-tcrs", default='epsg:5186', help="Target CRS for local coordinates")
     parser.add_argument("--track-check", "-tc", action="store_true", help="Check if all frames are present in the tracking results and vice versa.")
     parser.add_argument("--log-path", "-lp", type=Path, default=None, help="Where to write logs: a directory or a full file path; defaults to a platform-specific log directory.")

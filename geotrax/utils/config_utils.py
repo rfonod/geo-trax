@@ -60,11 +60,11 @@ def resolve_asset_path(filepath: Union[str, Path]) -> Path:
 def load_config_all(args: argparse.Namespace, logger: logging.Logger) -> dict:
     """Load the unified pipeline configuration file and return a nested dict.
 
-    The pipeline config is a single YAML file with top-level sections: folders, processing,
-    batch, extraction, stabilo, georef, visualization, plotting, ultralytics, tracker.
-    The tracker section holds an 'active' selector plus a full parameter block per supported
-    tracker; the active block is written to a temporary YAML file so Ultralytics can read it
-    as a file path (its required interface).
+    The pipeline config is a single YAML file with top-level sections: folders, output,
+    processing, batch, extraction, stabilo, georef, visualization, plotting, ultralytics,
+    tracker. The tracker section holds an 'active' selector plus a full parameter block per
+    supported tracker; the active block is written to a temporary YAML file so Ultralytics can
+    read it as a file path (its required interface).
     """
     full = load_config(args.cfg, logger)
 

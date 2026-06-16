@@ -23,6 +23,8 @@ Arguments:
 Options:
   -h, --help                    : Show this help message and exit.
   -p, --processed-folder <path> : Custom path to the PROCESSED directory. If not provided, auto-detected from the dataset file location.
+  -c, --cfg <path>              : Pipeline config used to resolve the output folder name where georeferenced CSVs are located.
+                                  Defaults to the bundled config (geotrax/cfg/default.yaml).
   -lp, --log-path <str>         : Where to write logs: a directory or a full file path; defaults to a platform-specific log directory.
   -q, --quiet                   : Reduce console verbosity to important messages only (default: show INFO-level detail).
 
@@ -65,11 +67,14 @@ from typing import Union
 
 import pandas as pd
 
+from geotrax.utils.cli_utils import DEFAULT_CFG
+from geotrax.utils.config_utils import load_config
+from geotrax.utils.file_utils import DEFAULT_OUTPUT
 from geotrax.utils.logging_utils import setup_logger
 
 
 def find_source_id(dataset_filepath: Path, vehicle_id: int, logger: logging.Logger,
-                   processed_folder: Union[Path, None] = None) -> tuple:
+                   processed_folder: Union[Path, None] = None, folder_name: str = None) -> tuple:
     """
     Find the original vehicle ID extracted from the source video from the dataset ID.
     """
@@ -92,7 +97,8 @@ def find_source_id(dataset_filepath: Path, vehicle_id: int, logger: logging.Logg
 
     # Narrow down the search to the specific date, location, and flight session
     date, location_id, flight_session = dataset_filepath.stem.split('_')[0:3]
-    search_space =  f"{date}/D*/{flight_session}/results/{location_id}*.csv"
+    folder = folder_name or DEFAULT_OUTPUT['folder']
+    search_space = f"{date}/D*/{flight_session}/{folder}/{location_id}*.csv"
 
     # Find all relevant georeferenced results (.csv files) in the PROCESSED directory
     csv_files = list(processed_folder.rglob(search_space))
@@ -172,6 +178,7 @@ def parse_cli_args() -> argparse.Namespace:
     parser.add_argument('dataset_filepath', type=Path, help='Filepath to the source dataset (.csv) file (e.g. 2022-10-04_A/2022-10-04_A_AM1.csv)')
     parser.add_argument('vehicle_id', type=int, help='Vehicle ID of interest from the dataset (e.g. 1)')
     parser.add_argument('--processed-folder', '-p', type=Path, help='Custom path to the PROCESSED directory containing the georeferenced results')
+    parser.add_argument('--cfg', '-c', type=Path, default=DEFAULT_CFG, help='Pipeline config used to resolve the output folder name where georeferenced CSVs are located. Defaults to the bundled config.')
     parser.add_argument('--log-path', '-lp', type=Path, default=None, help='Where to write logs: a directory or a full file path; defaults to a platform-specific log directory.')
     parser.add_argument('--quiet', '-q', action='store_true', help='Reduce console verbosity to important messages only (default: show INFO-level detail).')
 
@@ -185,7 +192,9 @@ def main() -> None:
     args = parse_cli_args()
     logger = setup_logger(Path(__file__).stem, verbose=not args.quiet, log_path=args.log_path)
 
-    find_source_id(args.dataset_filepath, args.vehicle_id, logger, processed_folder=args.processed_folder)
+    out_cfg = load_config(args.cfg, logger).get('output', DEFAULT_OUTPUT)
+    folder_name = out_cfg.get('folder', DEFAULT_OUTPUT['folder'])
+    find_source_id(args.dataset_filepath, args.vehicle_id, logger, processed_folder=args.processed_folder, folder_name=folder_name)
 
 
 if __name__ == '__main__':

@@ -54,7 +54,9 @@ import numpy as np
 import pandas as pd
 import yaml
 
-from geotrax.utils.file_utils import detect_delimiter
+from geotrax.utils.cli_utils import DEFAULT_CFG
+from geotrax.utils.config_utils import load_config
+from geotrax.utils.file_utils import DEFAULT_OUTPUT, detect_delimiter, get_output_dir
 from geotrax.utils.logging_utils import setup_logger
 
 GSD_150 = 0.0282  # meters per pixel at 3840x2160 resolution and 150m altitude
@@ -74,8 +76,9 @@ VIDEO_FORMATS = {'.mp4', '.mov', '.avi', '.mkv'}
 
 def compare_dimension_estimators(args: argparse.Namespace, logger: logging.Logger) -> None:
     """Compare the old and new vehicle-dimension estimators on the source's tracking results."""
-    # Load tracks associated with the video (need to run tracking first)
-    tracks_txt_file = Path(f"{str(args.source.parent / 'results' / args.source.stem)}.txt")
+    output_cfg = load_config(args.cfg, logger).get('output', DEFAULT_OUTPUT)
+    tracks_postfix = output_cfg.get('tracks_postfix', DEFAULT_OUTPUT['tracks_postfix'])
+    tracks_txt_file = get_output_dir(args.source, output_cfg) / f"{args.source.stem}{tracks_postfix}.txt"
 
     # Detect delimiter
     delimiter = detect_delimiter(tracks_txt_file)
@@ -335,6 +338,7 @@ def parse_cli_args() -> argparse.Namespace:
     parser.add_argument("--plot", "-p", action="store_true", help="plot histograms [default: False]")
     parser.add_argument("--id", "-i", type=int, default=0, help="ID to print/plot in detail")
     parser.add_argument("--lines", "-l", type=int, default=5, help="Number of lines to print")
+    parser.add_argument("--cfg", "-c", type=Path, default=DEFAULT_CFG, help="Pipeline config used to resolve the output folder and filename postfixes. Defaults to the bundled config.")
     parser.add_argument("--log-path", "-lp", type=Path, default=None, help="Where to write logs: a directory or a full file path; defaults to a platform-specific log directory.")
     parser.add_argument("--quiet", "-q", action="store_true", help="Reduce console verbosity to important messages only (default: show INFO-level detail).")
 

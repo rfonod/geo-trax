@@ -28,7 +28,9 @@ Options:
   -h, --help            : Show this help message and exit.
   --id, -i <int>        : Vehicle ID to visualize. Prompted interactively if omitted or 0 (default: 0).
   --show                : Display plots interactively (default: False).
-  --save, -s            : Save plots as PDF files to <video_dir>/results/plots/ (default: False).
+  --save, -s            : Save plots as PDF files to <output_folder>/plots/ (default: False).
+  -c, --cfg <path>      : Pipeline config used to resolve the output folder and filename postfixes.
+                          Defaults to the bundled config (geotrax/cfg/default.yaml).
   -lp, --log-path <str> : Where to write logs: a directory or a full file path; defaults to a platform-specific log directory.
   -q, --quiet           : Reduce console verbosity to important messages only (default: show INFO-level detail).
 
@@ -71,7 +73,9 @@ import cv2
 import matplotlib.pyplot as plt
 import numpy as np
 
-from geotrax.utils.file_utils import detect_delimiter
+from geotrax.utils.cli_utils import DEFAULT_CFG
+from geotrax.utils.config_utils import load_config
+from geotrax.utils.file_utils import DEFAULT_OUTPUT, detect_delimiter, get_output_dir
 from geotrax.utils.logging_utils import setup_logger
 
 # Ground sampling distance constants for the Songdo experiment
@@ -99,7 +103,9 @@ def visualize_dimension_estimation(args: argparse.Namespace, logger: logging.Log
 
 
 def load_tracks(args: argparse.Namespace, logger: logging.Logger) -> np.ndarray:
-    tracks_file = args.source.parent / 'results' / f'{args.source.stem}.txt'
+    output_cfg = load_config(args.cfg, logger).get('output', DEFAULT_OUTPUT)
+    tracks_postfix = output_cfg.get('tracks_postfix', DEFAULT_OUTPUT['tracks_postfix'])
+    tracks_file = get_output_dir(args.source, output_cfg) / f'{args.source.stem}{tracks_postfix}.txt'
     if not tracks_file.exists():
         logger.critical(f"Tracking results not found: '{tracks_file}'. Run 'geotrax extract' on the video first.")
         sys.exit(1)
@@ -298,7 +304,8 @@ def save_or_show_plot(args: argparse.Namespace, filename: str, logger: logging.L
     plt.axis('equal')
     plt.axis('off')
     if args.save:
-        img_dir = args.source.parent / 'results' / 'plots'
+        output_cfg = load_config(args.cfg, logger).get('output', DEFAULT_OUTPUT)
+        img_dir = get_output_dir(args.source, output_cfg) / 'plots'
         img_dir.mkdir(parents=True, exist_ok=True)
         img_filepath = img_dir / f"{args.source.stem}_{filename}_ID-{args.id}.pdf"
         plt.savefig(str(img_filepath), bbox_inches='tight', pad_inches=0, transparent=False)
@@ -320,6 +327,10 @@ def parse_cli_args() -> argparse.Namespace:
     parser.add_argument(
         '--id', '-i', type=int, default=0,
         help="Vehicle ID to visualize. Prompted interactively if 0 (default: 0)."
+    )
+    parser.add_argument(
+        '--cfg', '-c', type=Path, default=DEFAULT_CFG,
+        help="Pipeline config used to resolve the output folder and filename postfixes. Defaults to the bundled config."
     )
     parser.add_argument(
         '--show', action='store_true',

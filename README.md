@@ -231,9 +231,9 @@ geotrax batch path/to/processed-data/ --plot-only --plot-aggregate --plot-class-
 
 <details>
 <summary><b>📁 Output File Formats</b></summary>
-Suppose the input video is named `video.mp4`. The output files will be saved in the `results` folder relative to the input video. The following files will be generated:
+Suppose the input video is named `video_file.mp4`. By default, output files are saved in a `results` sub-folder next to the input video. The output folder and all filename postfixes are configurable via the `output:` section of the pipeline config (or `--output-folder` / `-of` for the folder). The examples below use the default naming. The following files will be generated:
 
-- **video.txt**: Contains the extracted vehicle trajectories in the following format:
+- **video_file.txt** (`<stem><tracks_postfix>.txt`): Contains the extracted vehicle trajectories in the following format:
 
   ```text
   frame_id, vehicle_id, x_c(unstab), y_c(unstab), w(unstab), h(unstab), x_c(stab), y_c(stab), w(stab), h(stab), class_id, confidence, vehicle_length, vehicle_width
@@ -250,7 +250,7 @@ Suppose the input video is named `video.mp4`. The output files will be saved in 
   - `confidence`: Detection confidence score (0-1).
   - `vehicle_length`, `vehicle_width`: Estimated vehicle dimensions in pixels.
 
-- **video_vid_transf.txt**: Contains the transformation matrix for each frame in the format:
+- **video_file_vid_transf.txt** (`<stem><stab_transform_postfix>.txt`): Contains the transformation matrix for each frame in the format:
 
   ```text
   frame_id, h11, h12, h13, h21, h22, h23, h31, h32, h33
@@ -260,16 +260,16 @@ Suppose the input video is named `video.mp4`. The output files will be saved in 
   - `frame_id`: Frame number of the stabilized frame (starts from `cut_frame_left + 1` since the reference frame itself has no transform).
   - `hij`: Elements of the 3x3 homography matrix that maps each frame (`frame_id`) to the reference frame.
 
-- **video.yaml**: Video metadata and the configuration settings used for processing the `video.mp4`. (This file is saved in the same directory as the input video.)
+- **video_file.yaml**: Video metadata and the configuration settings used for processing `video_file.mp4`. (This file is saved in the same directory as the input video, not in the output folder.)
 
-- **video_mode_X.mp4**: Processed video in various visualization modes (X = 0, 1, 2):
+- **video_file_mode_X.mp4** (`<stem><visualization_postfix>_mode_<X>.mp4`): Processed video in various visualization modes (X = 0, 1, 2):
   - **Mode 0**: Results overlaid on the original (unstabilized) video.
   - **Mode 1**: Results overlaid on the stabilized video.
   - **Mode 2**: Results plotted on top of the static reference frame.
 
-  Each version can display vehicle bounding boxes, IDs, class labels, confidence scores, and short trajectory trails that fade and vary in thickness to indicate the recency of the movement. If an input `video.csv` file is available in the same directory as the input video, i.e., the converted flight logs, vehicle speed and lane information can also be displayed.
+  Each version can display vehicle bounding boxes, IDs, class labels, confidence scores, and short trajectory trails that fade and vary in thickness to indicate the recency of the movement. If an input `video_file.csv` file is available in the same directory as the input video, i.e., the converted flight logs, vehicle speed and lane information can also be displayed.
 
-- **video.csv**: Contains the georeferenced vehicle trajectories in a tabular format. This file includes both geographic and local coordinates, estimated real-world dimensions, kinematic data, road section, and lane information. The columns are:
+- **video_file.csv** (`<stem><georeferenced_postfix>.csv`): Contains the georeferenced vehicle trajectories in a tabular format. This file includes both geographic and local coordinates, estimated real-world dimensions, kinematic data, road section, and lane information. The columns are:
 
   ```text
   Vehicle_ID, [Timestamp,] Frame_Number, Ortho_X, Ortho_Y, Local_X, Local_Y, Latitude, Longitude, Vehicle_Length, Vehicle_Width, Vehicle_Class, Vehicle_Speed, Vehicle_Acceleration, Road_Section, Lane_Number, Visibility
@@ -290,13 +290,13 @@ Suppose the input video is named `video.mp4`. The output files will be saved in 
   - `Lane_Number`: Identifier for the lane the vehicle is in.
   - `Visibility`: Boolean indicating if the vehicle's bounding box is fully visible within the frame.
 
-- **video_geo_transf.txt**: Contains the 3x3 georeferencing transformation matrix (homography) that maps points from the video's reference frame to the orthomap. The format is a comma-separated list of the 9 matrix elements:
+- **video_file_geo_transf.txt** (`<stem><geo_transform_postfix>.txt`): Contains the 3x3 georeferencing transformation matrix (homography) that maps points from the video's reference frame to the orthomap. The format is a comma-separated list of the 9 matrix elements:
 
   ```text
   h11, h12, h13, h21, h22, h23, h31, h32, h33
   ```
 
-**Note:** *All output files (except `video.yaml`) are saved in the `results` folder relative to the input video.*
+**Note:** *All output files (except `video_file.yaml`) are saved in the configured output folder (default: `results/` sub-folder next to the input video). Trajectory and distribution plots are always written to a `plots/` sub-folder inside the output folder.*
 
 </details>
 

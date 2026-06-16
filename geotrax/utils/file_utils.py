@@ -7,11 +7,68 @@ import argparse
 import logging
 import sys
 from pathlib import Path
-from typing import Tuple, Union
+from typing import Optional, Tuple, Union
 
 import cv2
 
 from geotrax.utils.constants import MACOS, WINDOWS
+
+# Fallback output naming conventions — reproduces the historical 'results/' layout.
+# Used ONLY when no config has been loaded (output_cfg=None in the path helpers, or
+# .get('key', DEFAULT_OUTPUT['key']) guards against a custom config missing a key).
+# In normal pipeline operation every stage loads the YAML and threads the full
+# cfg['output'] dict through, so DEFAULT_OUTPUT never takes precedence over config.
+DEFAULT_OUTPUT = {
+    'folder': 'results',
+    'tracks_postfix': '',
+    'georeferenced_postfix': '',
+    'stab_transform_postfix': '_vid_transf',
+    'geo_transform_postfix': '_geo_transf',
+    'visualization_postfix': '',
+}
+
+
+def get_output_dir(source: Path, output_cfg: Optional[dict] = None) -> Path:
+    """Return the output directory for *source*.
+
+    If ``output_cfg['folder']`` is an absolute path it is used as-is (shared
+    across all inputs in a batch). A relative name is resolved next to the
+    input video's parent directory.
+    """
+    cfg = output_cfg or DEFAULT_OUTPUT
+    folder = Path(cfg.get('folder', DEFAULT_OUTPUT['folder']))
+    return folder if folder.is_absolute() else source.parent / folder
+
+
+def build_result_path(
+    source: Path,
+    result_type: str,
+    output_cfg: Optional[dict] = None,
+    viz_mode: Optional[int] = None,
+    ext: Optional[str] = None,
+) -> Optional[Path]:
+    """Return the expected output path for *result_type* given *source*.
+
+    result_type choices: 'video', 'processed', 'video_transformations',
+    'geo_transformations', 'georeferenced', 'visualized'.
+    Returns ``None`` for unknown types.
+    """
+    if result_type == 'video':
+        return source
+    cfg = output_cfg or DEFAULT_OUTPUT
+    out_dir = get_output_dir(source, cfg)
+    stem = source.stem
+    if result_type == 'processed':
+        return out_dir / f"{stem}{cfg.get('tracks_postfix', DEFAULT_OUTPUT['tracks_postfix'])}.txt"
+    if result_type == 'video_transformations':
+        return out_dir / f"{stem}{cfg.get('stab_transform_postfix', DEFAULT_OUTPUT['stab_transform_postfix'])}.txt"
+    if result_type == 'geo_transformations':
+        return out_dir / f"{stem}{cfg.get('geo_transform_postfix', DEFAULT_OUTPUT['geo_transform_postfix'])}.txt"
+    if result_type == 'georeferenced':
+        return out_dir / f"{stem}{cfg.get('georeferenced_postfix', DEFAULT_OUTPUT['georeferenced_postfix'])}.csv"
+    if result_type == 'visualized':
+        return out_dir / f"{stem}{cfg.get('visualization_postfix', DEFAULT_OUTPUT['visualization_postfix'])}_mode_{viz_mode}.{ext}"
+    return None
 
 
 def detect_delimiter(filepath: Path, lines_to_check: int = 5) -> str:
@@ -132,15 +189,18 @@ def get_video_dimensions(video_path: Path) -> Tuple[int, int]:
     return frame_w, frame_h
 
 
-def check_if_results_exist(file: Path, result_type: str, viz_mode: int = None, ext: str = None) -> Tuple[bool, Path]:
-    """Check if the results already exist for the video file."""
-    results_dir = file.parent / 'results'
-    result_path = {
-        "video": file,
-        "processed": results_dir / f"{file.stem}.txt",
-        'video_transformations': results_dir / f"{file.stem}_vid_transf.txt",
-        'geo_transformations': results_dir / f"{file.stem}_geo_transf.txt",
-        "georeferenced": results_dir / f"{file.stem}.csv",
-        "visualized": results_dir / f"{file.stem}_mode_{viz_mode}.{ext}"
-    }.get(result_type)
-    return result_path.exists() if result_path else False, result_path
+def check_if_results_exist(
+    file: Path,
+    result_type: str,
+    viz_mode: Optional[int] = None,
+    ext: Optional[str] = None,
+    output_cfg: Optional[dict] = None,
+) -> Tuple[bool, Optional[Path]]:
+    """Check if the results already exist for *file*.
+
+    *output_cfg* is the ``cfg -> output`` dict (or ``None`` to use the
+    historical defaults). Existing callers that pass ``viz_mode`` / ``ext``
+    positionally are unaffected because ``output_cfg`` is keyword-only.
+    """
+    result_path = build_result_path(file, result_type, output_cfg, viz_mode, ext)
+    return (result_path.exists() if result_path else False), result_path

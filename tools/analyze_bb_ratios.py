@@ -24,6 +24,8 @@ Options:
   -hs, --hist           : Generate and display a histogram of length-to-width ratios for each vehicle class.
   -p, --plot            : Plot length and height histogram per video and vehicle ID.
   -i, --id <int>        : Specify a vehicle ID for detailed analysis.
+  -c, --cfg <path>      : Pipeline config used to resolve the output folder and filename postfixes.
+                          Defaults to the bundled config (geotrax/cfg/default.yaml).
   -lp, --log-path <str> : Where to write logs: a directory or a full file path; defaults to a platform-specific log directory.
   -q, --quiet           : Reduce console verbosity to important messages only (default: show INFO-level per-video detail).
 
@@ -65,7 +67,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 from compare_dimension_estimators import estimate_vehicle_dimensions_new
 
-from geotrax.utils.file_utils import detect_delimiter
+from geotrax.utils.cli_utils import DEFAULT_CFG
+from geotrax.utils.config_utils import load_config
+from geotrax.utils.file_utils import DEFAULT_OUTPUT, detect_delimiter, get_output_dir
 from geotrax.utils.logging_utils import setup_logger
 
 DEFAULT_CLASS_NAMES = ['Car', 'Bus', 'Truck', 'Motorcycle', 'Pedestrian', 'Bicycle']
@@ -119,12 +123,16 @@ def process_file(file, args, logger):
     # Check if the input is a valid video file or a YAML file
     if file.suffix.lower() not in {'.yaml'} | VIDEO_FORMATS:
         return None
-    # Check if the file is in the results directory
-    if file.parent.name == 'results':
+    # Skip files that live inside the output folder itself
+    output_cfg = load_config(args.cfg, logger).get('output', DEFAULT_OUTPUT)
+    folder_name = output_cfg.get('folder', DEFAULT_OUTPUT['folder'])
+    if file.parent.name == folder_name:
         return None
 
     # Load tracks
-    tracks_txt_file = Path(f"{str(file.parent / 'results' / file.stem)}.txt")
+    tracks_postfix = output_cfg.get('tracks_postfix', DEFAULT_OUTPUT['tracks_postfix'])
+    out_dir = get_output_dir(file, output_cfg)
+    tracks_txt_file = out_dir / f"{file.stem}{tracks_postfix}.txt"
     if not tracks_txt_file.exists():
         return None
 
@@ -241,6 +249,7 @@ def parse_cli_args() -> argparse.Namespace:
     parser.add_argument("--hist", "-hs", action="store_true", help="Plot ratio histograms per vehicle class")
     parser.add_argument("--plot", "-p", action="store_true", help="Plot length and height histogram per video and vehicle ID")
     parser.add_argument("--id", "-i", type=int, default=0, help="Vehicle ID to analyze in detail (default: User prompt)")
+    parser.add_argument("--cfg", "-c", type=Path, default=DEFAULT_CFG, help="Pipeline config used to resolve the output folder and filename postfixes. Defaults to the bundled config.")
     parser.add_argument("--log-path", "-lp", type=Path, default=None, help="Where to write logs: a directory or a full file path; defaults to a platform-specific log directory.")
     parser.add_argument("--quiet", "-q", action="store_true", help="Reduce console verbosity to important messages only (default: show INFO-level per-video detail).")
     return parser.parse_args()

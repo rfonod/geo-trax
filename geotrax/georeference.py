@@ -25,11 +25,13 @@ Options:
     --help, -h                     : Show this help message and exit.
     --cfg, -c <path>               : Path to a custom pipeline config file. Defaults to the bundled config;
                                      run 'geotrax config show' to view it or 'geotrax config copy' to customize.
+    --output-folder, -of <str>     : Root folder for outputs (bare name or absolute path).
+                                     Defaults to cfg -> output -> folder (historical default: 'results').
     --log-path, -lp <str>          : Where to write logs: a directory or a full file path; defaults to a platform-specific log directory.
     --verbose, -v                  : Set print verbosity level to INFO (default: WARNING).
 
 Georeferencing Options:
-    --ortho-folder, -of <path>     : Custom path to the folder with orthophotos (.png, .tif, .txt).
+    --ortho-folder, -orf <path>    : Custom path to the folder with orthophotos (.png, .tif, .txt).
                                      Defaults to cfg -> folders -> ortho_folder, then 'ORTHOPHOTOS' at the
                                      same level as 'PROCESSED' in 'input'.
     --geo-source, -gs <str>        : Source of georeferencing parameters (metadata-tif, text-file, center-text-file).
@@ -48,7 +50,7 @@ Georeferencing Options:
 Examples:
 
   1. Georeference tracking data using default settings and custom orthophoto folder:
-     geotrax georeference path/to/video.mp4 -of path/to/orthophotos
+     geotrax georeference path/to/video.mp4 -orf path/to/orthophotos
 
   2. Use a custom master frames folder and always recompute master->ortho homography:
      geotrax georeference path/to/video.mp4 -mf path/to/master -r
@@ -92,7 +94,14 @@ from tqdm import tqdm
 
 from geotrax.utils.cli_utils import add_common_args
 from geotrax.utils.config_utils import backfill_args_from_config, load_config_all
-from geotrax.utils.file_utils import check_if_results_exist, detect_delimiter, determine_location_id, get_ortho_folder
+from geotrax.utils.file_utils import (
+    build_result_path,
+    check_if_results_exist,
+    detect_delimiter,
+    determine_location_id,
+    get_ortho_folder,
+    get_output_dir,
+)
 from geotrax.utils.logging_utils import setup_logger
 
 
@@ -104,6 +113,7 @@ def georeference(args: argparse.Namespace, logger: logging.Logger) -> None:
     config = full_config['georef']
     gproc = config['processing']
     folders = full_config['main']['folders']
+    out_cfg_raw = full_config['main'].get('output', {})
     backfill_args_from_config(args, {
         'ref_frame': gproc['ref_frame'],
         'recompute': gproc['recompute'],
@@ -112,7 +122,9 @@ def georeference(args: argparse.Namespace, logger: logging.Logger) -> None:
         'ortho_folder': Path(folders['ortho_folder']) if folders['ortho_folder'] else None,
         'master_folder': Path(folders['master_folder']) if folders['master_folder'] else None,
         'segmentation_folder': Path(folders['segmentation_folder']) if folders['segmentation_folder'] else None,
+        'output_folder': out_cfg_raw.get('folder', 'results'),
     })
+    out_cfg = {**out_cfg_raw, 'folder': args.output_folder}
 
     n_steps = 8 if args.no_master else 10
     _bar_w = max(10, shutil.get_terminal_size().columns - 88)
@@ -122,7 +134,7 @@ def georeference(args: argparse.Namespace, logger: logging.Logger) -> None:
 
     pbar.set_postfix_str('loading tracking data')
     location_id = determine_location_id(args.source, logger)
-    track_id, frame_num, bbox_unstab, x_stab_frame, y_stab_frame, class_id, veh_dim_px = get_tracking_data(args.source, logger)
+    track_id, frame_num, bbox_unstab, x_stab_frame, y_stab_frame, class_id, veh_dim_px = get_tracking_data(args.source, logger, out_cfg)
     timestamps = get_timestamps(args.source, frame_num, logger)
     pbar.update()
 
@@ -179,19 +191,19 @@ def georeference(args: argparse.Namespace, logger: logging.Logger) -> None:
     georeferenced_df = create_and_format_georeferenced_df(track_id, timestamps, frame_num, x_stab_ortho, y_stab_ortho, x_local, y_local,
                                                       latitude, longitude, veh_dim_real, class_id, veh_speed, veh_acceleration,
                                                       road_section, lane_number, visibility, config['filtering']['min_traj_length'], logger)
-    save_georeferenced_data(args.source, georeferenced_df, logger)
-    save_homography(args.source, homography_reference_to_ortho, logger)
+    save_georeferenced_data(args.source, georeferenced_df, logger, out_cfg)
+    save_homography(args.source, homography_reference_to_ortho, logger, out_cfg)
     pbar.update()
 
     pbar.set_postfix_str('done')
     pbar.close()
 
 
-def get_tracking_data(source: Path, logger: logging.Logger) -> tuple:
+def get_tracking_data(source: Path, logger: logging.Logger, output_cfg: dict = None) -> tuple:
     """
     Load tracking data from the provided file.
     """
-    tracking_data_exists, tracking_data_filepath = check_if_results_exist(source, 'processed')
+    tracking_data_exists, tracking_data_filepath = check_if_results_exist(source, 'processed', output_cfg=output_cfg)
     if not tracking_data_exists:
         logger.critical(f"No tracking data found for: '{source}'. Run the extraction stage ('geotrax extract') first.")
         sys.exit(1)
@@ -874,20 +886,21 @@ def create_and_format_georeferenced_df(track_id, timestamps, frame_num, x_stab_o
         sys.exit(1)
 
 
-def save_georeferenced_data(source: Path, georeferenced_df: pd.DataFrame, logger: logging.Logger) -> None:
+def save_georeferenced_data(source: Path, georeferenced_df: pd.DataFrame, logger: logging.Logger, output_cfg: dict = None) -> None:
     """
     Save the georeferenced data to a CSV file.
     """
-    georeferenced_results_filepath = source.parent / 'results' / source.with_suffix('.csv').name
+    georeferenced_results_filepath = build_result_path(source, 'georeferenced', output_cfg)
+    get_output_dir(source, output_cfg).mkdir(parents=True, exist_ok=True)
     georeferenced_df.to_csv(georeferenced_results_filepath, index=False)
     logger.info(f"Georeferenced data saved to: '{georeferenced_results_filepath}'.")
 
 
-def save_homography(source: Path, homography: np.ndarray, logger: logging.Logger) -> None:
+def save_homography(source: Path, homography: np.ndarray, logger: logging.Logger, output_cfg: dict = None) -> None:
     """
     Save the computed homography to a .txt file.
     """
-    geo_transf_filepath = source.parent / 'results' / (source.stem + '_geo_transf.txt')
+    geo_transf_filepath = build_result_path(source, 'geo_transformations', output_cfg)
     try:
         np.savetxt(geo_transf_filepath, homography.reshape(1, -1), fmt='%.20g', delimiter=',')
     except Exception as e:
@@ -903,7 +916,7 @@ def add_georeferencing_args(group) -> None:
     Used by both ``geotrax georeference`` and ``geotrax batch`` so the two expose an identical
     set of georeferencing options. Every flag defaults to ``None`` and is backfilled from config.
     """
-    group.add_argument("--ortho-folder", "-of", type=Path, default=None, help="Custom path to the folder with orthophotos (.png, .tif, .txt). Defaults to cfg -> folders -> ortho_folder, then 'ORTHOPHOTOS' at the same level as 'PROCESSED' in 'input'.")
+    group.add_argument("--ortho-folder", "-orf", type=Path, default=None, help="Custom path to the folder with orthophotos (.png, .tif, .txt). Defaults to cfg -> folders -> ortho_folder, then 'ORTHOPHOTOS' at the same level as 'PROCESSED' in 'input'.")
     group.add_argument("--geo-source", "-gs", choices=['metadata-tif', 'text-file', 'center-text-file'], default=None, help="Source of georeferencing parameters. If not provided, falls back to cfg -> georef -> processing -> geo_source, then auto-detect.")
     group.add_argument("--ref-frame", "-rf", type=int, default=None, help="Reference frame number (must match stabilization setting). Defaults to cfg -> georef -> processing -> ref_frame.")
     group.add_argument("--no-master", "-nm", action="store_const", const=True, default=None, help="Disable the master frame approach regardless of config. When not set, cfg -> georef -> processing -> use_master applies.")

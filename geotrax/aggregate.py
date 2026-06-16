@@ -24,19 +24,20 @@ Arguments:
   input : Path to the PROCESSED folder of georeferenced results.
 
 Options:
-  -h, --help          : Show this help message and exit.
-  -o, --output <path> : Path to the output folder. If not provided, the output folder will be
-                        created in the same directory as the PROCESSED folder and will be
-                        named 'DATASET' (default: None).
-  -lp, --log-path <str> : Where to write logs: a directory or a full file path; defaults to a platform-specific log directory.
-  -v, --verbose       : Set print verbosity level to INFO (default: WARNING).
+  -h, --help                 : Show this help message and exit.
+  -of, --output-folder <path>: Path to the output folder for aggregated results. If not provided,
+                               a 'DATASET' folder is created next to the PROCESSED folder (default: None).
+  -c, --cfg <path>           : Pipeline config used to resolve the output folder name where
+                               georeferenced CSVs are located. Defaults to the bundled config.
+  -lp, --log-path <str>      : Where to write logs: a directory or a full file path; defaults to a platform-specific log directory.
+  -v, --verbose              : Set print verbosity level to INFO (default: WARNING).
 
 Examples:
 1. Basic aggregation with default output location:
    geotrax aggregate /path/to/PROCESSED/
 
 2. Aggregate with custom output folder:
-   geotrax aggregate /path/to/PROCESSED/ --output /path/to/custom/output/
+   geotrax aggregate /path/to/PROCESSED/ --output-folder /path/to/custom/output/
 
 3. Enable verbose logging and save to custom log file:
    geotrax aggregate /path/to/PROCESSED/ --verbose --log-path custom_aggregate.log
@@ -68,14 +69,15 @@ import pandas as pd
 from tqdm import tqdm
 
 from geotrax.utils.cli_utils import add_common_args
-from geotrax.utils.file_utils import determine_location_id
+from geotrax.utils.config_utils import load_config
+from geotrax.utils.file_utils import DEFAULT_OUTPUT, determine_location_id
 from geotrax.utils.logging_utils import setup_logger
 
 
 def aggregate_results(args: argparse.Namespace, logger: logging.Logger) -> None:
     """Aggregate the georeferenced results by day, location, and flight session."""
     input_path = args.input
-    output_path = args.output or input_path.parent / 'DATASET'
+    output_path = args.output_folder or input_path.parent / 'DATASET'
     logger.info(f"Starting aggregation process. Input folder: {input_path}, Output folder: {output_path}")
 
     if not input_path.exists():
@@ -84,7 +86,9 @@ def aggregate_results(args: argparse.Namespace, logger: logging.Logger) -> None:
 
     output_path.mkdir(parents=True, exist_ok=True)
 
-    csv_files = list(input_path.rglob('**/results/*.csv'))
+    output_cfg = load_config(args.cfg, logger).get('output', DEFAULT_OUTPUT)
+    folder_name = output_cfg.get('folder', DEFAULT_OUTPUT['folder'])
+    csv_files = list(input_path.rglob(f'**/{folder_name}/*.csv'))
     if not csv_files:
         logger.critical(f"No CSV files found in '{input_path}'")
         sys.exit(1)
@@ -183,8 +187,8 @@ def parse_cli_args() -> argparse.Namespace:
     parser.add_argument('input', type=Path, help='Path to the PROCESSED folder of georeferenced results.')
 
     optional = parser.add_argument_group('Optional arguments')
-    optional.add_argument('--output', '-o', type=Path, default=None, help="Path to the output folder. If not provided, the output folder will be created in the same directory as the PROCESSED folder and will be named 'DATASET'")
-    add_common_args(optional, cfg=False)
+    optional.add_argument('--output-folder', '-of', type=Path, default=None, help="Path to the output folder for aggregated results. If not provided, a 'DATASET' folder is created next to the PROCESSED folder.")
+    add_common_args(optional, output_folder=False)
 
     return parser.parse_args()
 

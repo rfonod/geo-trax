@@ -15,9 +15,9 @@ from geotrax.utils.file_utils import (
 )
 from geotrax.utils.logging_utils import (
     NOTICE_LEVEL,
+    BColors,
     ColoredFormatter,
     FileFormatter,
-    BColors,
     setup_logger,
 )
 
