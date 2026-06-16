@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-# Author: Haechan Cho (gkqkemwh@kaist.ac.kr)
+# Author: Haechan Cho (gkqkemwh@kaist.ac.kr) and Robert Fonod (robert.fonod@ieee.org)
 
 """
 subset_orthophoto.py - Orthophoto Subset Extraction Tool

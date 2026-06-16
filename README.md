@@ -330,7 +330,7 @@ If you use **Geo-trax** in your research, software, or dataset generation, pleas
 
 ## Contributions
 
-The georeferencing code was developed with contributions from [Haechan Cho](https://github.com/cho-96).
+Some georeferencing-related code received early contributions from [Haechan Cho](https://github.com/cho-96).
 
 Contributions from the community are welcome! If you encounter any issues or have suggestions for improvements, please open a [GitHub Issue](https://github.com/rfonod/geo-trax/issues) or submit a pull request.
 

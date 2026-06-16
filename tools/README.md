@@ -6,7 +6,6 @@ preparation, annotation, georeferencing setup, and evaluation. Run any tool dire
 
 ```bash
 python tools/<name>.py -h          # full usage, arguments, and examples
-python tools/<name>.py ... -q      # suppress INFO logging
 ```
 
 > **Run tools from the repository root.** Logs go to the platform log directory by default;
@@ -318,6 +317,10 @@ python tools/compare_tracking.py /path/to/videos/ --show
 python tools/compare_tracking.py /path/to/videos/ --trackers botsort ocsort --save
 ```
 
+Example output comparing BoT-SORT and ByteTrack on a sample flight session from the [Songdo Traffic](../README.md#field-deployment) dataset.
+
+![Trajectory-length distribution comparison between BoT-SORT and ByteTrack: violin plot, CDF, mirrored histogram, and density difference.](assets/trajectory_length_distributions_analysis.png)
+
 ### `compute_bb_center_error.py`
 
 🟢 **General** — Computes bounding-box centre error between human labels (`../labels/`) and model
@@ -383,6 +386,10 @@ vehicle: positional/speed errors, `--coords local|global`, and smoothing-filter 
 python tools/compare_av_detections_and_tune_filters.py data/ --show
 python tools/compare_av_detections_and_tune_filters.py data/ --tune --save --filter savitzky_golay
 ```
+
+The figure below illustrates the two complementary trajectory sources (drone-derived BEV and on-board probe vehicle) and how positional differences between them are computed. In the [Songdo experiment](../README.md#field-deployment), the probe vehicle was an AV equipped with high-precision RTK-GNSS sensors, provided by Stanford Center at the Incheon Global Campus (SCIGC).
+
+![Dual trajectory sources (drone BEV and on-board probe vehicle) and the methodology for computing positional differences between drone-derived and sensor-derived trajectories.](assets/AV_measurement_sources.jpg)
 
 ---
 

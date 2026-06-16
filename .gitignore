@@ -83,7 +83,6 @@ desktop.ini
 runs/
 data-private/
 projects/
-assets/*.drawio
 
 # Data directories that should not be committed
 data/sample_videos/
