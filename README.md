@@ -20,15 +20,16 @@
 2. **Vehicle Tracking**: Implements the selected tracking algorithm to follow detected vehicles, ensuring robust trajectory data and continuity across frames.
 3. **Trajectory Stabilization**: Corrects for unintentional drone movement by aligning trajectories to a reference frame, using bounding boxes of detected vehicles to enhance stability. Leverages the [Stabilo](https://github.com/rfonod/stabilo) 🌀 library, fine-tuned by [Stabilo-Optimize](https://github.com/rfonod/stabilo-optimize) 🎯, to achieve reliable, consistent stabilization.
 4. **Georeferencing**: Maps stabilized trajectories to real-world coordinates using an orthophoto and an image registration technique.
-5. **Dataset Creation**: Compiles trajectory and related metadata (e.g., velocity, acceleration, dimension estimates) into a structured dataset.
-6. **Visualization Tools**: Visualizes extracted trajectories, overlays paths on video frames, and generates plots for traffic data analysis.
-7. **Auxiliary Tools**: Provides data wrangling, analysis, and model training scripts/tools to support dataset preparation, advanced analytics, and custom model development.
-8. **Customization and Configuration**: Flexible configuration options to adjust pipeline settings, including detection/tracking parameters, stabilization methods, and visualization modes.
+5. **Dataset Creation**: Compiles trajectory and related metadata (e.g., velocity, acceleration, dimension estimates) into a structured dataset, with optional aggregation of results across multiple drones and flights covering the same location.
+6. **Visualization**: Overlays trajectories, bounding boxes, IDs, class labels, speeds, and lane information on the video, in three rendering modes (original, stabilized, or static reference frame).
+7. **Plotting & Analysis**: Generates trajectory maps (optionally overlaid on the orthophoto) together with kinematic (speed, acceleration), class, and vehicle-dimension distribution charts, for individual videos or aggregated across drones and flights.
+8. **Auxiliary Tools**: Provides data wrangling, analysis, and model training scripts/tools to support dataset preparation, advanced analytics, and custom model development. See [`tools/README.md`](tools/README.md) for a categorized index of all utilities.
+9. **Customization and Configuration**: Flexible configuration options to adjust pipeline settings, including detection/tracking parameters, stabilization methods, and visualization modes.
 
 <details>
 <summary><b>🚀 Planned Enhancements</b></summary>
 
-- Comprehensive documentation in a dedicated `docs/` folder, including tool-specific READMEs.
+- Comprehensive documentation in a dedicated `docs/` folder. A [`tools/README.md`](tools/README.md) index already covers the auxiliary scripts.
 - Modularized, OOP-based pipeline with custom reference frame support and georeferencing leveraging Stabilo's image-matching backend.
 - Rationalized single-file YAML configuration.
 - Per-class confidence thresholds and oriented bounding box visualization (using azimuth and dimension estimates).
@@ -186,15 +187,7 @@ All tracker parameters (confidence thresholds, track buffer, matching thresholds
 
 Installing geo-trax provides a single `geotrax` command with one subcommand per pipeline stage: `batch` (primary entry point), `extract`, `georeference`, `visualize`, `plot`, `aggregate`, and `config` (config management). Run `geotrax -h` for the overview and `geotrax <command> -h` for the per-command option reference (`python -m geotrax …` works identically).
 
-The `geotrax batch` command can process multiple videos in a directory, including subdirectories, or a single video file.
-
-To view the help message and available options, run:
-
-```bash
-geotrax batch -h
-```
-
-Below are some example commands to demonstrate its usage.
+The `geotrax batch` command processes a single video file or a whole directory tree of videos (run `geotrax batch -h` for all options). The examples below show common usage.
 
 #### Example 1: Process all files in a directory without georeferencing
 
