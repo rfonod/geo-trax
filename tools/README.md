@@ -266,6 +266,10 @@ to the drone's mean hover position with the best detection coverage. Outputs
 python tools/find_master_frames.py /path/to/PROCESSED -of /path/to/master_frames -s -smf -sv
 ```
 
+Example `--visualize` output from the [Songdo experiment](../README.md#field-deployment) with 20 drones, showing the selected master frame location per intersection relative to the initial frame position of each flight clip.
+
+![Master frame selection result across intersection locations, showing the selected master frame and the initial frame position of each flight clip per intersection.](assets/best_master_frame_locations.jpg)
+
 ### `subset_orthophoto.py`
 
 🟢 **General** — Extracts square PNG subsets from a large GeoTIFF orthophoto, centred on
@@ -332,6 +336,10 @@ python tools/compute_bb_center_error.py /path/to/images/
 python tools/compute_bb_center_error.py /path/to/images/ --class-agnostic --save
 ```
 
+Example output showing the bounding-box center error distribution between human annotations from the [Songdo Vision](../README.md#field-deployment) dataset and [geo-trax](https://github.com/rfonod/geo-trax) model predictions.
+
+![Bounding-box center error distribution between human annotations and geo-trax model predictions.](assets/bb_center_error_distribution.jpg)
+
 ### `analyze_bb_ratios.py`
 
 🧪 **Research** — Analyses length-to-width aspect ratios of vehicle bounding boxes per class,
@@ -389,7 +397,7 @@ python tools/compare_av_detections_and_tune_filters.py data/ --tune --save --fil
 
 The figure below illustrates the two complementary trajectory sources (drone-derived BEV and on-board probe vehicle) and how positional differences between them are computed. In the [Songdo experiment](../README.md#field-deployment), the probe vehicle was an AV equipped with high-precision RTK-GNSS sensors, provided by Stanford Center at the Incheon Global Campus (SCIGC).
 
-![Dual trajectory sources (drone BEV and on-board probe vehicle) and the methodology for computing positional differences between drone-derived and sensor-derived trajectories.](assets/AV_measurement_sources.jpg)
+![Dual trajectory sources (drone BEV and on-board probe vehicle) and the methodology for computing positional differences between drone-derived and sensor-derived trajectories.](assets/av_measurement_sources.jpg)
 
 ---
 
