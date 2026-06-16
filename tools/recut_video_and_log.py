@@ -13,25 +13,29 @@ The tool reads cut specifications from a text file and applies them to both the 
 associated flight log, adjusting frame numbers and timestamps accordingly.
 
 Usage:
-  python tools/recut_video_and_log.py <input_video> <cuts> [options]
-
-Alternate Usage (no cuts file):
-    python tools/recut_video_and_log.py <input_video> --start <frame> --end <frame> [--rotate <deg>] [options]
+  python tools/recut_video_and_log.py <input_video> [<cuts>] [options]
+  python tools/recut_video_and_log.py <input_video> --start <frame> --end <frame> [options]
 
 Arguments:
   input_video : Path to the input video file to be cut.
-  cuts        : Path to the cuts specification file.
+  cuts        : Path to the cuts specification file (optional; mutually exclusive with --start/--end).
 
 Options:
   -h, --help              : Show this help message and exit.
-  -i, --input-csv <path>  : Input CSV flight log path (default: <input_video>.CSV).
-  -s, --start <frame>     : Cut start frame number (alternative to cuts file).
-  -e, --end <frame>       : Cut end frame number (alternative to cuts file).
+  -i, --input-csv <path>  : Full path to the input CSV flight log (default: same directory and stem as
+                            the input video, tried with both .csv and .CSV extensions).
+  -s, --start <frame>     : Cut start frame number (mutually exclusive with <cuts>; requires --end).
+  -e, --end <frame>       : Cut end frame number, -1 for end of video (mutually exclusive with <cuts>;
+                            requires --start).
   -r, --rotate <deg>      : Optional counter-clockwise rotation in degrees (0, ±90, ±180, ±270).
-  -o, --output <path>     : Output video file path; CSV will be saved with same name but .CSV extension (default: <input_video>_cut.MP4 and .CSV).
+  -o, --output <path>     : Full file path for the output video, including filename and extension
+                            (e.g., /path/to/cut.MP4); the companion CSV log is saved to the same path
+                            with the extension replaced by .csv or .CSV to match the video suffix.
+                            Default: <input_video_dir>/<input_video_stem>_cut<ext> with a matching CSV
+                            saved alongside it.
   -ec, --exact-cut        : Perform exact frame cutting with re-encoding (slower but precise; default: off).
-  -b, --bitrate <rate>    : Video bitrate for exact-cut mode (e.g., '5M', '10000k'; default: auto).
-  -d, --debug             : Run in debug mode with verification and detailed output (default: False).
+  -b, --bitrate <rate>    : Video bitrate, used only with --exact-cut (e.g., '5M', '10000k'; default: auto).
+  -d, --debug             : Run in debug mode with frame verification and detailed output (default: off).
   -lp, --log-path <str>   : Where to write logs: a directory or a full file path; defaults to a platform-specific log directory.
   -q, --quiet             : Reduce console verbosity to important messages only (default: show INFO-level detail).
 
@@ -58,13 +62,15 @@ Examples:
 
 Input:
 - Video file (any format supported by ffmpeg)
-- Corresponding CSV flight log with same filename but .CSV extension
-- Cuts file containing single line with frame range and optional rotation
+- CSV flight log expected alongside the video with the same stem and .CSV extension
+  (optional; skipped if absent or missing a 'frame' column)
+- Cuts file with a single line specifying the frame range and optional rotation
+  (omit if using --start/--end instead)
 
 Output:
-- Cut video file (with _cut suffix if no output path specified)
-- Cut CSV flight log with adjusted frame numbers and timestamps
-- Debug verification output (if debug mode enabled)
+- Cut video saved to the --output path, or to the input video's directory as <stem>_cut<ext>
+- Cut CSV log saved alongside the output video with the same stem and .csv/.CSV extension
+- Debug verification output (if --debug is enabled)
 
 Notes:
 - By default, cut start frame is adjusted to the nearest keyframe to avoid re-encoding (fast)
@@ -390,19 +396,35 @@ def perform_sanity_checks(cuts: Tuple[int, int, int], filepaths: Dict[str, Path]
     )
 
 
+def _default_csv_path(video_path: Path) -> Path:
+    """Return the companion CSV path for a video, trying both .csv and .CSV.
+
+    Prefers the case that matches the video suffix; falls back to the other
+    case so that e.g. a .mp4 video paired with a .CSV log is still found on
+    case-sensitive file systems.
+    """
+    primary = video_path.with_suffix('.csv' if video_path.suffix.islower() else '.CSV')
+    fallback = video_path.with_suffix('.CSV' if video_path.suffix.islower() else '.csv')
+    if primary.exists():
+        return primary
+    if fallback.exists():
+        return fallback
+    return primary  # neither exists; return primary so the later warning names the expected path
+
+
 def parse_cli_args() -> argparse.Namespace:
     """Parse command-line arguments."""
     parser = argparse.ArgumentParser(description="Cut video and flight log according to specified frame ranges.")
     parser.add_argument('input_video', type=Path, help="File path to the input video")
-    parser.add_argument('cuts', type=Path, nargs='?', help="File path to the cuts file")
-    parser.add_argument('--input-csv', '-i', type=Path, default=None, help="Input CSV flight log path (default: matches input video name with CSV extension)")
-    parser.add_argument('--start', '-s', type=int, help="Cut start frame number (alternative to cuts file)")
-    parser.add_argument('--end', '-e', type=int, help="Cut end frame number (-1 for end; alternative to cuts file)")
+    parser.add_argument('cuts', type=Path, nargs='?', help="Path to the cuts specification file (mutually exclusive with --start/--end)")
+    parser.add_argument('--input-csv', '-i', type=Path, default=None, help="Full path to the input CSV flight log (default: same directory and stem as the input video, trying .csv/.CSV in both cases)")
+    parser.add_argument('--start', '-s', type=int, help="Cut start frame number (mutually exclusive with <cuts>; requires --end)")
+    parser.add_argument('--end', '-e', type=int, help="Cut end frame number, -1 for end of video (mutually exclusive with <cuts>; requires --start)")
     parser.add_argument('--rotate', '-r', type=int, default=None, help="Optional counter-clockwise rotation in degrees (0, ±90, ±180, ±270)")
-    parser.add_argument('--output', '-o', type=Path, default=None, help="Output video file path; CSV will be saved with same name but .CSV extension (default: <input_video>_cut.MP4 and .CSV).")
+    parser.add_argument('--output', '-o', type=Path, default=None, help="Full file path for the output video (e.g., /path/to/cut.MP4); companion CSV saved alongside with matching .csv/.CSV extension. Default: <video_dir>/<stem>_cut<ext> with a matching CSV.")
     parser.add_argument('--exact-cut', '-ec', action='store_true', help="Perform exact frame cutting with re-encoding (slower but precise)")
-    parser.add_argument('--bitrate', '-b', type=str, default=None, help="Video bitrate for exact-cut mode (e.g., '5M', '10000k')")
-    parser.add_argument('--debug', '-d', action='store_true', help="Run in debug mode")
+    parser.add_argument('--bitrate', '-b', type=str, default=None, help="Video bitrate, used only with --exact-cut (e.g., '5M', '10000k'; default: auto)")
+    parser.add_argument('--debug', '-d', action='store_true', help="Run in debug mode with frame verification and detailed output")
     parser.add_argument('--log-path', '-lp', type=Path, default=None, help="Where to write logs: a directory or a full file path; defaults to a platform-specific log directory.")
     parser.add_argument('--quiet', '-q', action='store_true', help="Reduce console verbosity to important messages only (default: show INFO-level detail).")
     return parser.parse_args()
@@ -413,13 +435,13 @@ def main() -> None:
     args = parse_cli_args()
     logger = setup_logger(Path(__file__).stem, verbose=not args.quiet, log_path=args.log_path)
 
-    # Determine CSV suffix case based on video suffix case
+    # CSV suffix mirrors the video extension case for output file naming
     csv_suffix = '.csv' if args.input_video.suffix.islower() else '.CSV'
 
     # Setup input file paths
     filepaths = {
         'input_video': args.input_video,
-        'input_csv': args.input_csv if args.input_csv else args.input_video.with_suffix(csv_suffix),
+        'input_csv': args.input_csv if args.input_csv else _default_csv_path(args.input_video),
     }
 
     # Determine cuts source: CLI args or cuts file
