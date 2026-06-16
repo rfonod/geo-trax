@@ -42,9 +42,8 @@ These chains show how the tools compose around the `geotrax` stages:
   (pre-labels) → inspect with `viz_annotations` / `find_max_annotations` /
   `compute_bb_center_error` → convert with `fix_json_annotations` / `yolo_to_coco` → `train/`.
 - **Evaluation & QA.** Trackers: `compare_tracking`. Dimensions: `analyze_bb_ratios`,
-  `compute_bb_dimensions_naive`, `compare_dimension_estimators`, `viz_dimension_estimation`.
-  Georeferencing accuracy: `benchmark_ortho_matching`, `compare_av_detections_and_tune_filters`.
-  Final dataset: `check_dataset`, `find_source_id`.
+  `viz_dimension_estimation`. Georeferencing accuracy: `benchmark_ortho_matching`,
+  `compare_av_detections_and_tune_filters`. Final dataset: `check_dataset`, `find_source_id`.
 
 ---
 
@@ -88,8 +87,6 @@ These chains show how the tools compose around the `geotrax` stages:
 | [`compare_tracking.py`](#compare_trackingpy) | Compare trackers via track-length distributions and KL divergence | 🟢 |
 | [`compute_bb_center_error.py`](#compute_bb_center_errorpy) | Bounding-box center error between human labels and model predictions | 🟢 |
 | [`analyze_bb_ratios.py`](#analyze_bb_ratiospy) | Length/width aspect-ratio statistics and histograms per vehicle class | 🧪 |
-| [`compute_bb_dimensions_naive.py`](#compute_bb_dimensions_naivepy) | Naive per-vehicle pixel dimension baseline for AV validation | 🧪 |
-| [`compare_dimension_estimators.py`](#compare_dimension_estimatorspy) | Compare old vs. new (azimuth-based) vehicle dimension estimators | 🧪 |
 | [`viz_dimension_estimation.py`](#viz_dimension_estimationpy) | Step-by-step visualization of the azimuth-based dimension estimator | 🔵 |
 | [`compare_av_detections_and_tune_filters.py`](#compare_av_detections_and_tune_filterspy) | Compare extracted vs. RTK-GNSS AV trajectories; tune smoothing filters | 🧪 |
 
@@ -351,28 +348,6 @@ python tools/analyze_bb_ratios.py data/ --hist
 python tools/analyze_bb_ratios.py video.yaml --id 42
 ```
 
-### `compute_bb_dimensions_naive.py`
-
-🧪 **Research** — Estimates per-vehicle pixel dimensions by averaging the longer/shorter
-bounding-box sides over fully visible frames — a naive baseline to validate the pipeline's
-azimuth-based estimator against AV ground truth (`--av`; requires the Songdo AV ID map).
-
-```bash
-python tools/compute_bb_dimensions_naive.py data/results/ --av
-python tools/compute_bb_dimensions_naive.py data/results/ --frame-size 1080 1920 --visibility-margin 8
-```
-
-### `compare_dimension_estimators.py`
-
-🧪 **Research** — Compares the old area-percentile dimension estimator against the new
-azimuth-based one for runtime and per-vehicle differences. Prints timing and statistics;
-`--plot` saves histograms; `--id` focuses one vehicle.
-
-```bash
-python tools/compare_dimension_estimators.py video.mp4
-python tools/compare_dimension_estimators.py video.yaml --plot --id 42
-```
-
 ### `viz_dimension_estimation.py`
 
 🔵 **Songdo** — Renders step-by-step visualizations of the azimuth-based dimension estimator for
@@ -383,6 +358,10 @@ Constants are tuned to the Songdo DJI Mavic 3 setup (140–150 m, 4K, EPSG:5186)
 python tools/viz_dimension_estimation.py path/to/video.mp4 --id 42 --show
 python tools/viz_dimension_estimation.py path/to/video.mp4 --id 42 --save
 ```
+
+Example output from the [Songdo experiment](../README.md#field-deployment) showing a vehicle trajectory with accepted (green) and rejected (red) bounding boxes (left) and the resulting dimension distribution with the final estimate (right).
+
+![Vehicle trajectory with accepted and rejected bounding boxes and the corresponding dimension distribution with the final estimate.](assets/vehicle_dimension_calculation.jpg)
 
 ### `compare_av_detections_and_tune_filters.py`
 
