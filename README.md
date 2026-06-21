@@ -16,7 +16,7 @@
 
 ## Features
 
-1. **Vehicle Detection**: Utilizes a pre-trained YOLO model to detect vehicles (cars, buses, trucks, and motorcycles) in the video frames.
+1. **Vehicle Detection**: Utilizes a pre-trained YOLO model to detect vehicles (cars, buses, trucks, and motorcycles) in the video frames using horizontal bounding boxes (HBB).
 2. **Vehicle Tracking**: Implements the selected tracking algorithm to follow detected vehicles, ensuring robust trajectory data and continuity across frames.
 3. **Trajectory Stabilization**: Corrects for unintentional drone movement by aligning trajectories to a reference frame, using bounding boxes of detected vehicles to enhance stability. Leverages the [Stabilo](https://github.com/rfonod/stabilo) 🌀 library, fine-tuned by [Stabilo-Optimize](https://github.com/rfonod/stabilo-optimize) 🎯, to achieve reliable, consistent stabilization.
 4. **Georeferencing**: Maps stabilized trajectories to real-world coordinates using an orthophoto and an image registration technique.
@@ -153,7 +153,36 @@ To switch the tracking algorithm, set `tracker.active` in the config (see [Track
 
 </details>
 
-## Model Training
+## Detection Model
+
+The default vehicle detector is a **YOLOv8s** model (HBB, 1920 × 1920 px input) trained for high-altitude drone BEV imagery. It is hosted on the [🤗 Hugging Face Hub](https://huggingface.co/rfonod/geo-trax) and **downloads automatically on first use** (no manual setup). It detects four vehicle classes (car incl. vans, bus, truck, and motorcycle) and underpins the results reported in the [publication](https://doi.org/10.1016/j.trc.2025.105205). To use a different model, point `extraction.model` in the config (or the `--model`/`-m` CLI flag) to a local `.pt` path or another `hf://<org>/<name>/<file>.pt` reference; it must be an [Ultralytics](https://github.com/ultralytics/ultralytics)-supported model.
+
+<details>
+<summary><b>🎯 Model details and detection performance</b></summary>
+
+| Property | Value |
+|---|---|
+| Architecture | YOLOv8s (HBB) |
+| Input resolution | 1920 × 1920 px |
+| Parameters | ~11 M |
+| Framework | [Ultralytics](https://github.com/ultralytics/ultralytics) ≥ 8.4.64 |
+| Validated on | [Songdo Vision](https://doi.org/10.5281/zenodo.13828407) test set (1,084 images) |
+
+Metrics on the [Songdo Vision](https://doi.org/10.5281/zenodo.13828407) test split (see Table 3 of the [publication](https://doi.org/10.1016/j.trc.2025.105205) for full results):
+
+| ID | Label | Precision | Recall | mAP@50 | mAP@50-95 |
+|---|---|---|---|---|---|
+| 0 | Car (incl. vans) | 0.979 | 0.981 | 0.992 | 0.835 |
+| 1 | Bus | 0.952 | 0.977 | 0.988 | 0.826 |
+| 2 | Truck | 0.887 | 0.916 | 0.935 | 0.722 |
+| 3 | Motorcycle | 0.827 | 0.866 | 0.888 | 0.463 |
+| **All** | | **0.911** | **0.935** | **0.951** | **0.711** |
+
+> The model was also trained on pedestrian and bicycle instances, but those classes are underrepresented, unevaluated, and **not recommended for use**; Geo-trax filters to the four classes above by default. See the [model card](https://huggingface.co/rfonod/geo-trax) for full details, usage examples, and evaluation plots.
+
+</details>
+
+### Custom Model Training
 
 The `train/` directory contains scripts for training and exporting custom YOLOv8 detection models using the [Ultralytics](https://github.com/ultralytics/ultralytics) framework, along with a SLURM wrapper for HPC clusters. See [train/README.md](train/README.md) for full usage instructions.
 
