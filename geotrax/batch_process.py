@@ -57,6 +57,12 @@ Shared Options:
     --verbose, -v       : Set print verbosity level to INFO (default: WARNING).
 
 Processing Options:
+    --model, -m <str>     : Detection model to use — a local file path OR an
+                          'hf://<org>/<name>/<file>.pt' Hugging Face reference (auto-downloaded and
+                          cached). Defaults to cfg -> extraction -> model.
+    --class-names, -cn <ID=NAME|FILE> [...] : Rename class-id -> name labels with a .yaml/.json mapping
+                          file or inline ID=NAME pairs (e.g. -cn 0=car 1=bus). Defaults to
+                          cfg -> extraction -> class_rename, then the model's own names, then integer IDs.
     --conf, -co <float>   : Detection confidence threshold. Defaults to cfg -> ultralytics -> conf.
     --classes, -cls <int> [<int> ...] : Vehicle class IDs to extract (e.g., --classes 0 1 2).
                           Defaults to cfg -> ultralytics -> classes.

@@ -23,6 +23,11 @@ Options:
                                           or a flat Ultralytics YAML. The annotator uses the config's
                                           'ultralytics:' detection settings; a bundled preset name
                                           (default, confident, lenient, stable) also works.
+    --model <str>                       : Override the config model — a local file path OR an
+                                          'hf://<org>/<name>/<file>.pt' Hugging Face reference
+                                          (auto-downloaded and cached).
+    -cn, --class-names <ID=NAME|FILE>   : Override class-id -> name labels on saved visualizations with a
+                                          .yaml/.json mapping file or inline ID=NAME pairs (e.g. -cn 0=car 1=bus).
     -v, --save-viz                      : Save images with colored bounding boxes overlaid.
     -z, --viz-dir <path>                : Directory to save visualization images. Defaults to
                                           '<annotations>/visualizations' when --save-viz is set.
@@ -119,7 +124,7 @@ from ultralytics import YOLO
 from ultralytics.utils.checks import check_yolo
 
 from geotrax.utils.cli_utils import DEFAULT_CFG
-from geotrax.utils.config_utils import load_config, resolve_asset_path
+from geotrax.utils.config_utils import load_config, resolve_class_names, resolve_model_path
 from geotrax.utils.logging_utils import setup_logger
 
 
@@ -145,11 +150,19 @@ def run_annotator(args: argparse.Namespace, logger: logging.Logger) -> None:
         logger.error("Error loading the configuration.")
         return
 
+    # The model and class-rename overrides live in the 'extraction:' section of a pipeline config
+    # (absent for a flat Ultralytics YAML); capture them before narrowing to 'ultralytics:' below.
+    extraction_cfg = config.get('extraction', {}) if isinstance(config, dict) else {}
+    cfg_model = extraction_cfg.get('model')
+    cfg_class_rename = extraction_cfg.get('class_rename')
+
     # Use the 'ultralytics:' section of a geo-trax pipeline config; fall back to a flat
     # Ultralytics YAML if the user supplies one directly.
     config = config.get('ultralytics', config)
     config['mode'] = 'predict'  # the pipeline config uses mode: track; the annotator only predicts
-    config['model'] = str(resolve_asset_path(config['model']))  # resolve models/... from any working directory
+    # A CLI --model override takes precedence over the config value; either form (local path or
+    # hf:// reference) is resolved to a concrete local file (auto-downloaded and cached if hf://).
+    config['model'] = str(resolve_model_path(args.model or cfg_model or config.get('model'), logger))
 
     # Apply CLI overrides to config
     if args.conf is not None:
@@ -172,6 +185,13 @@ def run_annotator(args: argparse.Namespace, logger: logging.Logger) -> None:
     base_conf = config.get('conf', 0.25)
 
     model = load_detector(config, logger)
+
+    # Apply a class-name override (CLI > config) to the model so saved visualizations use the custom
+    # labels. Without an override the model keeps its own embedded names.
+    if args.class_names is not None or cfg_class_rename is not None:
+        model.names = resolve_class_names(
+            Path(config['model']), args.class_names, cfg_class_rename, config.get('classes'), logger
+        )
 
     output_dir = Path(args.annotations) if args.annotations else args.source.parent / "pre-labels"
     output_dir.mkdir(exist_ok=True, parents=True)
@@ -284,6 +304,12 @@ def parse_cli_args() -> argparse.Namespace:
     parser.add_argument('--cfg', '-c', type=Path, default=DEFAULT_CFG,
                         help="Pipeline config (a bundled preset name or a path) or a flat Ultralytics YAML; "
                              "the annotator uses its 'ultralytics:' detection settings.")
+    parser.add_argument('--model', type=str, default=None,
+                        help="Detection model overriding the config — a local file path OR an "
+                             "'hf://<org>/<name>/<file>.pt' Hugging Face reference (auto-downloaded and cached).")
+    parser.add_argument('--class-names', '-cn', nargs='+', default=None, metavar='ID=NAME|FILE',
+                        help="Override class-id -> name labels on saved visualizations: a .yaml/.json mapping "
+                             "file or inline ID=NAME pairs (e.g. -cn 0=car 1=bus).")
 
     # Output modes
     parser.add_argument('--save-viz', '-v', action='store_true',

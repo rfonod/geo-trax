@@ -93,12 +93,9 @@ python -m pip install geo-trax
 
 This installs the `geotrax` command-line interface (see [Batch Processing Example](#batch-processing-example)) together with the bundled configuration tree (`geotrax/cfg/`).
 
-> [!NOTE]
-> The default detection model (`models/yolov8s_merger8_exp1.pt`) is distributed with the repository, not the PyPI package. Download the [`models/`](models/) folder (weights + class-names YAML) into your working directory, or point the `model:` key of a custom Ultralytics config to its location.
-
 ### Option 2: Install from Local Source
 
-Recommended for development or model training — the default detection model weights ship with the repository. Clone (or fork) the repository and install the package from the local source:
+Recommended for development or model training. Clone (or fork) the repository and install the package from the local source:
 
 ```bash
 git clone --depth 1 https://github.com/rfonod/geo-trax.git   # latest snapshot only; drop --depth 1 for full history
@@ -115,6 +112,9 @@ python -m pip install -e '.[dev]'   # pip
 # uv pip install -e '.[dev]'        # uv
 # poetry install --extras dev       # Poetry
 ```
+
+> [!NOTE]
+> The default detection model is hosted on Hugging Face ([`rfonod/geo-trax`](https://huggingface.co/rfonod/geo-trax), file `geotrax_hbb_yolov8s_1920_v1.pt`) and **downloads automatically on first use** into the Hugging Face cache (`~/.cache/huggingface/hub`, overridable via `HF_HOME`). To use your own weights, set the model — in a custom config (`extraction -> model`) or with `--model` — to either a local file path or an `hf://<org>/<name>/<file>.pt` reference.
 
 ## Configuration
 

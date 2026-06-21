@@ -16,7 +16,9 @@ from geotrax.utils.config_utils import (
     load_config,
     load_config_all,
     resolve_asset_path,
+    resolve_class_names,
     resolve_config_path,
+    resolve_model_path,
 )
 
 logger = logging.getLogger(__name__)
@@ -52,11 +54,15 @@ def test_load_config_missing_exits():
 
 
 @pytest.mark.parametrize('preset', ['default', 'confident', 'lenient', 'stable'])
-def test_unified_configs_load(preset):
+def test_unified_configs_load(preset, tmp_path):
     mock_model = MagicMock()
     mock_model.names = {0: 'Car', 1: 'Bus', 2: 'Truck', 3: 'Motorcycle'}
-    with patch('geotrax.utils.config_utils.YOLO', return_value=mock_model):
-        args = argparse.Namespace(cfg=preset, classes=None, conf=None, show=None)
+    # The presets reference the model via hf://; patch the downloader so no network is hit.
+    fake_weights = tmp_path / 'model.pt'
+    fake_weights.touch()
+    with patch('geotrax.utils.config_utils.YOLO', return_value=mock_model), \
+         patch('geotrax.utils.config_utils.hf_hub_download', return_value=str(fake_weights)):
+        args = argparse.Namespace(cfg=preset, classes=None, conf=None, show=None, model=None, class_names=None)
         config = load_config_all(args, logger)
     assert set(config) == {'main', 'stabilo', 'ultralytics', 'georef'}
     assert config['main']['visualization']['viz_mode'] in (0, 1, 2)
@@ -98,8 +104,70 @@ def test_load_class_names_from_model_success():
     assert result == {0: 'Car', 1: 'Bus', 2: 'Truck', 3: 'Motorcycle'}
 
 
-def test_load_class_names_from_model_missing_returns_defaults():
+def test_load_class_names_from_model_missing_returns_none():
     with patch('geotrax.utils.config_utils.YOLO', side_effect=FileNotFoundError('not found')):
         result = load_class_names_from_model(Path('no/such/model.pt'), logger)
-    assert result[0] == 'class_0'
-    assert len(result) == 100
+    assert result is None
+
+
+# --- resolve_model_path -------------------------------------------------------
+
+def test_resolve_model_path_local_passes_through():
+    # A non-hf:// reference keeps the historical local-path behaviour (no download).
+    assert resolve_model_path('no/such/model.pt', logger) == Path('no/such/model.pt')
+
+
+def test_resolve_model_path_hf_downloads_and_parses(tmp_path):
+    cached = tmp_path / 'cached.pt'
+    cached.touch()
+    with patch('geotrax.utils.config_utils.hf_hub_download', return_value=str(cached)) as mock_dl:
+        result = resolve_model_path('hf://rfonod/geo-trax/geotrax_hbb_yolov8s_1920_v1.pt', logger)
+    mock_dl.assert_called_once_with(repo_id='rfonod/geo-trax', filename='geotrax_hbb_yolov8s_1920_v1.pt')
+    assert result == cached
+
+
+def test_resolve_model_path_hf_malformed_exits():
+    with patch('geotrax.utils.config_utils.hf_hub_download', return_value='x'):
+        with pytest.raises(SystemExit):
+            resolve_model_path('hf://rfonod/onlytwoparts.pt', logger)
+
+
+def test_resolve_model_path_hf_missing_dependency_exits():
+    with patch('geotrax.utils.config_utils.hf_hub_download', None):
+        with pytest.raises(SystemExit):
+            resolve_model_path('hf://rfonod/geo-trax/model.pt', logger)
+
+
+# --- resolve_class_names ------------------------------------------------------
+
+def test_resolve_class_names_cli_inline_pairs_win():
+    result = resolve_class_names(Path('m.pt'), ['0=auto', '1=van'], {0: 'car'}, [0, 1], logger)
+    assert result == {0: 'auto', 1: 'van'}
+
+
+def test_resolve_class_names_config_when_no_cli():
+    result = resolve_class_names(Path('m.pt'), None, {0: 'car', 1: 'bus'}, [0, 1], logger)
+    assert result == {0: 'car', 1: 'bus'}
+
+
+def test_resolve_class_names_from_file(tmp_path):
+    f = tmp_path / 'names.yaml'
+    f.write_text('0: car\n1: bus\n')
+    result = resolve_class_names(Path('m.pt'), [str(f)], None, [0, 1], logger)
+    assert result == {0: 'car', 1: 'bus'}
+
+
+def test_resolve_class_names_falls_back_to_model():
+    mock_model = MagicMock()
+    mock_model.names = {0: 'Car', 1: 'Bus'}
+    with patch('geotrax.utils.config_utils.YOLO', return_value=mock_model):
+        result = resolve_class_names(Path('m.pt'), None, None, [0, 1], logger)
+    assert result == {0: 'Car', 1: 'Bus'}
+
+
+def test_resolve_class_names_integer_fallback_warns(caplog):
+    with patch('geotrax.utils.config_utils.YOLO', side_effect=RuntimeError('boom')):
+        with caplog.at_level('WARNING'):
+            result = resolve_class_names(Path('m.pt'), None, None, [0, 1, 2, 3], logger)
+    assert result == {0: '0', 1: '1', 2: '2', 3: '3'}
+    assert any('integer class IDs' in r.message for r in caplog.records)

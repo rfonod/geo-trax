@@ -4,11 +4,12 @@
 """YAML configuration loading and path resolution for the geo-trax pipeline."""
 
 import argparse
+import json
 import logging
 import sys
 import tempfile
 from pathlib import Path
-from typing import Union
+from typing import Optional, Union
 
 import yaml
 
@@ -19,7 +20,16 @@ try:
 except ImportError:
     YOLO = None
 
+try:
+    from huggingface_hub import hf_hub_download
+except ImportError:
+    hf_hub_download = None
+
 ROOT_DIR = PACKAGE_DIR.parent  # repository root (source checkout) or site-packages (installed)
+
+# Scheme prefix for Hugging Face Hub model references in the config, e.g.
+# 'hf://rfonod/geo-trax/geotrax_hbb_yolov8s_1920_v1.pt' -> repo 'rfonod/geo-trax', file '...pt'.
+HF_PREFIX = 'hf://'
 
 
 def resolve_config_path(cfg_filepath: Union[str, Path]) -> Path:
@@ -57,6 +67,49 @@ def resolve_asset_path(filepath: Union[str, Path]) -> Path:
     return path
 
 
+def resolve_model_path(model_ref: Union[str, Path], logger: logging.Logger) -> Path:
+    """Resolve a model reference to a local file path, downloading from Hugging Face if needed.
+
+    Two forms are supported via the same config/CLI entry:
+      * A Hugging Face reference ``hf://<org>/<name>/<filename>`` (e.g.
+        ``hf://rfonod/geo-trax/geotrax_hbb_yolov8s_1920_v1.pt``). The weight is downloaded once and
+        served from the standard Hugging Face Hub cache (``~/.cache/huggingface/hub``, overridable via
+        ``HF_HOME``/``HF_HUB_CACHE``); ``hf_hub_download`` revalidates by etag, so repeat runs do not
+        re-download. The cache location is identical for every install mode (PyPI, source, editable).
+      * A local path (absolute or relative), which keeps the historical behaviour via
+        :func:`resolve_asset_path` and is never downloaded.
+    """
+    model_str = str(model_ref)
+    if not model_str.startswith(HF_PREFIX):
+        return resolve_asset_path(model_ref)
+
+    if hf_hub_download is None:
+        logger.critical(
+            f"Model '{model_str}' is a Hugging Face reference but 'huggingface_hub' is not installed. "
+            "Install it (it is a core dependency: `python -m pip install -e .`) or point the config "
+            "`ultralytics -> model` (or --model) at a local weights file."
+        )
+        sys.exit(1)
+
+    parts = model_str[len(HF_PREFIX):].split('/')
+    if len(parts) < 3:
+        logger.critical(
+            f"Malformed Hugging Face model reference '{model_str}'. Expected "
+            f"'{HF_PREFIX}<org>/<name>/<filename>' (e.g. '{HF_PREFIX}rfonod/geo-trax/geotrax_hbb_yolov8s_1920_v1.pt')."
+        )
+        sys.exit(1)
+
+    repo_id = '/'.join(parts[:2])
+    filename = '/'.join(parts[2:])
+    try:
+        local_path = hf_hub_download(repo_id=repo_id, filename=filename)
+    except Exception as e:
+        logger.critical(f"Failed to download model '{filename}' from Hugging Face repo '{repo_id}': {e}")
+        sys.exit(1)
+    logger.info(f"Model '{filename}' resolved from Hugging Face repo '{repo_id}' (cached at '{local_path}').")
+    return Path(local_path)
+
+
 def load_config_all(args: argparse.Namespace, logger: logging.Logger) -> dict:
     """Load the unified pipeline configuration file and return a nested dict.
 
@@ -76,9 +129,20 @@ def load_config_all(args: argparse.Namespace, logger: logging.Logger) -> dict:
                           if k not in ('tracker', 'stabilo', 'ultralytics', 'georef')}
 
     kwargs_ultralytics['tracker'] = str(_write_tracker_yaml(kwargs_tracker, args.cfg, logger))
-    kwargs_ultralytics['model'] = str(resolve_asset_path(kwargs_ultralytics['model']))
+    # The model and class-rename mapping live in the 'extraction:' section (the 'ultralytics:' section
+    # keeps only a pointer comment). A CLI --model override takes precedence over the config value, then
+    # the reference (local path or hf:// auto-download) is resolved to a concrete local file for Ultralytics.
+    extraction_cfg = full.get('extraction', {})
+    model_ref = getattr(args, 'model', None) or extraction_cfg.get('model') or kwargs_ultralytics.get('model')
+    kwargs_ultralytics['model'] = str(resolve_model_path(model_ref, logger))
 
-    kwargs_main['class_names'] = load_class_names_from_model(Path(kwargs_ultralytics['model']), logger)
+    kwargs_main['class_names'] = resolve_class_names(
+        Path(kwargs_ultralytics['model']),
+        getattr(args, 'class_names', None),
+        extraction_cfg.get('class_rename'),
+        kwargs_ultralytics.get('classes'),
+        logger,
+    )
     kwargs_main['args'] = args
 
     keys_to_update = ['classes', 'conf', 'show']
@@ -149,15 +213,92 @@ def backfill_args_from_config(args: argparse.Namespace, mapping: dict) -> None:
             setattr(args, arg_name, config_value)
 
 
-def load_class_names_from_model(model_path: Path, logger: logging.Logger) -> dict:
-    """Load class names embedded in a YOLO model file."""
+def load_class_names_from_model(model_path: Path, logger: logging.Logger) -> Optional[dict]:
+    """Load the class-id -> name mapping embedded in a YOLO model file.
+
+    Returns ``None`` when the names cannot be obtained (ultralytics missing or the model fails to
+    load), letting the caller fall back to a config/CLI mapping or integer labels.
+    """
     if YOLO is None:
-        logger.error("ultralytics is not installed; cannot load class names from model. Using default class names.")
-        return {i: f'class_{i}' for i in range(100)}
+        logger.error("ultralytics is not installed; cannot load class names from model.")
+        return None
     try:
         names = YOLO(str(model_path)).names
         logger.info(f"Class names loaded from model: '{model_path}'.")
         return names
     except Exception as e:
-        logger.error(f"Failed to load class names from '{model_path}': {e}. Using default class names.")
-        return {i: f'class_{i}' for i in range(100)}
+        logger.error(f"Failed to load class names from '{model_path}': {e}.")
+        return None
+
+
+def _load_class_names_mapping(value: Union[str, Path, dict, list], logger: logging.Logger) -> Optional[dict]:
+    """Coerce a class-names override into a ``{int: str}`` mapping.
+
+    Accepts an inline ``dict`` (from the config), a path to a ``.yaml``/``.json`` mapping file, or a
+    list of ``ID=NAME`` tokens (from the CLI, e.g. ``['0=car', '1=bus']``). Returns ``None`` on failure.
+    """
+    mapping = None
+    if isinstance(value, dict):
+        mapping = value
+    elif isinstance(value, list):  # CLI ID=NAME pairs, or a single-element [path]
+        if len(value) == 1 and Path(value[0]).is_file():
+            return _load_class_names_mapping(value[0], logger)
+        mapping = {}
+        for token in value:
+            if '=' not in token:
+                logger.error(f"Invalid --class-names entry '{token}'. Expected ID=NAME (e.g. 0=car) or a file path.")
+                return None
+            key, name = token.split('=', 1)
+            mapping[key] = name
+    else:  # str/Path file
+        path = Path(value)
+        if not path.is_file():
+            logger.error(f"Class names file '{path}' not found.")
+            return None
+        try:
+            with open(path, 'r') as f:
+                mapping = json.load(f) if path.suffix.lower() == '.json' else yaml.safe_load(f)
+        except Exception as e:
+            logger.error(f"Failed to read class names from '{path}': {e}.")
+            return None
+    if not isinstance(mapping, dict) or not mapping:
+        logger.error(f"Class names override '{value}' did not yield a non-empty mapping.")
+        return None
+    try:
+        return {int(k): str(v) for k, v in mapping.items()}
+    except (ValueError, TypeError) as e:
+        logger.error(f"Class names override '{value}' has non-integer keys: {e}.")
+        return None
+
+
+def resolve_class_names(
+    model_path: Path,
+    cli_value: Optional[Union[list, str]],
+    cfg_value: Optional[Union[dict, str]],
+    classes: Optional[list],
+    logger: logging.Logger,
+) -> dict:
+    """Resolve the class-id -> name mapping by precedence: CLI > config > model > integer fallback.
+
+    The CLI (``--class-names``) and config (``class_names:``) overrides accept an inline mapping, a
+    ``.yaml``/``.json`` file path, or ``ID=NAME`` pairs. When none of CLI, config, or the model yields a
+    mapping, integer labels (``{id: str(id)}``) are used over the configured ``classes`` ids (or
+    ``range(100)``) and a warning is logged.
+    """
+    for source, value in (('--class-names', cli_value), ('config class_names', cfg_value)):
+        if value is not None:
+            mapping = _load_class_names_mapping(value, logger)
+            if mapping is not None:
+                logger.info(f"Class names taken from {source}: {mapping}.")
+                return mapping
+
+    model_names = load_class_names_from_model(model_path, logger)
+    if model_names:
+        return model_names
+
+    ids = classes if classes else range(100)
+    logger.warning(
+        "No class-name mapping found (CLI, config, or model); falling back to integer class IDs. "
+        "Provide one via cfg -> class_names or --class-names to label classes."
+    )
+    return {int(i): str(int(i)) for i in ids}

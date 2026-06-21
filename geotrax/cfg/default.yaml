@@ -67,6 +67,8 @@ batch:
 # --- Extraction stage ---
 # Stabilization, short-track removal, and vehicle dimension estimation for 'geotrax extract'.
 extraction:
+  model: hf://rfonod/geo-trax/geotrax_hbb_yolov8s_1920_v1.pt  # Detection model: a local file path OR an 'hf://<org>/<name>/<file>.pt' reference (auto-downloaded & cached); default = the bundled geo-trax model — CLI: --model
+  class_rename: null    # Rename class-id → labels (inline dict or .yaml/.json path); null = use the model's own names — CLI: --class-names
   stabilize: true       # Stabilize extracted bounding boxes; appends 4 columns (x_stab, y_stab, w_stab, h_stab) to results/video.txt
   save_stab: true       # Save per-frame stabilization homographies to results/video_vid_transf.txt
   min_track_length: 3   # Discard tracks shorter than this many frames; [1, inf)
@@ -204,8 +206,7 @@ ultralytics:
   task: detect # (str) YOLO task; i.e. detect, segment, semantic, classify, pose, obb
   mode: track  # (str) YOLO mode; i.e. train, val, predict, export, track, benchmark
 
-  # Model
-  model: models/yolov8s_merger8_exp1.pt # (str) path to model weights file
+  # Model — set in the 'extraction:' section above (extraction -> model); accepts a local path or an hf:// reference — CLI: --model
   data:         # (str, optional) path to data file, e.g. coco8.yaml
   imgsz: 1920   # (int | list) inference image size (square int, or [h,w])
   device:       # (int | str | list) device: 0/[0,1,2,3] for CUDA, 'cpu'/'mps', or -1/[-1,-1] to auto-select idle GPUs
