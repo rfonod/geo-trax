@@ -36,7 +36,7 @@ readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
 requires-python = ">=3.9"
-keywords = ["trajectory-extraction", "trajectory-analysis", "object-detection", "object-tracking", "object-stabilization", "georeferencing", "computer-vision", "deep-learning"]
+keywords = ["trajectory-extraction", "trajectory-stabilization", "georeferencing", "object-detection", "object-tracking", "vehicle-tracking", "computer-vision", "deep-learning", "yolo", "drone", "aerial-imagery", "traffic-analysis"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Operating System :: OS Independent",
