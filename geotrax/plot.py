@@ -29,13 +29,13 @@ Options:
 Plot Background Options:
   --ortho-folder, -orf <path>        : Path to the folder with orthophoto images (.png) used as
                                        plot backgrounds for georeferenced trajectories. Defaults to
-                                       cfg -> folders -> ortho_folder, then 'ORTHOPHOTOS' at the same
+                                       cfg -> input -> ortho_folder, then 'ORTHOPHOTOS' at the same
                                        level as 'PROCESSED' in 'input'.
   --segmentation-folder, -osf <path> : Path to the folder containing lane segmentation CSV files
                                        (used during georeferencing for lane assignment) and,
                                        when --plot-segmentations is enabled, the corresponding
                                        overlay PNG files used as plot backgrounds. Defaults to
-                                       cfg -> folders -> segmentation_folder, then '<ortho-folder>/segmentations'.
+                                       cfg -> input -> segmentation_folder, then '<ortho-folder>/segmentations'.
 
 Plotting Options (the --plot-* names are shared with 'geotrax batch'):
   --plot-save / --no-plot-save, -ps  : Save plots as PDF files. Defaults to cfg -> plotting -> save.
@@ -108,7 +108,7 @@ def generate_plots(args: argparse.Namespace, logger: logging.Logger) -> None:
     """
     config = load_config_all(args, logger)['main']
     plot_cfg = config['plotting']
-    folders = config['folders']
+    folders = config['input']
     out_cfg_raw = config.get('output', {})
     backfill_args_from_config(args, {
         'save': plot_cfg['save'],
@@ -807,8 +807,8 @@ def parse_cli_args() -> argparse.Namespace:
     add_common_args(optional)
 
     georef = parser.add_argument_group('Plot background arguments')
-    georef.add_argument("--ortho-folder", "-orf", type=Path, default=None, help="Path to the folder with orthophoto images (.png) used as plot backgrounds for georeferenced trajectories. Defaults to cfg -> folders -> ortho_folder, then 'ORTHOPHOTOS' at the same level as 'PROCESSED' in 'input'.")
-    georef.add_argument("--segmentation-folder", "-osf", type=Path, default=None, help="Path to the folder containing lane segmentation CSV files (used during georeferencing for lane assignment) and, when --plot-segmentations is enabled, the corresponding overlay PNG files used as plot backgrounds. Defaults to cfg -> folders -> segmentation_folder, then '<ortho-folder>/segmentations'.")
+    georef.add_argument("--ortho-folder", "-orf", type=Path, default=None, help="Path to the folder with orthophoto images (.png) used as plot backgrounds for georeferenced trajectories. Defaults to cfg -> input -> ortho_folder, then 'ORTHOPHOTOS' at the same level as 'PROCESSED' in 'input'.")
+    georef.add_argument("--segmentation-folder", "-osf", type=Path, default=None, help="Path to the folder containing lane segmentation CSV files (used during georeferencing for lane assignment) and, when --plot-segmentations is enabled, the corresponding overlay PNG files used as plot backgrounds. Defaults to cfg -> input -> segmentation_folder, then '<ortho-folder>/segmentations'.")
 
     plotting = parser.add_argument_group('Plotting arguments')
     add_plotting_args(plotting)

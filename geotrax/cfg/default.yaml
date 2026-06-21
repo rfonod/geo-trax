@@ -25,13 +25,24 @@
 
 # ── Pipeline orchestration ────────────────────────────────────────────────────
 
-# --- Shared data folders (CLI override) ---
-# Persistent defaults for the orthophoto / master-frame / segmentation folders; null keeps the
-# existing auto-detection (relative to the input). Used by georeferencing and plotting.
-folders:
-  ortho_folder: null         # Folder with orthophotos (.png, .tif, .txt); null = auto-detect 'ORTHOPHOTOS' next to 'PROCESSED' — CLI: --ortho-folder
-  master_folder: null        # Folder with master frame files (.png); null = '<ortho_folder>/master_frames' — CLI: --master-folder
-  segmentation_folder: null  # Folder with lane segmentation CSVs (and overlay PNGs); null = '<ortho_folder>/segmentations' — CLI: --segmentation-folder
+# --- Shared input asset folders (CLI override) ---
+# Persistent defaults for the orthophoto / master-frame / segmentation folders used by
+# georeferencing and plotting. null keeps the auto-detection relative to the pipeline input,
+# which expects a 'PROCESSED' folder (the videos to process) with a sibling 'ORTHOPHOTOS' folder:
+#
+#   <parent>/                   # name is arbitrary
+#   ├── PROCESSED/              # pipeline input: (cut) videos + optional (cut) flight logs (.csv)
+#   │   └── 2022-10-04/D1/AM1/  # arbitrary layout, e.g. date / drone / session
+#   │       ├── A1.mp4          # 'A' = location ID (e.g. intersection), '1' = sequence number
+#   │       ├── A1.csv          # optional (cut) flight log
+#   │       └── A2.mp4          # next clip at the same location
+#   └── ORTHOPHOTOS/            # auto-detected sibling of PROCESSED (ortho_folder)
+#       ├── master_frames/      # optional master frame PNGs         (master_folder)
+#       └── segmentations/      # optional lane CSVs (+ plot PNGs)   (segmentation_folder)
+input:
+  ortho_folder: null         # Path to the orthophotos folder (.png, .tif, .txt); null = auto-detect 'ORTHOPHOTOS' next to 'PROCESSED' — CLI: --ortho-folder
+  master_folder: null        # Path to the master-frames folder (.png), optional; null = '<ortho_folder>/master_frames' — CLI: --master-folder
+  segmentation_folder: null  # Path to the lane-segmentation folder (.csv; overlay .png used only for plotting), optional; null = '<ortho_folder>/segmentations' — CLI: --segmentation-folder
 
 # --- Output destination & naming (CLI override for folder) ---
 # Controls where pipeline outputs are written and how they are named. Defaults reproduce the

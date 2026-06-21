@@ -113,7 +113,7 @@ def resolve_model_path(model_ref: Union[str, Path], logger: logging.Logger) -> P
 def load_config_all(args: argparse.Namespace, logger: logging.Logger) -> dict:
     """Load the unified pipeline configuration file and return a nested dict.
 
-    The pipeline config is a single YAML file with top-level sections: folders, output,
+    The pipeline config is a single YAML file with top-level sections: input, output,
     processing, batch, extraction, stabilo, georef, visualization, plotting, ultralytics,
     tracker. The tracker section holds an 'active' selector plus a full parameter block per
     supported tracker; the active block is written to a temporary YAML file so Ultralytics can

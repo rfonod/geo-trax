@@ -74,7 +74,7 @@ Processing Options:
 
 Georeferencing Options:
     --ortho-folder, -orf <path>    : Path to the folder with orthophotos (.png, .tif, .txt).
-                          Defaults to cfg -> folders -> ortho_folder, then 'ORTHOPHOTOS' at the
+                          Defaults to cfg -> input -> ortho_folder, then 'ORTHOPHOTOS' at the
                           same level as 'PROCESSED' in input.
     --geo-source, -gs <choice>     : Georeferencing parameter source: metadata-tif, text-file, or
                           center-text-file. Auto-detected if omitted.
@@ -84,14 +84,14 @@ Georeferencing Options:
     --no-master, -nm               : Disable the master-frame approach regardless of config.
                           When not set, cfg -> georef -> processing -> use_master applies.
     --master-folder, -mf <path>    : Path to the folder containing master frame files (.png).
-                          Defaults to cfg -> folders -> master_folder, then '<ortho-folder>/master_frames'.
+                          Defaults to cfg -> input -> master_folder, then '<ortho-folder>/master_frames'.
     --recompute, -r                : Force recomputation of the master→orthophoto homography
                           even if a cached result exists.
                           Defaults to cfg -> georef -> processing -> recompute.
     --segmentation-folder, -osf <path> : Path to the folder with road segmentation CSV files
                           (used for lane assignment during georeferencing) and, when
                           --plot-segmentations is enabled, the corresponding overlay PNG files
-                          used as plot backgrounds. Defaults to cfg -> folders -> segmentation_folder,
+                          used as plot backgrounds. Defaults to cfg -> input -> segmentation_folder,
                           then '<ortho-folder>/segmentations'.
 
 Visualization Options:
