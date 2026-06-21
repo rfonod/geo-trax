@@ -65,6 +65,7 @@ Thumbs.db
 desktop.ini
 
 # ML model weights and export artifacts (all formats)
+models/
 *.pt
 *.pth
 *.onnx
