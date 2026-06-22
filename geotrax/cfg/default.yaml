@@ -201,7 +201,9 @@ plotting:
   show: false               # Show plots in an interactive window — CLI: --plot-show / --no-plot-show
   stationary_speed_cutoff: 1  # Minimum speed [km/h] for a vehicle to appear in speed/acceleration plots; [0, inf)
   savefig_font_size: 14       # Font size used in saved figures; [1, inf)
-  colors: ['#76b041', '#3274d9', '#ff61b4', '#ff9d00', '#9954bb', '#ffc000']  # Per-source trajectory colors used when aggregation is enabled
+  colors: ['#76b041', '#3274d9', '#ff61b4', '#ff9d00', '#9954bb', '#ffc000',
+            '#e84343', '#17becf', '#ef843c', '#2ca02c', '#8c564b', '#e377c2',
+            '#7f7f7f', '#bcbd22', '#1f60c4', '#a05195']  # Per-source trajectory colors used when aggregation is enabled
   skip_filenames_with: ['bus', 'ids', 'transf']  # Skip result files whose stem contains any of these substrings
   aggregate: false          # When the input is a folder, merge trajectories from all videos sharing the same location ID into one plot per location — CLI: --plot-aggregate / --no-plot-aggregate
   plot_points: false        # Plot discrete trajectory points instead of connected lines — CLI: --plot-points / --no-plot-points

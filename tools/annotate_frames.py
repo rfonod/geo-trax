@@ -23,7 +23,7 @@ Options:
                                           or a flat Ultralytics YAML. The annotator uses the config's
                                           'ultralytics:' detection settings; a bundled preset name
                                           (default, confident, lenient, stable) also works.
-    --model <str>                       : Override the config model — a local file path OR an
+    -m, --model <str>                   : Override the config model — a local file path OR an
                                           'hf://<org>/<name>/<file>.pt' Hugging Face reference
                                           (auto-downloaded and cached).
     -cn, --class-names <ID=NAME|FILE>   : Override class-id -> name labels on saved visualizations with a
@@ -31,7 +31,7 @@ Options:
     -v, --save-viz                      : Save images with colored bounding boxes overlaid.
     -z, --viz-dir <path>                : Directory to save visualization images. Defaults to
                                           '<annotations>/visualizations' when --save-viz is set.
-    -m, --save-masked                   : Save images with blacked-out vehicle regions.
+    -mk, --save-masked                  : Save images with blacked-out vehicle regions.
     -g, --margin <float>                : Margin factor to enlarge bounding boxes for masked images
                                           only (default: 0.0).
     -f, --conf <float>                  : Override the confidence threshold from the config file.
@@ -189,7 +189,7 @@ def run_annotator(args: argparse.Namespace, logger: logging.Logger) -> None:
     # Apply a class-name override (CLI > config) to the model so saved visualizations use the custom
     # labels. Without an override the model keeps its own embedded names.
     if args.class_names is not None or cfg_class_rename is not None:
-        model.names = resolve_class_names(
+        model.names, _ = resolve_class_names(
             Path(config['model']), args.class_names, cfg_class_rename, config.get('classes'), logger
         )
 
@@ -304,7 +304,7 @@ def parse_cli_args() -> argparse.Namespace:
     parser.add_argument('--cfg', '-c', type=Path, default=DEFAULT_CFG,
                         help="Pipeline config (a bundled preset name or a path) or a flat Ultralytics YAML; "
                              "the annotator uses its 'ultralytics:' detection settings.")
-    parser.add_argument('--model', type=str, default=None,
+    parser.add_argument('--model', '-m', type=str, default=None,
                         help="Detection model overriding the config — a local file path OR an "
                              "'hf://<org>/<name>/<file>.pt' Hugging Face reference (auto-downloaded and cached).")
     parser.add_argument('--class-names', '-cn', nargs='+', default=None, metavar='ID=NAME|FILE',
@@ -316,7 +316,7 @@ def parse_cli_args() -> argparse.Namespace:
                         help='Save images with colored bounding boxes overlaid')
     parser.add_argument('--viz-dir', '-z', type=Path,
                         help='Directory to save visualization images (default: <annotations>/visualizations)')
-    parser.add_argument('--save-masked', '-m', action='store_true',
+    parser.add_argument('--save-masked', '-mk', action='store_true',
                         help='Save images with blacked-out vehicle regions')
     parser.add_argument('--margin', '-g', type=float, default=0.0,
                         help='Margin factor to enlarge bounding boxes for masked images only (default: 0.0)')

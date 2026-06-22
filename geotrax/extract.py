@@ -67,6 +67,7 @@ Notes:
 """
 
 import argparse
+import datetime
 import logging
 import shutil
 import sys
@@ -83,6 +84,7 @@ from ultralytics import RTDETR, YOLO
 from ultralytics.utils.checks import check_yolo
 from ultralytics.utils.files import increment_path
 
+from geotrax import __version__
 from geotrax.utils.cli_utils import add_common_args
 from geotrax.utils.config_utils import backfill_args_from_config, load_config_all
 from geotrax.utils.file_utils import (
@@ -92,6 +94,12 @@ from geotrax.utils.file_utils import (
     get_video_dimensions,
 )
 from geotrax.utils.logging_utils import setup_logger
+
+_INFERENCE_KEYS = {
+    'conf', 'iou', 'imgsz', 'max_det', 'classes',
+    'augment', 'agnostic_nms', 'half', 'device', 'vid_stride',
+    'mode', 'task', 'stream_buffer',
+}
 
 
 def detect_track_stabilize(args: argparse.Namespace, logger: logging.Logger) -> None:
@@ -443,10 +451,55 @@ def save_results(tracks: np.ndarray, transforms: np.ndarray, config: Dict, logge
     else:
         logger.info(f"Video stabilization results saved to: '{transf_txt_file.resolve()}'")
 
-    serializable_config = convert_to_serializable(config)
+    metadata = convert_to_serializable(_build_run_metadata(config, save_dir))
     with open(info_yaml_file, 'w') as f:
-        yaml.dump(serializable_config, f, default_flow_style=False)
+        yaml.dump(metadata, f, default_flow_style=False, sort_keys=False)
     logger.info(f"Video info and configs saved to: '{info_yaml_file.resolve()}'")
+
+
+def _build_run_metadata(config: Dict, save_dir: Path) -> Dict:
+    """Build a structured, human-readable metadata dict to save alongside the video."""
+    main = config['main']
+    ul = config['ultralytics']
+    args = main['args']
+    active_classes = ul.get('classes') or []
+    class_mapping = main.get('class_names', {})
+
+    return {
+        'run': {
+            'geotrax_version': __version__,
+            'timestamp': datetime.datetime.now().isoformat(timespec='seconds'),
+            'source': str(args.source),
+            'config': str(args.cfg),
+            'output_folder': str(save_dir),
+        },
+        'model': {
+            'configured': main.get('model_configured'),
+            'resolved': ul.get('model'),
+        },
+        'class_names': {
+            'source': main.get('class_names_source', 'unknown'),
+            'mapping': {k: class_mapping[k] for k in sorted(active_classes) if k in class_mapping},
+        },
+        'extraction': {k: v for k, v in main.get('extraction', {}).items() if k != 'model'},
+        'processing': main.get('processing', {}),
+        'output': main.get('output', {}),
+        'detection': {k: v for k, v in ul.items() if k in _INFERENCE_KEYS},
+        'tracker': {
+            'active': main.get('tracker_active'),
+            'params': main.get('tracker_params', {}),
+        },
+        'stabilo': config['stabilo'],
+        'georef': config['georef'],
+        'paths': {
+            'ortho_folder': getattr(args, 'ortho_folder', None),
+            'master_folder': getattr(args, 'master_folder', None),
+            'segmentation_folder': getattr(args, 'segmentation_folder', None),
+        },
+        'visualization': main.get('visualization', {}),
+        'plotting': main.get('plotting', {}),
+        'batch': main.get('batch', {}),
+    }
 
 
 def add_processing_args(group) -> None:

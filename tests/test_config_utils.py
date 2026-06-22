@@ -142,35 +142,40 @@ def test_resolve_model_path_hf_missing_dependency_exits():
 # --- resolve_class_names ------------------------------------------------------
 
 def test_resolve_class_names_cli_inline_pairs_win():
-    result = resolve_class_names(Path('m.pt'), ['0=auto', '1=van'], {0: 'car'}, [0, 1], logger)
-    assert result == {0: 'auto', 1: 'van'}
+    mapping, source = resolve_class_names(Path('m.pt'), ['0=auto', '1=van'], {0: 'car'}, [0, 1], logger)
+    assert mapping == {0: 'auto', 1: 'van'}
+    assert source == 'cli'
 
 
 def test_resolve_class_names_config_when_no_cli():
-    result = resolve_class_names(Path('m.pt'), None, {0: 'car', 1: 'bus'}, [0, 1], logger)
-    assert result == {0: 'car', 1: 'bus'}
+    mapping, source = resolve_class_names(Path('m.pt'), None, {0: 'car', 1: 'bus'}, [0, 1], logger)
+    assert mapping == {0: 'car', 1: 'bus'}
+    assert source == 'config'
 
 
 def test_resolve_class_names_from_file(tmp_path):
     f = tmp_path / 'names.yaml'
     f.write_text('0: car\n1: bus\n')
-    result = resolve_class_names(Path('m.pt'), [str(f)], None, [0, 1], logger)
-    assert result == {0: 'car', 1: 'bus'}
+    mapping, source = resolve_class_names(Path('m.pt'), [str(f)], None, [0, 1], logger)
+    assert mapping == {0: 'car', 1: 'bus'}
+    assert source == 'cli'
 
 
 def test_resolve_class_names_falls_back_to_model():
     mock_model = MagicMock()
     mock_model.names = {0: 'Car', 1: 'Bus'}
     with patch('geotrax.utils.config_utils.YOLO', return_value=mock_model):
-        result = resolve_class_names(Path('m.pt'), None, None, [0, 1], logger)
-    assert result == {0: 'Car', 1: 'Bus'}
+        mapping, source = resolve_class_names(Path('m.pt'), None, None, [0, 1], logger)
+    assert mapping == {0: 'Car', 1: 'Bus'}
+    assert source == 'model'
 
 
 def test_resolve_class_names_integer_fallback_warns(caplog):
     with patch('geotrax.utils.config_utils.YOLO', side_effect=RuntimeError('boom')):
         with caplog.at_level('WARNING'):
-            result = resolve_class_names(Path('m.pt'), None, None, [0, 1, 2, 3], logger)
-    assert result == {0: '0', 1: '1', 2: '2', 3: '3'}
+            mapping, source = resolve_class_names(Path('m.pt'), None, None, [0, 1, 2, 3], logger)
+    assert mapping == {0: '0', 1: '1', 2: '2', 3: '3'}
+    assert source == 'fallback'
     assert any('integer class IDs' in r.message for r in caplog.records)
 
 

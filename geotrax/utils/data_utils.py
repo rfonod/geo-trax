@@ -11,8 +11,10 @@ class VizColors:
     """Color palette for video visualization."""
     def __init__(self) -> None:
         """Initialise the fixed RGB colour palette."""
-        hexs = ('1F77B4', 'D62728', 'FF7F0E', '006400', '8C564B', '9467BD',
-                '0000FF', 'FF0000', 'A52A2A', '000000', '00FF00', '800080')
+        hexs = ('4E79A7', 'F28E2B', 'E15759', '76B7B2', '59A14F', 'EDC948',
+                'B07AA1', 'FF9DA7', '9C755F', 'BAB0AC', 'A0CBE8', 'FFBE7D',
+                'FF9D9A', '86BCB6', '8CD17D', 'F1CE63', 'D4A6C8', 'FABFD2',
+                'D7B5A6', 'C7C7C7')
         self.palette = [self.hex2rgb(f'#{c}') for c in hexs]
         self.n = len(self.palette)
         self.txt_color = (255, 255, 255)

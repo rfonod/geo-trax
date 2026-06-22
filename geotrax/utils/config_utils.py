@@ -152,16 +152,24 @@ def load_config_all(args: argparse.Namespace, logger: logging.Logger, needs_mode
         # concrete local file for Ultralytics.
         extraction_cfg = full.get('extraction', {})
         model_ref = getattr(args, 'model', None) or extraction_cfg.get('model') or kwargs_ultralytics.get('model')
+        kwargs_main['model_configured'] = str(model_ref)
         kwargs_ultralytics['model'] = str(resolve_model_path(model_ref, logger))
-        kwargs_main['class_names'] = resolve_class_names(
+        kwargs_main['class_names'], kwargs_main['class_names_source'] = resolve_class_names(
             Path(kwargs_ultralytics['model']),
             getattr(args, 'class_names', None),
             extraction_cfg.get('class_rename'),
             kwargs_ultralytics.get('classes'),
             logger,
         )
+        active = kwargs_tracker.get('active')
+        kwargs_main['tracker_active'] = active
+        kwargs_main['tracker_params'] = kwargs_tracker.get(active, {}) if active else {}
     else:
         kwargs_main['class_names'] = {}
+        kwargs_main['class_names_source'] = None
+        kwargs_main['model_configured'] = None
+        kwargs_main['tracker_active'] = None
+        kwargs_main['tracker_params'] = {}
 
     kwargs_main['args'] = args
 
@@ -297,28 +305,34 @@ def resolve_class_names(
     cfg_value: Optional[Union[dict, str]],
     classes: Optional[list],
     logger: logging.Logger,
-) -> dict:
+) -> tuple:
     """Resolve the class-id -> name mapping by precedence: CLI > config > model > integer fallback.
 
     The CLI (``--class-names``) and config (``class_names:``) overrides accept an inline mapping, a
     ``.yaml``/``.json`` file path, or ``ID=NAME`` pairs. When none of CLI, config, or the model yields a
     mapping, integer labels (``{id: str(id)}``) are used over the configured ``classes`` ids (or
     ``range(100)``) and a warning is logged.
+
+    Returns a ``(mapping, source_label)`` tuple where ``source_label`` is one of
+    ``'cli'``, ``'config'``, ``'model'``, or ``'fallback'``.
     """
-    for source, value in (('--class-names', cli_value), ('config class_names', cfg_value)):
+    for source_label, log_tag, value in (
+        ('cli', '--class-names', cli_value),
+        ('config', 'config class_names', cfg_value),
+    ):
         if value is not None:
             mapping = _load_class_names_mapping(value, logger)
             if mapping is not None:
-                logger.info(f"Class names taken from {source}: {mapping}.")
-                return mapping
+                logger.info(f"Class names taken from {log_tag}: {mapping}.")
+                return mapping, source_label
 
     model_names = load_class_names_from_model(model_path, logger)
     if model_names:
-        return model_names
+        return model_names, 'model'
 
     ids = classes if classes else range(100)
     logger.warning(
         "No class-name mapping found (CLI, config, or model); falling back to integer class IDs. "
         "Provide one via cfg -> class_names or --class-names to label classes."
     )
-    return {int(i): str(int(i)) for i in ids}
+    return {int(i): str(int(i)) for i in ids}, 'fallback'
