@@ -109,7 +109,7 @@ def georeference(args: argparse.Namespace, logger: logging.Logger) -> None:
     """
     Georeference the tracking data using orthophotos.
     """
-    full_config = load_config_all(args, logger)
+    full_config = load_config_all(args, logger, needs_model=False)
     config = full_config['georef']
     gproc = config['processing']
     folders = full_config['main']['input']

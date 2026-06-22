@@ -23,6 +23,13 @@ Options:
                         run 'geotrax config show' to view it or 'geotrax config copy' to customize.
   --output-folder, -of <str> : Root folder for outputs (bare name or absolute path).
                         Defaults to cfg -> output -> folder (historical default: 'results').
+  --model, -m <str>   : Detection model used to resolve vehicle class names — a local file path
+                        OR an 'hf://<org>/<name>/<file>.pt' Hugging Face reference. Only needed
+                        when class names are not set via --class-names or cfg -> extraction ->
+                        class_rename. Defaults to cfg -> extraction -> model.
+  --class-names, -cn <ID=NAME|FILE> [...] : Class-id -> name mapping: a .yaml/.json file or
+                        inline ID=NAME pairs (e.g. -cn 0=car 1=bus). Overrides model-derived
+                        names. Defaults to cfg -> extraction -> class_rename, then model names.
   --log-path, -lp <str> : Where to write logs: a directory or a full file path; defaults to a platform-specific log directory.
   --verbose, -v       : Set print verbosity level to INFO (default: WARNING).
 
@@ -618,6 +625,8 @@ def parse_cli_args() -> argparse.Namespace:
 
     optional = parser.add_argument_group('Optional arguments')
     add_common_args(optional)
+    optional.add_argument('--model', '-m', type=str, default=None, help="Detection model used to resolve vehicle class names: a local path OR an 'hf://<org>/<name>/<file>.pt' reference. Defaults to cfg -> extraction -> model.")
+    optional.add_argument('--class-names', '-cn', nargs='+', default=None, metavar='ID=NAME|FILE', help="Class-id -> name mapping: a .yaml/.json file or inline ID=NAME pairs (e.g. -cn 0=car 1=bus). Defaults to cfg -> extraction -> class_rename, then model names.")
 
     viz = parser.add_argument_group('Visualization arguments')
     add_visualization_args(viz)

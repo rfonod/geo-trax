@@ -110,7 +110,7 @@ def resolve_model_path(model_ref: Union[str, Path], logger: logging.Logger) -> P
     return Path(local_path)
 
 
-def load_config_all(args: argparse.Namespace, logger: logging.Logger) -> dict:
+def load_config_all(args: argparse.Namespace, logger: logging.Logger, needs_model: bool = True) -> dict:
     """Load the unified pipeline configuration file and return a nested dict.
 
     The pipeline config is a single YAML file with top-level sections: input, output,
@@ -118,6 +118,10 @@ def load_config_all(args: argparse.Namespace, logger: logging.Logger) -> dict:
     tracker. The tracker section holds an 'active' selector plus a full parameter block per
     supported tracker; the active block is written to a temporary YAML file so Ultralytics can
     read it as a file path (its required interface).
+
+    Set ``needs_model=False`` for stages (e.g. georeferencing) that never use the detection
+    model or class names. This skips the tracker YAML, model path resolution, and HF download
+    for those stages so a missing or unavailable model does not abort them.
     """
     full = load_config(args.cfg, logger)
 
@@ -128,21 +132,25 @@ def load_config_all(args: argparse.Namespace, logger: logging.Logger) -> dict:
     kwargs_main        = {k: v for k, v in full.items()
                           if k not in ('tracker', 'stabilo', 'ultralytics', 'georef')}
 
-    kwargs_ultralytics['tracker'] = str(_write_tracker_yaml(kwargs_tracker, args.cfg, logger))
-    # The model and class-rename mapping live in the 'extraction:' section (the 'ultralytics:' section
-    # keeps only a pointer comment). A CLI --model override takes precedence over the config value, then
-    # the reference (local path or hf:// auto-download) is resolved to a concrete local file for Ultralytics.
-    extraction_cfg = full.get('extraction', {})
-    model_ref = getattr(args, 'model', None) or extraction_cfg.get('model') or kwargs_ultralytics.get('model')
-    kwargs_ultralytics['model'] = str(resolve_model_path(model_ref, logger))
+    if needs_model:
+        kwargs_ultralytics['tracker'] = str(_write_tracker_yaml(kwargs_tracker, args.cfg, logger))
+        # The model and class-rename mapping live in the 'extraction:' section (the 'ultralytics:'
+        # section keeps only a pointer comment). A CLI --model override takes precedence over the
+        # config value, then the reference (local path or hf:// auto-download) is resolved to a
+        # concrete local file for Ultralytics.
+        extraction_cfg = full.get('extraction', {})
+        model_ref = getattr(args, 'model', None) or extraction_cfg.get('model') or kwargs_ultralytics.get('model')
+        kwargs_ultralytics['model'] = str(resolve_model_path(model_ref, logger))
+        kwargs_main['class_names'] = resolve_class_names(
+            Path(kwargs_ultralytics['model']),
+            getattr(args, 'class_names', None),
+            extraction_cfg.get('class_rename'),
+            kwargs_ultralytics.get('classes'),
+            logger,
+        )
+    else:
+        kwargs_main['class_names'] = {}
 
-    kwargs_main['class_names'] = resolve_class_names(
-        Path(kwargs_ultralytics['model']),
-        getattr(args, 'class_names', None),
-        extraction_cfg.get('class_rename'),
-        kwargs_ultralytics.get('classes'),
-        logger,
-    )
     kwargs_main['args'] = args
 
     keys_to_update = ['classes', 'conf', 'show']
