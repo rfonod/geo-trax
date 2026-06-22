@@ -21,10 +21,11 @@ except ImportError:
     YOLO = None
 
 try:
-    from huggingface_hub import hf_hub_download
+    from huggingface_hub import hf_hub_download, try_to_load_from_cache
     from huggingface_hub.constants import HF_HUB_CACHE as _HF_HUB_CACHE
 except ImportError:
     hf_hub_download = None
+    try_to_load_from_cache = None
     _HF_HUB_CACHE = None
 
 ROOT_DIR = PACKAGE_DIR.parent  # repository root (source checkout) or site-packages (installed)
@@ -103,17 +104,21 @@ def resolve_model_path(model_ref: Union[str, Path], logger: logging.Logger) -> P
 
     repo_id = '/'.join(parts[:2])
     filename = '/'.join(parts[2:])
-    cache_hint = str(_HF_HUB_CACHE) if _HF_HUB_CACHE else '~/.cache/huggingface/hub'
-    logger.notice(
-        f"Downloading '{filename}' from Hugging Face (repo: '{repo_id}') → "
-        f"cache: '{cache_hint}' (override via HF_HOME or HF_HUB_CACHE) ..."
-    )
+    cached = try_to_load_from_cache(repo_id=repo_id, filename=filename) if try_to_load_from_cache else None
+    is_cached = isinstance(cached, str)
+    if not is_cached:
+        cache_hint = str(_HF_HUB_CACHE) if _HF_HUB_CACHE else '~/.cache/huggingface/hub'
+        logger.notice(
+            f"Downloading '{filename}' from Hugging Face (repo: '{repo_id}') → "
+            f"cache: '{cache_hint}' (override via HF_HOME or HF_HUB_CACHE) ..."
+        )
     try:
         local_path = hf_hub_download(repo_id=repo_id, filename=filename)
     except Exception as e:
         logger.critical(f"Failed to download model '{filename}' from Hugging Face repo '{repo_id}': {e}")
         sys.exit(1)
-    logger.notice(f"Model ready: '{local_path}'")
+    if is_cached:
+        logger.info(f"Model '{filename}' loaded from cache: '{local_path}'.")
     return Path(local_path)
 
 
