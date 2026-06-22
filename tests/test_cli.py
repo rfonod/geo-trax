@@ -8,7 +8,7 @@ import sys
 
 import pytest
 
-from geotrax.cli import COMMANDS
+from geotrax.cli import COMMANDS, build_usage
 
 
 def run_cli(*args):
@@ -57,3 +57,10 @@ def test_subcommand_without_required_args_fails():
     result = run_cli('visualize')
     assert result.returncode == 2
     assert 'required' in result.stderr or 'arguments' in result.stderr
+
+
+def test_build_usage_contains_all_commands():
+    usage = build_usage()
+    assert isinstance(usage, str)
+    for name in COMMANDS:
+        assert name in usage

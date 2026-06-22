@@ -12,6 +12,7 @@ import pytest
 
 from geotrax import CFG_DIR
 from geotrax.utils.config_utils import (
+    backfill_args_from_config,
     load_class_names_from_model,
     load_config,
     load_config_all,
@@ -171,3 +172,25 @@ def test_resolve_class_names_integer_fallback_warns(caplog):
             result = resolve_class_names(Path('m.pt'), None, None, [0, 1, 2, 3], logger)
     assert result == {0: '0', 1: '1', 2: '2', 3: '3'}
     assert any('integer class IDs' in r.message for r in caplog.records)
+
+
+# --- backfill_args_from_config -----------------------------------------------
+
+def test_backfill_args_fills_none_values():
+    args = argparse.Namespace(conf=None, classes=[0, 1])
+    backfill_args_from_config(args, {'conf': 0.25, 'classes': [0, 1, 2]})
+    assert args.conf == 0.25           # was None → filled
+    assert args.classes == [0, 1]      # already set → unchanged
+
+
+def test_backfill_args_noop_when_already_set():
+    args = argparse.Namespace(verbose=True)
+    backfill_args_from_config(args, {'verbose': False})
+    assert args.verbose is True        # pre-existing value must not be overwritten
+
+
+def test_backfill_args_missing_key_raises():
+    # The function only operates on existing Namespace attributes; a missing key raises.
+    args = argparse.Namespace()
+    with pytest.raises(AttributeError):
+        backfill_args_from_config(args, {'no_such_attr': 42})

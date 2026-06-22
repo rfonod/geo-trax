@@ -9,11 +9,13 @@ from pathlib import Path
 import pytest
 
 from geotrax.utils.file_utils import (
+    build_result_path,
     check_if_results_exist,
     convert_to_serializable,
     detect_delimiter,
     determine_location_id,
     determine_suffix_and_fourcc,
+    get_output_dir,
 )
 
 
@@ -78,3 +80,51 @@ def test_determine_suffix_and_fourcc():
     suffix, fourcc = determine_suffix_and_fourcc()
     assert suffix in {'mp4', 'avi'}
     assert isinstance(fourcc, str) and len(fourcc) == 4
+
+
+# --- get_output_dir ----------------------------------------------------------
+
+@pytest.mark.parametrize(
+    'cfg, source, expected_suffix',
+    [
+        (None, Path('/data/video.mp4'), 'results'),           # default folder
+        ({'folder': 'out'}, Path('/data/video.mp4'), 'out'),  # custom relative folder
+    ],
+)
+def test_get_output_dir_relative(cfg, source, expected_suffix):
+    result = get_output_dir(source, cfg)
+    assert result == source.parent / expected_suffix
+
+
+def test_get_output_dir_absolute_folder():
+    source = Path('/data/video.mp4')
+    cfg = {'folder': '/shared/output'}
+    result = get_output_dir(source, cfg)
+    assert result == Path('/shared/output')
+
+
+# --- build_result_path -------------------------------------------------------
+
+@pytest.mark.parametrize(
+    'result_type, extra_kwargs, expected_name',
+    [
+        ('processed', {}, 'video.txt'),
+        ('video_transformations', {}, 'video_vid_transf.txt'),
+        ('geo_transformations', {}, 'video_geo_transf.txt'),
+        ('georeferenced', {}, 'video.csv'),
+        ('visualized', {'viz_mode': 1, 'ext': 'mp4'}, 'video_mode_1.mp4'),
+    ],
+)
+def test_build_result_path_default_cfg(result_type, extra_kwargs, expected_name):
+    source = Path('/data/video.mp4')
+    result = build_result_path(source, result_type, **extra_kwargs)
+    assert result == source.parent / 'results' / expected_name
+
+
+def test_build_result_path_video_returns_source():
+    source = Path('/data/video.mp4')
+    assert build_result_path(source, 'video') == source
+
+
+def test_build_result_path_unknown_type_returns_none():
+    assert build_result_path(Path('/data/video.mp4'), 'unknown') is None
