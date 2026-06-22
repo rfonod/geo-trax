@@ -53,9 +53,9 @@ _PRESETS = ['default', 'confident', 'lenient', 'stable']
 
 _PRESET_DESCRIPTIONS = {
     'default':   'Balanced baseline; suitable for most scenes.',
-    'confident': 'Higher confidence (conf=0.4) with TTA; fewer but more reliable detections.',
-    'lenient':   'Lower confidence (conf=0.1), higher cap (max_det=1500); maximises recall.',
-    'stable':    'Full-resolution stabilization (downsample_ratio=1.0); slower but more accurate.',
+    'confident': 'Precision: higher conf (0.4), tighter NMS, longer min track; fewer, more reliable detections.',
+    'lenient':   'Recall: relaxes every threshold (conf 0.15, max_det 1500, looser NMS/association/track-init).',
+    'stable':    'Stabilization quality: full res + more features + CLAHE + stricter matching; slower, more accurate.',
 }
 
 _COPY_SUFFIX = '_copy'

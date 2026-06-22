@@ -355,7 +355,7 @@ tracker:
     track_low_thresh: 0.1    # Detection confidence threshold for second-stage (low-confidence) recovery; [0.0, 1.0]
     new_track_thresh: 0.25   # Minimum confidence to initialise a new track; higher reduces false track initiations; [0.0, 1.0]
     track_buffer: 30         # Frames to keep a lost track alive before deletion; higher tolerates longer occlusions; [1, inf)
-    match_thresh: 0.8        # IoU/cost threshold for track-detection assignment; higher = stricter matching; [0.0, 1.0]
+    match_thresh: 0.8        # Max association cost (1 - IoU) for track-detection matching; higher = looser (accepts lower-IoU matches); [0.0, 1.0]
     fuse_score: true         # Fuse detection confidence with the IoU cost matrix; improves weak-detection robustness; [true, false]
     # BoT-SORT specific
     gmc_method: sparseOptFlow  # Global motion compensation method; choices: [sparseOptFlow, orb, sift, ecc, none]
@@ -372,7 +372,7 @@ tracker:
     track_low_thresh: 0.1    # Detection confidence threshold for second-stage (low-confidence) recovery; [0.0, 1.0]
     new_track_thresh: 0.25   # Minimum confidence to initialise a new track; higher reduces false track initiations; [0.0, 1.0]
     track_buffer: 30         # Frames to keep a lost track alive before deletion; higher tolerates longer occlusions; [1, inf)
-    match_thresh: 0.8        # IoU/cost threshold for track-detection assignment; higher = stricter matching; [0.0, 1.0]
+    match_thresh: 0.8        # Max association cost (1 - IoU) for track-detection matching; higher = looser (accepts lower-IoU matches); [0.0, 1.0]
     fuse_score: true         # Fuse detection confidence with the IoU cost matrix; improves weak-detection robustness; [true, false]
 
   # OC-SORT — observation-centric, motion-only, ReID-free; robust to occlusion and non-linear motion.
@@ -382,7 +382,7 @@ tracker:
     track_low_thresh: 0.1    # Detection confidence threshold for second-stage recovery; only used when use_byte=true; [0.0, 1.0]
     new_track_thresh: 0.25   # Minimum confidence to initialise a new track; higher reduces false track initiations; [0.0, 1.0]
     track_buffer: 30         # Frames to keep a lost track alive before deletion; higher tolerates longer occlusions; [1, inf)
-    match_thresh: 0.8        # IoU/cost threshold for track-detection assignment; higher = stricter matching; [0.0, 1.0]
+    match_thresh: 0.8        # Max association cost (1 - IoU) for track-detection matching; higher = looser (accepts lower-IoU matches); [0.0, 1.0]
     fuse_score: true         # Fuse detection confidence with the IoU cost matrix; improves weak-detection robustness; [true, false]
     # OC-SORT specific
     delta_t: 3       # Temporal window [frames] for velocity-direction estimation in the OCM module; higher smooths more; [1, inf)
@@ -396,7 +396,7 @@ tracker:
     track_low_thresh: 0.1     # Detection confidence threshold for second-stage recovery; only used when use_byte=true; [0.0, 1.0]
     new_track_thresh: 0.3     # Minimum confidence to initialise a new track; higher reduces false track initiations; [0.0, 1.0]
     track_buffer: 30          # Frames to keep a lost track alive before deletion; higher tolerates longer occlusions; [1, inf)
-    match_thresh: 0.8         # IoU/cost threshold for track-detection assignment; higher = stricter matching; [0.0, 1.0]
+    match_thresh: 0.8         # Max association cost (1 - IoU) for track-detection matching; higher = looser (accepts lower-IoU matches); [0.0, 1.0]
     fuse_score: true          # Fuse detection confidence with the IoU cost matrix; improves weak-detection robustness; [true, false]
     # OC-SORT specific (inherited)
     delta_t: 3       # Temporal window [frames] for velocity-direction estimation in the OCM module; higher smooths more; [1, inf)
@@ -417,7 +417,7 @@ tracker:
     track_low_thresh: 0.1    # Detection confidence threshold for second-stage (low-confidence) recovery; [0.0, 1.0]
     new_track_thresh: 0.25   # Minimum confidence to initialise a new track; higher reduces false track initiations; [0.0, 1.0]
     track_buffer: 30         # Frames to keep a lost track alive before deletion; higher tolerates longer occlusions; [1, inf)
-    match_thresh: 0.8        # IoU/cost threshold for track-detection assignment; higher = stricter matching; [0.0, 1.0]
+    match_thresh: 0.8        # Max association cost (1 - IoU) for track-detection matching; higher = looser (accepts lower-IoU matches); [0.0, 1.0]
     fuse_score: true         # Fuse detection confidence with the IoU cost matrix; improves weak-detection robustness; [true, false]
     # FastTracker specific (occlusion handling)
     reset_velocity_offset_occ: 5    # History frames to roll back for restoring Kalman velocity at occlusion onset; [0, inf)
@@ -436,7 +436,7 @@ tracker:
     track_low_thresh: 0.25    # Detection confidence threshold for second-stage (low-confidence) recovery; [0.0, 1.0]
     new_track_thresh: 0.7     # Minimum confidence to initialise a new track via track-aware initialisation (TAI); [0.0, 1.0]
     track_buffer: 30          # Frames to keep a lost track alive before deletion; higher tolerates longer occlusions; [1, inf)
-    match_thresh: 0.7         # Initial matching threshold for iterative assignment; higher = stricter matching; [0.0, 1.0]
+    match_thresh: 0.7         # Initial cost gate for iterative assignment; higher = looser (accepts higher-cost matches); [0.0, 1.0]
     lost_match_thr: 0.0       # Relaxed rebind-cost gate for still-Lost tracks; 0 disables the second pass; raise (e.g. 0.9) for long-occlusion scenes; [0.0, 1.0]
     # Association weights
     iou_weight: 0.5    # Weight of the HMIoU distance in the cost matrix; [0.0, 1.0]

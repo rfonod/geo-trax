@@ -1,11 +1,15 @@
 # geo-trax pipeline configuration — "stable" preset (stable.yaml).
 #
-# Identical to default.yaml except for full-resolution stabilization. Produces higher-fidelity
-# feature extraction and more precise bounding-box stabilization, at the cost of slower
-# processing. Use when stabilization quality is the priority (e.g. shaky footage).
+# A stabilization-quality preset: full-resolution stabilization with more keypoints, CLAHE
+# pre-processing, and a stricter match filter. Produces higher-fidelity feature extraction and
+# more precise bounding-box stabilization, at the cost of slower processing. Use when
+# stabilization quality is the priority (e.g. shaky footage). The ORB detector is retained.
 #
 # Differs from default.yaml:
-#   stabilo.downsample_ratio: 0.5 -> 1.0
+#   stabilo.downsample_ratio: 0.5   -> 1.0
+#   stabilo.max_features:     2000  -> 4000
+#   stabilo.clahe:            false -> true
+#   stabilo.filter_ratio:     0.9   -> 0.8
 #
 # This file ships bundled inside the installed package. You normally do not edit it in place.
 # Instead, work with a local copy:
@@ -107,18 +111,18 @@ extraction:
 # Full parameter reference: https://github.com/rfonod/stabilo
 stabilo:
   # Image pre-processing
-  clahe: false          # Apply Contrast Limited Adaptive Histogram Equalization before feature detection; [true, false]
+  clahe: true           # Apply Contrast Limited Adaptive Histogram Equalization before feature detection; [true, false] — enabled (stability preset): more features in low-contrast regions
   downsample_ratio: 1.0 # Resize input frames by this factor before processing; lower = faster but fewer features; (0.0, 1.0]
 
   # Feature detector and descriptor
   detector_name: 'orb'  # Feature detector/descriptor; choices: [orb, sift, rsift, brisk, kaze, akaze]
-  max_features: 2000    # Maximum keypoints to detect per frame; higher = more robust but slower; [0, inf)
+  max_features: 4000    # Maximum keypoints to detect per frame; higher = more robust but slower; [0, inf) — raised (stability preset) for a more robust homography
   ref_multiplier: 2.0   # Multiplier applied to max_features for the reference frame only; (0.0, inf)
 
   # Feature matching and filtering
   matcher_name: 'bf'    # Matching strategy; choices: [bf (brute-force), flann]
   filter_type: 'ratio'  # Post-match filter; choices: [none, ratio (Lowe), distance]
-  filter_ratio: 0.9     # Lowe ratio-test threshold; lower = stricter (fewer but better matches); (0.0, 1.0]
+  filter_ratio: 0.8     # Lowe ratio-test threshold; lower = stricter (fewer but better matches); (0.0, 1.0] — stricter (stability preset): keep only the best matches
 
   # Transformation estimation
   transformation_type: 'projective'  # Geometric model to estimate; choices: [projective, affine]
@@ -361,7 +365,7 @@ tracker:
     track_low_thresh: 0.1    # Detection confidence threshold for second-stage (low-confidence) recovery; [0.0, 1.0]
     new_track_thresh: 0.25   # Minimum confidence to initialise a new track; higher reduces false track initiations; [0.0, 1.0]
     track_buffer: 30         # Frames to keep a lost track alive before deletion; higher tolerates longer occlusions; [1, inf)
-    match_thresh: 0.8        # IoU/cost threshold for track-detection assignment; higher = stricter matching; [0.0, 1.0]
+    match_thresh: 0.8        # Max association cost (1 - IoU) for track-detection matching; higher = looser (accepts lower-IoU matches); [0.0, 1.0]
     fuse_score: true         # Fuse detection confidence with the IoU cost matrix; improves weak-detection robustness; [true, false]
     # BoT-SORT specific
     gmc_method: sparseOptFlow  # Global motion compensation method; choices: [sparseOptFlow, orb, sift, ecc, none]
@@ -378,7 +382,7 @@ tracker:
     track_low_thresh: 0.1    # Detection confidence threshold for second-stage (low-confidence) recovery; [0.0, 1.0]
     new_track_thresh: 0.25   # Minimum confidence to initialise a new track; higher reduces false track initiations; [0.0, 1.0]
     track_buffer: 30         # Frames to keep a lost track alive before deletion; higher tolerates longer occlusions; [1, inf)
-    match_thresh: 0.8        # IoU/cost threshold for track-detection assignment; higher = stricter matching; [0.0, 1.0]
+    match_thresh: 0.8        # Max association cost (1 - IoU) for track-detection matching; higher = looser (accepts lower-IoU matches); [0.0, 1.0]
     fuse_score: true         # Fuse detection confidence with the IoU cost matrix; improves weak-detection robustness; [true, false]
 
   # OC-SORT — observation-centric, motion-only, ReID-free; robust to occlusion and non-linear motion.
@@ -388,7 +392,7 @@ tracker:
     track_low_thresh: 0.1    # Detection confidence threshold for second-stage recovery; only used when use_byte=true; [0.0, 1.0]
     new_track_thresh: 0.25   # Minimum confidence to initialise a new track; higher reduces false track initiations; [0.0, 1.0]
     track_buffer: 30         # Frames to keep a lost track alive before deletion; higher tolerates longer occlusions; [1, inf)
-    match_thresh: 0.8        # IoU/cost threshold for track-detection assignment; higher = stricter matching; [0.0, 1.0]
+    match_thresh: 0.8        # Max association cost (1 - IoU) for track-detection matching; higher = looser (accepts lower-IoU matches); [0.0, 1.0]
     fuse_score: true         # Fuse detection confidence with the IoU cost matrix; improves weak-detection robustness; [true, false]
     # OC-SORT specific
     delta_t: 3       # Temporal window [frames] for velocity-direction estimation in the OCM module; higher smooths more; [1, inf)
@@ -402,7 +406,7 @@ tracker:
     track_low_thresh: 0.1     # Detection confidence threshold for second-stage recovery; only used when use_byte=true; [0.0, 1.0]
     new_track_thresh: 0.3     # Minimum confidence to initialise a new track; higher reduces false track initiations; [0.0, 1.0]
     track_buffer: 30          # Frames to keep a lost track alive before deletion; higher tolerates longer occlusions; [1, inf)
-    match_thresh: 0.8         # IoU/cost threshold for track-detection assignment; higher = stricter matching; [0.0, 1.0]
+    match_thresh: 0.8         # Max association cost (1 - IoU) for track-detection matching; higher = looser (accepts lower-IoU matches); [0.0, 1.0]
     fuse_score: true          # Fuse detection confidence with the IoU cost matrix; improves weak-detection robustness; [true, false]
     # OC-SORT specific (inherited)
     delta_t: 3       # Temporal window [frames] for velocity-direction estimation in the OCM module; higher smooths more; [1, inf)
@@ -423,7 +427,7 @@ tracker:
     track_low_thresh: 0.1    # Detection confidence threshold for second-stage (low-confidence) recovery; [0.0, 1.0]
     new_track_thresh: 0.25   # Minimum confidence to initialise a new track; higher reduces false track initiations; [0.0, 1.0]
     track_buffer: 30         # Frames to keep a lost track alive before deletion; higher tolerates longer occlusions; [1, inf)
-    match_thresh: 0.8        # IoU/cost threshold for track-detection assignment; higher = stricter matching; [0.0, 1.0]
+    match_thresh: 0.8        # Max association cost (1 - IoU) for track-detection matching; higher = looser (accepts lower-IoU matches); [0.0, 1.0]
     fuse_score: true         # Fuse detection confidence with the IoU cost matrix; improves weak-detection robustness; [true, false]
     # FastTracker specific (occlusion handling)
     reset_velocity_offset_occ: 5    # History frames to roll back for restoring Kalman velocity at occlusion onset; [0, inf)
@@ -442,7 +446,7 @@ tracker:
     track_low_thresh: 0.25    # Detection confidence threshold for second-stage (low-confidence) recovery; [0.0, 1.0]
     new_track_thresh: 0.7     # Minimum confidence to initialise a new track via track-aware initialisation (TAI); [0.0, 1.0]
     track_buffer: 30          # Frames to keep a lost track alive before deletion; higher tolerates longer occlusions; [1, inf)
-    match_thresh: 0.7         # Initial matching threshold for iterative assignment; higher = stricter matching; [0.0, 1.0]
+    match_thresh: 0.7         # Initial cost gate for iterative assignment; higher = looser (accepts higher-cost matches); [0.0, 1.0]
     lost_match_thr: 0.0       # Relaxed rebind-cost gate for still-Lost tracks; 0 disables the second pass; raise (e.g. 0.9) for long-occlusion scenes; [0.0, 1.0]
     # Association weights
     iou_weight: 0.5    # Weight of the HMIoU distance in the cost matrix; [0.0, 1.0]
