@@ -509,7 +509,7 @@ def add_processing_args(group) -> None:
     Used by both ``geotrax extract`` and ``geotrax batch`` so the two expose an identical set
     of processing options. Every flag defaults to ``None`` and is backfilled from the config.
     """
-    group.add_argument('--model', '-m', type=str, default=None, help="Detection model to use: a local file path OR an 'hf://<org>/<name>/<file>.pt' Hugging Face reference (auto-downloaded & cached). Defaults to cfg -> extraction -> model.")
+    group.add_argument('--model', '-m', nargs='+', default=None, metavar='MODEL', help="Detection model to use: a local file path OR an 'hf://<org>/<name>/<file>.pt' Hugging Face reference (auto-downloaded & cached). Defaults to cfg -> extraction -> model.")
     group.add_argument('--class-names', '-cn', nargs='+', default=None, metavar='ID=NAME|FILE', help="Rename class-id -> name labels: a .yaml/.json mapping file or inline ID=NAME pairs (e.g. -cn 0=car 1=bus). Defaults to cfg -> extraction -> class_rename, then the model's own names.")
     group.add_argument('--conf', '-co', type=float, default=None, help='Detection confidence threshold. Defaults to cfg -> ultralytics -> conf.')
     group.add_argument('--classes', '-cls', nargs='+', type=int, default=None, help='Class IDs to extract (e.g., --classes 0 1 2). Defaults to cfg -> ultralytics -> classes.')

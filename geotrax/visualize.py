@@ -625,7 +625,7 @@ def parse_cli_args() -> argparse.Namespace:
 
     optional = parser.add_argument_group('Optional arguments')
     add_common_args(optional)
-    optional.add_argument('--model', '-m', type=str, default=None, help="Detection model used to resolve vehicle class names: a local path OR an 'hf://<org>/<name>/<file>.pt' reference. Defaults to cfg -> extraction -> model.")
+    optional.add_argument('--model', '-m', nargs='+', default=None, metavar='MODEL', help="Detection model used to resolve vehicle class names: a local path OR an 'hf://<org>/<name>/<file>.pt' reference. Defaults to cfg -> extraction -> model.")
     optional.add_argument('--class-names', '-cn', nargs='+', default=None, metavar='ID=NAME|FILE', help="Class-id -> name mapping: a .yaml/.json file or inline ID=NAME pairs (e.g. -cn 0=car 1=bus). Defaults to cfg -> extraction -> class_rename, then model names.")
 
     viz = parser.add_argument_group('Visualization arguments')

@@ -82,9 +82,11 @@ def resolve_model_path(model_ref: Union[str, Path], logger: logging.Logger) -> P
       * A local path (absolute or relative), which keeps the historical behaviour via
         :func:`resolve_asset_path` and is never downloaded.
     """
-    model_str = str(model_ref)
+    model_str = str(model_ref).strip()
+    if model_str.startswith('hf download '):
+        model_str = model_str[len('hf download '):].strip()
     if not model_str.startswith(HF_PREFIX):
-        return resolve_asset_path(model_ref)
+        return resolve_asset_path(model_str)
 
     if hf_hub_download is None:
         logger.critical(
@@ -151,7 +153,10 @@ def load_config_all(args: argparse.Namespace, logger: logging.Logger, needs_mode
         # config value, then the reference (local path or hf:// auto-download) is resolved to a
         # concrete local file for Ultralytics.
         extraction_cfg = full.get('extraction', {})
-        model_ref = getattr(args, 'model', None) or extraction_cfg.get('model') or kwargs_ultralytics.get('model')
+        raw_model = getattr(args, 'model', None)
+        if isinstance(raw_model, list):
+            raw_model = ' '.join(raw_model)
+        model_ref = raw_model or extraction_cfg.get('model') or kwargs_ultralytics.get('model')
         kwargs_main['model_configured'] = str(model_ref)
         kwargs_ultralytics['model'] = str(resolve_model_path(model_ref, logger))
         kwargs_main['class_names'], kwargs_main['class_names_source'] = resolve_class_names(

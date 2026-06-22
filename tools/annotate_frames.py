@@ -304,7 +304,7 @@ def parse_cli_args() -> argparse.Namespace:
     parser.add_argument('--cfg', '-c', type=Path, default=DEFAULT_CFG,
                         help="Pipeline config (a bundled preset name or a path) or a flat Ultralytics YAML; "
                              "the annotator uses its 'ultralytics:' detection settings.")
-    parser.add_argument('--model', '-m', type=str, default=None,
+    parser.add_argument('--model', '-m', nargs='+', default=None, metavar='MODEL',
                         help="Detection model overriding the config — a local file path OR an "
                              "'hf://<org>/<name>/<file>.pt' Hugging Face reference (auto-downloaded and cached).")
     parser.add_argument('--class-names', '-cn', nargs='+', default=None, metavar='ID=NAME|FILE',
@@ -364,6 +364,8 @@ def parse_cli_args() -> argparse.Namespace:
 def main() -> None:
     """Command-line entry point."""
     args = parse_cli_args()
+    if isinstance(args.model, list):
+        args.model = ' '.join(args.model)
     logger = setup_logger(Path(__file__).stem, verbose=not args.quiet, log_path=args.log_path)
 
     run_annotator(args, logger)
