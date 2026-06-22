@@ -27,7 +27,9 @@ Options:
   -rf, --ref-frame <int>                   : Reference frame used for stabilization/georeferencing (default: 0).
   -viz, --visualize                        : Visualize flight logs and anomalies (default: False).
   -sv, --save-viz                          : Save visualization to a PDF file (default: False).
-  -m, --match-pattern <str>                : Glob pattern to match flight logs (default: '??.CSV').
+  -m, --match-pattern <str>                : Glob pattern (case-insensitive) for flight-log files (default: '*.csv').
+                                             CSVs lacking flight-log columns are skipped automatically; narrow the
+                                             pattern (e.g. '??.csv' for short clip names like A1, B2) to limit the scan.
   -c, --cfg <path>                         : Pipeline config used to resolve the output folder and filename postfixes.
                                              Defaults to the bundled config (geotrax/cfg/default.yaml).
   -fe, --folders-exclude <str> [<str> ...] : Folders to exclude from the search (default: [output.folder from config]).
@@ -151,7 +153,7 @@ def find_all_flight_logs(input_folder: Path, match_pattern: str, folders_exclude
     for item in input_folder.iterdir():
         if item.is_dir() and item.name not in folders_exclude:
             flight_logs.extend(find_all_flight_logs(item, match_pattern, folders_exclude, logger))
-        elif item.is_file() and fnmatch.fnmatch(item.name, match_pattern):
+        elif item.is_file() and fnmatch.fnmatch(item.name.lower(), match_pattern.lower()):
             flight_logs.append(item)
 
     if not flight_logs:
@@ -181,6 +183,9 @@ def extract_flight_logs_stats(flight_logs: list, input_folder: Path, ref_frame: 
             iso_ref, shutter_ref, fnum_ref, ct_ref, focal_len_ref = df.loc[df['frame'] == ref_frame, ['iso', 'shutter', 'fnum', 'ct', 'focal_len']].values[0]
         except IndexError:
             logger.warning(f"Reference frame {ref_frame} not found in {flight_log}. Skipping...")
+            continue
+        except KeyError:
+            logger.warning(f"{flight_log} is missing expected flight-log columns; not a flight log? Skipping...")
             continue
 
         try:
@@ -461,7 +466,7 @@ def parse_cli_args() -> argparse.Namespace:
     parser.add_argument("--visualize", "-viz", action="store_true", help="Visualize the flight logs and anomalies.")
     parser.add_argument("--save-viz", "-sv", action="store_true", help="Save the visualization to a PDF file.")
     parser.add_argument("--cfg", "-c", type=Path, default=DEFAULT_CFG, help="Pipeline config used to resolve the output folder and filename postfixes. Defaults to the bundled config.")
-    parser.add_argument("--match-pattern", "-m", type=str, default='??.CSV', help="Pattern to match the flight logs.")
+    parser.add_argument("--match-pattern", "-m", type=str, default='*.csv', help="Glob pattern (case-insensitive) for flight-log files. Default '*.csv' matches any naming; narrow it (e.g. '??.csv' for short clip names like A1, B2) to skip auxiliary CSVs.")
     parser.add_argument("--folders-exclude", "-fe", type=str, nargs='+', default=[DEFAULT_OUTPUT['folder']], help="Folders to exclude from the search (default: [output.folder from config]).")
     parser.add_argument("--target-crs", "-tcrs", default='epsg:5186', help="Target CRS for local coordinates")
     parser.add_argument("--track-check", "-tc", action="store_true", help="Check if all frames are present in the tracking results and vice versa.")

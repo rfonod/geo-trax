@@ -83,18 +83,20 @@ unzip master_frames.zip && rm master_frames.zip
 
 ### Expected Directory Structure
 
-After downloading and extracting the files, your `data/` directory should have the following structure:
+> **Note:** This is a **simplified, sample-only** layout. The orthophoto, master-frame, and segmentation folders sit flat under `data/` and are passed explicitly via `-orf` / `-osf` / `-mf`, which **bypasses** the default auto-detection (a `PROCESSED/` folder with a sibling `ORTHOPHOTOS/` containing nested `master_frames/` and `segmentations/`). For the recommended layout used in real multi-drone projects, see [Recommended project folder structure](../README.md#field-deployment) in the main README.
+
+After downloading and extracting the four ZIPs, your `data/` directory should look like the tree below. Each entry is tagged by source: `download` (one of the Zenodo ZIPs above), `in repo` (already shipped with the repository), or `generated` (created locally).
 
 ```text
 geo-trax/
 └── data/
-    ├── master_frames/
+    ├── master_frames/    ← download: master_frames.zip
     │   ├── A.png
     │   ├── A.txt
     │   ├── ...
     │   ├── U.png
     │   └── U.txt
-    ├── orthophotos/
+    ├── orthophotos/      ← download: orthophotos.zip
     │   ├── A_center.txt
     │   ├── A.png
     │   ├── ...
@@ -102,21 +104,27 @@ geo-trax/
     │   ├── ...
     │   ├── U_center.txt
     │   └── U.png
-    ├── README.md    
-    ├── results-full/
-    ├── results-pixel/    
-    ├── sample_videos/
+    ├── README.md         ← in repo
+    ├── results/          ← created when you run the reproduce commands above
+    │   ├── U_video_cut.txt
+    │   ├── U_video_cut.csv
+    │   ├── U_video_cut_mode_0.mp4
+    │   ├── ...
+    │   └── plots/
+    ├── results-full/     ← in repo (reference output)
+    ├── results-pixel/    ← in repo (reference output)
+    ├── sample_videos/    ← download: sample_videos.zip
     │   ├── A_D1_2022-10-07_PM5_60s.mp4
     │   ├── ...
     │   └── U_D10_2022-10-07_PM5_60s.mp4
-    ├── segmentations/
+    ├── segmentations/    ← download: segmentations.zip (*.png generated locally)
     │   ├── A.csv
     │   ├── A.png          ← generated (see note below)
     │   ├── ...
     │   ├── U.csv
     │   └── U.png          ← generated (see note below)
-    ├── U_video_cut.csv
-    └── U_video_cut.mp4
+    ├── U_video_cut.csv   ← in repo (sample clip log)
+    └── U_video_cut.mp4   ← in repo (sample clip)
 ```
 
 ### Generate Segmentation Overlay PNGs

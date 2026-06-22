@@ -41,13 +41,13 @@ Examples:
 Input:
 - Aggregated dataset CSV file with Vehicle_ID and Drone_ID columns
 - PROCESSED directory structure: DATE/DRONE_ID/SESSION/results/LOCATION_ID*.csv
-- Source video files (.MP4) and georeferenced results (.csv)
+- Source video files (.mp4/.mov/.avi/.mkv, any case) and georeferenced results (.csv)
 
 Output:
 - Console output with detailed traceability information:
   * Date, Drone ID, Session, Video ID
   * Vehicle ID mapping (dataset → original)
-  * Source video file path (.MP4)
+  * Source video file path
   * Source CSV results file path
 
 Notes:
@@ -69,6 +69,7 @@ import pandas as pd
 
 from geotrax.utils.cli_utils import DEFAULT_CFG
 from geotrax.utils.config_utils import load_config
+from geotrax.utils.constants import VIDEO_FORMATS
 from geotrax.utils.file_utils import DEFAULT_OUTPUT
 from geotrax.utils.logging_utils import setup_logger
 
@@ -127,7 +128,11 @@ def find_source_id(dataset_filepath: Path, vehicle_id: int, logger: logging.Logg
             df['Vehicle_ID'] = df['Vehicle_ID'] + vehicle_id_offset
             if vehicle_id in df['Vehicle_ID'].values:
                 source_id = vehicle_id - vehicle_id_offset
-                source_video = source_results.parents[1] / (source_results.stem + '.MP4')
+                clip_dir = source_results.parents[1]
+                source_video = next(
+                    (p for p in clip_dir.glob(source_results.stem + '.*') if p.suffix.lower() in VIDEO_FORMATS),
+                    clip_dir / (source_results.stem + '.MP4'),
+                )
                 logger.notice(
                     f"Date     : {date}\n"
                     f"Drone ID : {drone_id}\n"

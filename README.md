@@ -58,6 +58,98 @@ Geo-trax was validated in a large-scale urban traffic monitoring experiment cond
 
 🎥 *Demo video of Geo-trax applied to the Songdo field experiment:* [https://youtu.be/gOGivL9FFLk](https://youtu.be/gOGivL9FFLk)
 
+<details>
+<summary><b>📂 Recommended project folder structure</b></summary>
+
+The layout below mirrors how data was organized in the Songdo experiment and matches what the pipeline auto-detects by default. It is a recommendation rather than a hard requirement; following it lets `geotrax batch` run with no path flags. Two conventions do the heavy lifting:
+
+- **A `PROCESSED/` folder anchors auto-detection.** When georeferencing/plotting need orthophotos, master frames, or segmentations and no explicit path is given, Geo-trax walks *up* from the video until it finds a folder named `PROCESSED`, then looks for a sibling `ORTHOPHOTOS/` folder next to it.
+- **A location ID ties each video to its assets.** The location ID is the leading run of letters in the clip's filename (`A1.mp4` → `A`). Every per-location asset shares that stem, so `A1.mp4` automatically resolves to `ORTHOPHOTOS/A.png`, `ORTHOPHOTOS/master_frames/A.png`, and `ORTHOPHOTOS/segmentations/A.csv`.
+
+### Directory tree
+
+```text
+<project>/                                 # project root (name arbitrary)
+├── RAW/                                   # untouched drone footage + flight logs (never modified)
+│   └── 2022-10-07/D1/PM1/                 # arbitrary nesting, e.g. date / drone / session
+│       ├── DJI_0001.MP4  DJI_0001.SRT
+│       └── DJI_0002.MP4  DJI_0002.SRT     # drone splits a recording into segments (file-size limit)
+├── PROCESSED/                             # pipeline input (auto-detect anchor)
+│   └── 2022-10-07/D1/PM1/
+│       ├── 0_merged.mp4  0_merged.srt     # merged flight video + log (temporary, deletable)
+│       ├── 0_merged.txt                   # cut list: start/end frames, one cut per line (temporary)
+│       ├── A1.mp4  A1.csv                 # cut clip + flight log; 'A' = location ID, '1' = sequence
+│       ├── A2.mp4  A2.csv                 # next clip at the same location
+│       ├── A1.yaml                        # run metadata, saved next to the clip (not in results/)
+│       └── results/                       # pipeline outputs, written next to each clip
+│           ├── A1.txt                     # pixel-coordinate tracks
+│           ├── A1_vid_transf.txt          # stabilization homographies
+│           ├── A1_geo_transf.txt          # georeferencing homography
+│           ├── A1.csv                     # georeferenced trajectories + kinematics
+│           ├── A1_mode_0.mp4              # video with overlaid boxes & trajectories (modes 0/1/2)
+│           └── plots/                     # various trajectory & distribution plots
+├── ORTHOPHOTOS/                           # auto-detected sibling of PROCESSED / DATASET
+│   ├── A.png                              # orthophoto cut-out, per location
+│   ├── A.txt  (or A.tif)                  # georeferencing parameters (or a georeferenced GeoTIFF)
+│   ├── ortho_parameters.txt               # (alternative) shared params + per-location A_center.txt
+│   ├── master_frames/                     # optional; consistent reference frame per location
+│   │   ├── A.png                          #   reference frame image
+│   │   └── A.txt                          #   cached master->ortho homography
+│   └── segmentations/                     # optional; per-location lane/road geometry
+│       ├── A.csv                          #   lane & road-section polygons
+│       └── A.png                          #   overlay image (used for plotting only)
+└── DATASET/                               # `geotrax aggregate` output (sibling of PROCESSED)
+    └── 2022-10-07_A/                      # one intersection-day
+        ├── 2022-10-07_A_AM1.csv           # one CSV per flight session (AM1-AM5, PM1-PM5),
+        └── 2022-10-07_A_PM1.csv           #   trajectories merged across drones for that session
+```
+
+`RAW/` is kept immutable; everything downstream lives under `PROCESSED/`. The `0_merged.*` files are temporary and can be deleted once cutting is done. The `master_frames/` and `segmentations/` sub-folders are optional; provide them only when you need cross-flight georeferencing consistency or lane-level analysis. `DATASET/` is created by `geotrax aggregate` next to `PROCESSED/` and groups per-clip results by location and flight session, merging across drones; it is also a valid auto-detection anchor for `ORTHOPHOTOS/`.
+
+### Naming conventions
+
+Only the **leading location letters** of a clip filename are required by the code (parsed by `determine_location_id`). The contextual metadata (date, drone, session) normally lives in the **folder path**, so each clip can be named compactly as location ID + sequence number:
+
+```text
+2022-10-07/D10/PM5/U1.mp4
+│          │   │   └── clip: location ID 'U' + sequence number '1'
+│          │   └────── flight session: AM1-AM5 (morning) / PM1-PM5 (afternoon)
+│          └────────── drone ID (D1, D2, ...)
+└───────────────────── capture date (ISO 8601, YYYY-MM-DD)
+```
+
+These compact names are assigned automatically by the cutting step, not typed by hand: given a location map (a JSON file pairing each label with its `[lat, lon]` center), [`tools/cut_merged_videos_and_logs.py`](tools/cut_merged_videos_and_logs.py) labels every clip with the location nearest to its GPS centroid and appends a per-location sequence number (`U1`, `U2`, ...).
+
+Because only the leading letters matter, the same context can instead be packed into a single self-contained filename when clips are detached from this tree. This is how the sample videos published on Zenodo are named, e.g. `U_D10_2022-10-07_PM5_60s.mp4` (location `U`, drone `D10`, date `2022-10-07`, session `PM5`). Here the per-location sequence number is replaced by a time marker showing where the clip falls within the session: `60s` denotes the first 60 seconds of that session at the location. Either way, the code still extracts location `U`.
+
+| Clip filename | Location ID | Resolves to |
+|---|---|---|
+| `U1.mp4` | `U` | `ORTHOPHOTOS/U.png`, `master_frames/U.png`, `segmentations/U.csv` |
+| `U2.mp4` | `U` | `ORTHOPHOTOS/U.png`, … |
+| `U_D10_2022-10-07_PM5_60s.mp4` | `U` | `ORTHOPHOTOS/U.png`, … |
+
+`geotrax aggregate` groups results by location (and date/session), merging clips from different drones that cover the same place into a unified dataset.
+
+### From RAW to trajectories
+
+The `tools/` directory provides the wrangling scripts that take you from raw footage to pipeline-ready clips (see [`tools/README.md`](tools/README.md) for the full index):
+
+1. **Merge** the recorded video segments and their logs into one video + log per flight session → [`tools/merge_videos_and_logs.py`](tools/merge_videos_and_logs.py)
+2. **Cut** each merged flight into per-location clips: list the start/end frames of each stable hover in `0_merged.txt`, then split (converting the DJI SRT log to a per-clip CSV) → [`tools/cut_merged_videos_and_logs.py`](tools/cut_merged_videos_and_logs.py)
+3. **QA / repair** the cut logs → [`tools/find_cut_video_issues.py`](tools/find_cut_video_issues.py), [`tools/fix_timestamp_anomalies.py`](tools/fix_timestamp_anomalies.py), [`tools/interpolate_missing_timestamps.py`](tools/interpolate_missing_timestamps.py)
+4. **Build the georeferencing assets**: orthophoto cut-outs per location → [`tools/subset_orthophoto.py`](tools/subset_orthophoto.py); master frames → [`tools/find_master_frames.py`](tools/find_master_frames.py); lane segmentations are drawn manually, with overlays rendered via [`tools/viz_segmentations.py`](tools/viz_segmentations.py)
+5. **Run the pipeline**: `geotrax batch PROCESSED/ ...`; orthophotos, master frames, and segmentations are auto-detected from the sibling `ORTHOPHOTOS/` folder.
+6. **(Optional) Aggregate** results across drones and flights for the same location → `geotrax aggregate PROCESSED/`, which writes a unified dataset to a sibling `DATASET/` folder.
+
+### Lessons from the Songdo experiment
+
+- Treat `RAW/` as read-only archival storage and derive everything under `PROCESSED/`; the wrangling steps are reproducible from the raw footage.
+- The **master frame** is an intermediary coordinate system per location: aligning every flight to one shared reference frame keeps trajectories from different drones, altitudes, and viewpoints in a single consistent coordinate system.
+- Coordinates were projected to a local CRS (EPSG:5186, KGD2002 / Central Belt 2010) alongside WGS84 lat/lon; set your own CRS in the `georef:` config section.
+- Imagery was captured at ~140–150 m altitude in 4K, giving a ground sampling distance of ≈ 0.027 m/px (the default `extraction.gsd`). Re-tune the GSD for different altitudes or cameras.
+
+</details>
+
 ## Installation
 
 It is recommended to create and activate a **Python virtual environment** (Python >= 3.9 and <= 3.13) first:
@@ -118,7 +210,7 @@ python -m pip install -e '.[dev]'   # pip
 
 ## Configuration
 
-The entire pipeline is driven by a **single, self-contained pipeline config file**. Every setting — detection, tracking, stabilization, georeferencing, visualization, and plotting — lives in one YAML file; there are no linked sub-config files. The defaults ship bundled inside the installed package, so there is nothing to download. Four ready-made presets are bundled and can be selected by name with `-c <name>` (e.g. `geotrax extract video.mp4 -c confident`): `default` (balanced baseline), `confident` (higher confidence, fewer false positives), `lenient` (lower confidence, higher recall), and `stable` (full-resolution stabilization).
+The entire pipeline is driven by a **single, self-contained pipeline config file**. Every setting — detection, tracking, stabilization, georeferencing, visualization, and plotting — lives in one YAML file; there are no linked sub-config files. The defaults ship bundled inside the installed package, so there is nothing to download. Four ready-made presets are bundled and can be selected by name with `-c <name>` (e.g. `geotrax extract video.mp4 -c confident`): `default` (balanced baseline), `confident` (tuned for precision — fewer false positives), `lenient` (tuned for recall — catches more vehicles), and `stable` (tuned for higher-quality stabilization).
 
 <details>
 <summary><b>⚙️ Inspecting, selecting, and customizing the pipeline config</b></summary>

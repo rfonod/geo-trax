@@ -29,7 +29,9 @@ Options:
   -viz, --visualize                         : Visualize the best master frame selection (default: False).
   -sv, --save-viz                           : Save the best master frames visualization to PDF (default: False).
   -n, --best-n <int>                        : Number of reference frames to consider for selection (default: 20).
-  -m, --match-pattern <str>                 : Glob pattern to match files in folder, case-sensitive (default: '??.CSV').
+  -m, --match-pattern <str>                 : Glob pattern (case-insensitive) for flight-log files (default: '*.csv').
+                                              CSVs lacking flight-log columns are skipped automatically; narrow the
+                                              pattern (e.g. '??.csv' for short clip names like A1, B2) to limit the scan.
   -c, --cfg <path>                          : Pipeline config used to resolve the output folder and filename postfixes.
                                               Defaults to the bundled config (geotrax/cfg/default.yaml).
   -fe, --folders-exclude <str> [<str> ...]  : Folders to exclude from the search (default: [output.folder from config]).
@@ -140,7 +142,7 @@ def find_all_flight_logs(input_folder: Path, match_pattern: str, folders_exclude
     for item in input_folder.iterdir():
         if item.is_dir() and item.name not in folders_exclude:
             flight_logs.extend(find_all_flight_logs(item, match_pattern, folders_exclude, logger))
-        elif item.is_file() and fnmatch.fnmatch(item.name, match_pattern):
+        elif item.is_file() and fnmatch.fnmatch(item.name.lower(), match_pattern.lower()):
             flight_logs.append(item)
 
     if not flight_logs:
@@ -170,6 +172,9 @@ def extract_ref_frame_data(flight_logs: list, args: argparse.Namespace, logger: 
             relative_altitude = df.loc[df['frame'] == args.ref_frame, 'rel_alt'].values[0]
         except IndexError:
             logger.warning(f"Reference frame {args.ref_frame} not found in {flight_log}. Skipping...")
+            continue
+        except KeyError:
+            logger.warning(f"{flight_log} is missing expected flight-log columns; not a flight log? Skipping...")
             continue
 
         geo_gdf = gpd.GeoDataFrame(geometry=[Point(longitude, latitude)], crs='epsg:4326')
@@ -392,7 +397,7 @@ def parse_cli_args() -> argparse.Namespace:
     parser.add_argument("--save-viz", "-sv", action="store_true", help="Save the best master frames visualization.")
     parser.add_argument("--best-n", "-n", type=int, default=20, help="Number of reference frames to consider for the best master frame selection (default: 20).")
     parser.add_argument("--cfg", "-c", type=Path, default=DEFAULT_CFG, help="Pipeline config used to resolve the output folder and filename postfixes. Defaults to the bundled config.")
-    parser.add_argument("--match-pattern", "-m", type=str, default='??.CSV', help="Pattern to match (case-sensitive) the files in the folder.")
+    parser.add_argument("--match-pattern", "-m", type=str, default='*.csv', help="Glob pattern (case-insensitive) for flight-log files. Default '*.csv' matches any naming; narrow it (e.g. '??.csv' for short clip names like A1, B2) to skip auxiliary CSVs.")
     parser.add_argument("--folders-exclude", "-fe", type=str, nargs='+', default=[DEFAULT_OUTPUT['folder']], help="Folders to exclude from the search (default: [output.folder from config]).")
     parser.add_argument("--bounding-box-cols", "-b", type=int, nargs='+', default=[2, 3, 4, 5], dest="bbox_cols", help="Columns of the bounding box in the detection/tracking results.")
     parser.add_argument("--target-crs", "-tcrs", default='epsg:5186', help="Target CRS for local coordinates")
