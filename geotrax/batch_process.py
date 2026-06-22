@@ -58,7 +58,7 @@ Shared Options:
 
 Processing Options:
     --model, -m <str>     : Detection model to use — a local file path OR an
-                          'hf://<org>/<name>/<file>.pt' Hugging Face reference (auto-downloaded and
+                          'hf://<org>/<repo>/<path/to/file>.pt' Hugging Face reference (auto-downloaded and
                           cached). Defaults to cfg -> extraction -> model.
     --class-names, -cn <ID=NAME|FILE> [...] : Rename class-id -> name labels with a .yaml/.json mapping
                           file or inline ID=NAME pairs (e.g. -cn 0=car 1=bus). Defaults to

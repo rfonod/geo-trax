@@ -93,12 +93,12 @@
       "resource_type": "software"
     },
     {
-      "identifier": "10.5281/zenodo.13828384",
+      "identifier": "10.5281/zenodo.13828383",
       "relation": "compiles",
       "resource_type": "dataset"
     },
     {
-      "identifier": "10.5281/zenodo.13828408",
+      "identifier": "10.5281/zenodo.13828407",
       "relation": "compiles",
       "resource_type": "dataset"
     }

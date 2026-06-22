@@ -24,7 +24,7 @@ Options:
   --output-folder, -of <str> : Root folder where pipeline outputs (incl. plots/) are read from and
                      written to. Defaults to cfg -> output -> folder (historical default: 'results').
   --model, -m <str> : Detection model used to resolve vehicle class names — a local file path
-                     OR an 'hf://<org>/<name>/<file>.pt' Hugging Face reference. Only needed
+                     OR an 'hf://<org>/<repo>/<path/to/file>.pt' Hugging Face reference. Only needed
                      when class names are not set via --class-names or cfg -> extraction ->
                      class_rename. Defaults to cfg -> extraction -> model.
   --class-names, -cn <ID=NAME|FILE> [...] : Class-id -> name mapping: a .yaml/.json file or
@@ -814,7 +814,7 @@ def parse_cli_args() -> argparse.Namespace:
 
     optional = parser.add_argument_group('Optional arguments')
     add_common_args(optional)
-    optional.add_argument('--model', '-m', nargs='+', default=None, metavar='MODEL', help="Detection model used to resolve vehicle class names: a local path OR an 'hf://<org>/<name>/<file>.pt' reference. Defaults to cfg -> extraction -> model.")
+    optional.add_argument('--model', '-m', nargs='+', default=None, metavar='MODEL', help="Detection model used to resolve vehicle class names: a local path OR an 'hf://<org>/<repo>/<path/to/file>.pt' reference. Defaults to cfg -> extraction -> model.")
     optional.add_argument('--class-names', '-cn', nargs='+', default=None, metavar='ID=NAME|FILE', help="Class-id -> name mapping: a .yaml/.json file or inline ID=NAME pairs (e.g. -cn 0=car 1=bus). Defaults to cfg -> extraction -> class_rename, then model names.")
 
     georef = parser.add_argument_group('Plot background arguments')

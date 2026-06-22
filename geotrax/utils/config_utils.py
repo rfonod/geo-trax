@@ -74,7 +74,7 @@ def resolve_model_path(model_ref: Union[str, Path], logger: logging.Logger) -> P
     """Resolve a model reference to a local file path, downloading from Hugging Face if needed.
 
     Two forms are supported via the same config/CLI entry:
-      * A Hugging Face reference ``hf://<org>/<name>/<filename>`` (e.g.
+      * A Hugging Face reference ``hf://<org>/<repo>/<path/to/file>`` (e.g.
         ``hf://rfonod/geo-trax/geotrax_hbb_yolov8s_1920_v1.pt``). The weight is downloaded once and
         served from the standard Hugging Face Hub cache (``~/.cache/huggingface/hub``, overridable via
         ``HF_HOME``/``HF_HUB_CACHE``); ``hf_hub_download`` revalidates by etag, so repeat runs do not
@@ -100,7 +100,7 @@ def resolve_model_path(model_ref: Union[str, Path], logger: logging.Logger) -> P
     if len(parts) < 3:
         logger.critical(
             f"Malformed Hugging Face model reference '{model_str}'. Expected "
-            f"'{HF_PREFIX}<org>/<name>/<filename>' (e.g. '{HF_PREFIX}rfonod/geo-trax/geotrax_hbb_yolov8s_1920_v1.pt')."
+            f"'{HF_PREFIX}<org>/<repo>/<path/to/file>' (e.g. '{HF_PREFIX}rfonod/geo-trax/geotrax_hbb_yolov8s_1920_v1.pt')."
         )
         sys.exit(1)
 

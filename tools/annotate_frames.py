@@ -24,7 +24,7 @@ Options:
                                           'ultralytics:' detection settings; a bundled preset name
                                           (default, confident, lenient, stable) also works.
     -m, --model <str>                   : Override the config model — a local file path OR an
-                                          'hf://<org>/<name>/<file>.pt' Hugging Face reference
+                                          'hf://<org>/<repo>/<path/to/file>.pt' Hugging Face reference
                                           (auto-downloaded and cached).
     -cn, --class-names <ID=NAME|FILE>   : Override class-id -> name labels on saved visualizations with a
                                           .yaml/.json mapping file or inline ID=NAME pairs (e.g. -cn 0=car 1=bus).
@@ -306,7 +306,7 @@ def parse_cli_args() -> argparse.Namespace:
                              "the annotator uses its 'ultralytics:' detection settings.")
     parser.add_argument('--model', '-m', nargs='+', default=None, metavar='MODEL',
                         help="Detection model overriding the config — a local file path OR an "
-                             "'hf://<org>/<name>/<file>.pt' Hugging Face reference (auto-downloaded and cached).")
+                             "'hf://<org>/<repo>/<path/to/file>.pt' Hugging Face reference (auto-downloaded and cached).")
     parser.add_argument('--class-names', '-cn', nargs='+', default=None, metavar='ID=NAME|FILE',
                         help="Override class-id -> name labels on saved visualizations: a .yaml/.json mapping "
                              "file or inline ID=NAME pairs (e.g. -cn 0=car 1=bus).")

@@ -206,7 +206,7 @@ python -m pip install -e '.[dev]'   # pip
 ```
 
 > [!NOTE]
-> The default detection model is hosted on Hugging Face ([`rfonod/geo-trax`](https://huggingface.co/rfonod/geo-trax), file `geotrax_hbb_yolov8s_1920_v1.pt`) and **downloads automatically on first use** into the Hugging Face cache (`~/.cache/huggingface/hub`, overridable via `HF_HOME`). To use your own weights, set the model — in a custom config (`extraction -> model`) or with `--model` — to either a local file path or an `hf://<org>/<name>/<file>.pt` reference.
+> The default detection model is hosted on Hugging Face ([`rfonod/geo-trax`](https://huggingface.co/rfonod/geo-trax), file `geotrax_hbb_yolov8s_1920_v1.pt`) and **downloads automatically on first use** into the Hugging Face cache (`~/.cache/huggingface/hub`, overridable via `HF_HOME`). To use your own weights, set the model — in a custom config (`extraction -> model`) or with `--model` — to either a local file path or an `hf://<org>/<repo>/<path/to/file>.pt` reference.
 
 ## Configuration
 
@@ -247,7 +247,7 @@ To switch the tracking algorithm, set `tracker.active` in the config (see [Track
 
 ## Detection Model
 
-The default vehicle detector is a **YOLOv8s** model (HBB, 1920 × 1920 px input) trained for high-altitude drone BEV imagery. It is hosted on the [🤗 Hugging Face Hub](https://huggingface.co/rfonod/geo-trax) and **downloads automatically on first use** (no manual setup). It detects four vehicle classes (car incl. vans, bus, truck, and motorcycle) and underpins the results reported in the [publication](https://doi.org/10.1016/j.trc.2025.105205). To use a different model, point `extraction.model` in the config (or the `--model`/`-m` CLI flag) to a local `.pt` path or another `hf://<org>/<name>/<file>.pt` reference; it must be an [Ultralytics](https://github.com/ultralytics/ultralytics)-supported model.
+The default vehicle detector is a **YOLOv8s** model (HBB, 1920 × 1920 px input) trained for high-altitude drone BEV imagery. It is hosted on the [🤗 Hugging Face Hub](https://huggingface.co/rfonod/geo-trax) and **downloads automatically on first use** (no manual setup). It detects four vehicle classes (car incl. vans, bus, truck, and motorcycle) and underpins the results reported in the [publication](https://doi.org/10.1016/j.trc.2025.105205). To use a different model, point `extraction.model` in the config (or the `--model`/`-m` CLI flag) to a local `.pt` path or another `hf://<org>/<repo>/<path/to/file>.pt` reference; it must be an [Ultralytics](https://github.com/ultralytics/ultralytics)-supported model.
 
 <details>
 <summary><b>🎯 Model details and detection performance</b></summary>
