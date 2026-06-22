@@ -269,6 +269,8 @@ def run_plotting(path: Path, args: argparse.Namespace, logger: logging.Logger) -
             segmentations=args.plot_segmentations,
             points=args.plot_points,
             class_filter=args.plot_class_filter,
+            model=getattr(args, 'model', None),
+            class_names=getattr(args, 'class_names', None),
         )
         generate_plots(plot_args, logger)
 

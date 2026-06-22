@@ -765,6 +765,8 @@ def default_plot_args(**overrides) -> argparse.Namespace:
         'id': 0,
         'points': None,
         'class_filter': None,
+        'model': None,
+        'class_names': None,
     }
     defaults.update(overrides)
     return argparse.Namespace(**defaults)
