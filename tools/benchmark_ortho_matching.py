@@ -207,7 +207,7 @@ def compute_homography(img_src: np.ndarray, img_dst: np.ndarray, logger: logging
                        filter_ratio: float = 0.55, ransac_epipolar_threshold: float = 3.0,
                        ransac_confidence: float = 0.999999, ransac_max_iters: int = 10000) -> tuple:
     """
-    Compute homography between two images using RSIFT keypoints and descriptors.
+    Compute the homography mapping the source image to the destination image.
     """
     homography, inliers_count, num_matches, _ = estimate_homography(
         img_src, img_dst, logger, max_features=max_features, filter_ratio=filter_ratio,

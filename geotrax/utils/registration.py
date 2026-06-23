@@ -1,15 +1,14 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-# Authors: Robert Fonod (robert.fonod@ieee.org) and Haechan Cho (gkqkemwh@kaist.ac.kr)
+# Authors: Robert Fonod (robert.fonod@ieee.org)
 
 """
 registration.py - Image registration via Stabilo.
 
-Estimates a homography between two images using the SIFT -> RootSIFT -> brute-force
-knn matching -> Lowe ratio test -> MAGSAC++ pipeline. The computation is delegated to
-the `stabilo` Stabilizer configured to reproduce that hand-rolled routine bit-for-bit
-(see stabilo's `test_exact_reproduction_of_reference_routine`). This is the single
-implementation shared by the georeferencing stage and the analysis tools.
+Estimates a homography between two images by delegating feature detection, matching and
+robust model fitting to a `stabilo` Stabilizer. The detector, matcher, filter and RANSAC
+parameters are configurable. This is the single implementation shared by the
+georeferencing stage and the analysis tools.
 """
 
 import logging
@@ -39,18 +38,15 @@ def estimate_homography(
     """
     Estimate the homography H mapping source -> destination image coordinates.
 
-    Uses a Stabilo Stabilizer configured to mirror the reference SIFT/RootSIFT/MAGSAC++
-    routine exactly: the destination is set as the reference frame and the source as the
+    The destination is set as the Stabilizer's reference frame and the source as the
     current frame, so the resulting cur->ref transform maps src -> dst with the RANSAC
     reprojection threshold evaluated in destination coordinates.
 
-    The defaults reproduce that routine bit-for-bit. `detector_name`, `matcher_name`,
-    `filter_type` and `sift_enable_precise_upscale` are exposed for tuning; the geometry of
-    the reproduction (projective transform, current-frame query, no masking/downsampling,
+    The detector, matcher, filter and RANSAC parameters are configurable; the geometry of
+    the registration (projective transform, current-frame query, no masking/downsampling,
     1.0 reference multiplier) is fixed internally.
 
-    If detection or matching fails, `max_features` is halved and retried (down to >10000),
-    mirroring the original routine's fallback.
+    If detection or matching fails, `max_features` is halved and retried (down to >10000).
 
     Returns:
         (H, inliers_count, num_matches, (n_src_kpts, n_dst_kpts)) on success, or
@@ -86,14 +82,14 @@ def estimate_homography(
         if homography is not None:
             n_dst_kpts, n_src_kpts = stabilizer.get_cur_num_keypoints()  # (ref=dst, cur=src)
             inliers_count = stabilizer.get_cur_inliers_count()
-            num_matches = len(stabilizer.cur_inliers)  # total good matches (no getter yet; see stabilo TODO)
+            num_matches = stabilizer.get_cur_num_matches()
             return homography, inliers_count, num_matches, (n_src_kpts, n_dst_kpts)
 
         max_features_to_try //= 2
         logger.warning(
-            f"SIFT detection or matching failed with {max_features_to_try * 2} max_features. "
+            f"Feature detection or matching failed with {max_features_to_try * 2} max_features. "
             f"Trying with {max_features_to_try} max_features."
         )
 
-    logger.error("SIFT detection failed with all attempted feature counts.")
+    logger.error("Feature detection failed with all attempted feature counts.")
     return None, None, None, None
