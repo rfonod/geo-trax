@@ -86,6 +86,7 @@ import numpy as np
 import pandas as pd
 
 from geotrax.utils.logging_utils import setup_logger
+from geotrax.utils.registration import estimate_homography
 
 
 def run_benchmark(args: argparse.Namespace, logger: logging.Logger) -> None:
@@ -146,9 +147,9 @@ def execute_ortho_benchmark(images_dir, orthos_dir, labels_dir, args, logger):
                 image_labels = pd.read_csv(labels_dir / (image_filepath.stem + '.csv'))
 
                 start_time = time.time()
-                H, inliers = compute_homography(image, ortho_resized, logger)
+                H, inliers_count, num_matches = compute_homography(image, ortho_resized, logger)
                 comp_times_list.append(time.time() - start_time)
-                inliers_list.append(inliers.sum())
+                inliers_list.append(inliers_count)
 
                 pixel_error_image_list = []
                 for pnum, ortho_x_label, ortho_y_label in ortho_labels_resized[['pnum', 'px', 'py']].values:
@@ -160,7 +161,7 @@ def execute_ortho_benchmark(images_dir, orthos_dir, labels_dir, args, logger):
                 logger.info(
                     f"{ortho_filepath.stem}({ortho_w_new})/{image_filepath.stem}: "
                     f"{np.mean(pixel_error_image_list):.3f}±{np.std(pixel_error_image_list):.3f}, "
-                    f"Inliers/total: {inliers.sum():3}/{len(inliers):<4} | "
+                    f"Inliers/total: {inliers_count:3}/{num_matches:<4} | "
                     + ' '.join(f'{i+1})={pixel_error:.2f}' for i, pixel_error in enumerate(pixel_error_image_list))
                 )
                 pixel_error_list.extend(pixel_error_image_list)
@@ -208,60 +209,12 @@ def compute_homography(img_src: np.ndarray, img_dst: np.ndarray, logger: logging
     """
     Compute homography between two images using RSIFT keypoints and descriptors.
     """
-
-    def convert_to_rootsift(descriptors: np.ndarray, eps = 1e-8) -> np.ndarray:
-        descriptors /= (descriptors.sum(axis=1, keepdims=True) + eps)
-        descriptors = np.sqrt(descriptors)
-        return descriptors
-
-    def try_compute_homography(max_features: int) -> tuple:
-        img_src_gray = cv2.cvtColor(img_src, cv2.COLOR_BGR2GRAY)
-        img_dst_gray = cv2.cvtColor(img_dst, cv2.COLOR_BGR2GRAY)
-
-        sift = cv2.SIFT.create(nfeatures=max_features, enable_precise_upscale=True)
-        kpt_src, desc_src = sift.detectAndCompute(img_src_gray, None)  # type: ignore
-        kpt_dst, desc_dst = sift.detectAndCompute(img_dst_gray, None)  # type: ignore
-
-        if kpt_src is None or kpt_dst is None:
-            return None, None
-
-        desc_src = convert_to_rootsift(desc_src)
-        desc_dst = convert_to_rootsift(desc_dst)
-
-        bf = cv2.BFMatcher()
-        try:
-            matches = bf.knnMatch(desc_src, desc_dst, k=2)
-        except cv2.error:
-            return None, None
-
-        good_matches = []
-        for pair in matches:
-            if len(pair) == 2:
-                m, n = pair
-                if m.distance < filter_ratio * n.distance:
-                    good_matches.append(m)
-
-        if len(good_matches) < 4:
-            return None, None
-
-        pts_src = np.array([kpt_src[m.queryIdx].pt for m in good_matches], dtype=np.float32).reshape(-1, 2)
-        pts_dst = np.array([kpt_dst[m.trainIdx].pt for m in good_matches], dtype=np.float32).reshape(-1, 2)
-
-        homography, inliers = cv2.findHomography(pts_src, pts_dst, method=cv2.USAC_MAGSAC, confidence=ransac_confidence,
-                                                 ransacReprojThreshold=ransac_epipolar_threshold, maxIters=ransac_max_iters)
-
-        return homography, inliers
-
-    max_features_to_try = max_features
-    while max_features_to_try > 10000:
-        homography, inliers = try_compute_homography(max_features_to_try)
-        if homography is not None:
-            return homography, inliers
-        max_features_to_try //= 2
-        logger.warning(f"SIFT detection or matching failed with {max_features_to_try*2} max_features. Trying with {max_features_to_try} max_features.")
-
-    logger.error("SIFT detection failed with all attempted feature counts.")
-    return None, None
+    homography, inliers_count, num_matches, _ = estimate_homography(
+        img_src, img_dst, logger, max_features=max_features, filter_ratio=filter_ratio,
+        ransac_epipolar_threshold=ransac_epipolar_threshold, ransac_confidence=ransac_confidence,
+        ransac_max_iter=ransac_max_iters,
+    )
+    return homography, inliers_count, num_matches
 
 
 def generate_and_save_visualizations(images_dir: Path, orthos_dir: Path, labels_dir: Path, visual_dir: Path, args: argparse.Namespace, logger: logging.Logger) -> None:

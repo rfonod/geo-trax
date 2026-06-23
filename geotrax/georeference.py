@@ -103,6 +103,7 @@ from geotrax.utils.file_utils import (
     get_output_dir,
 )
 from geotrax.utils.logging_utils import setup_logger
+from geotrax.utils.registration import estimate_homography
 
 
 def georeference(args: argparse.Namespace, logger: logging.Logger) -> None:
@@ -553,74 +554,33 @@ def compute_hash(image: np.ndarray) -> str:
 
 
 def compute_homography(img_src: np.ndarray, img_dst: np.ndarray, src_dst: tuple, logger: logging.Logger,
-                       max_features: int = 250000, filter_ratio: float = 0.55, ransac_method: int = cv2.USAC_MAGSAC,
+                       detector_name: str = 'rsift', matcher_name: str = 'bf', filter_type: str = 'ratio',
+                       sift_enable_precise_upscale: bool = True, max_features: int = 250000,
+                       filter_ratio: float = 0.55, ransac_method: int = cv2.USAC_MAGSAC,
                        ransac_epipolar_threshold: float = 3.0, ransac_max_iter: int = 10000,
                        ransac_confidence: float = 0.999999, rsift_eps: float = 1e-8) -> tuple:
     """
     Compute homography between a source image and a destination image.
     """
-    def convert_to_rootsift(descriptors, eps):
-        descriptors /= (descriptors.sum(axis=1, keepdims=True) + eps)
-        descriptors = np.sqrt(descriptors)
-        return descriptors
+    homography, inliers_count, num_matches, num_keypoints = estimate_homography(
+        img_src, img_dst, logger, detector_name=detector_name, matcher_name=matcher_name,
+        filter_type=filter_type, sift_enable_precise_upscale=sift_enable_precise_upscale,
+        max_features=max_features, filter_ratio=filter_ratio, ransac_method=ransac_method,
+        ransac_epipolar_threshold=ransac_epipolar_threshold, ransac_max_iter=ransac_max_iter,
+        ransac_confidence=ransac_confidence, rsift_eps=rsift_eps,
+    )
 
-    def try_compute_homography(max_features):
-        img_src_gray = cv2.cvtColor(img_src, cv2.COLOR_BGR2GRAY)
-        img_dst_gray = cv2.cvtColor(img_dst, cv2.COLOR_BGR2GRAY)
+    if homography is None:
+        sys.exit(1)
 
-        sift = cv2.SIFT.create(nfeatures=max_features, enable_precise_upscale=True)
-        kpt_src, desc_src = sift.detectAndCompute(img_src_gray, None)  # type: ignore
-        kpt_dst, desc_dst = sift.detectAndCompute(img_dst_gray, None)  # type: ignore
+    n_src_kpts, n_dst_kpts = num_keypoints
+    stats_txt = f"Keypoints in {src_dst[0]} frame: {n_src_kpts}, in {src_dst[1]}: {n_dst_kpts}. Inliers: {inliers_count} out of {num_matches} matches"
+    if inliers_count < 50:
+        logger.warning(stats_txt)
+    else:
+        logger.info(stats_txt)
 
-        if kpt_src is None or kpt_dst is None:
-            return None, None, None
-
-        desc_src = convert_to_rootsift(desc_src, rsift_eps)
-        desc_dst = convert_to_rootsift(desc_dst, rsift_eps)
-
-        bf = cv2.BFMatcher()
-        try:
-            matches = bf.knnMatch(desc_src, desc_dst, k=2)
-        except cv2.error:
-            return None, None, None
-
-        good_matches = []
-        for pair in matches:
-            if len(pair) == 2:
-                m, n = pair
-                if m.distance < filter_ratio * n.distance:
-                    good_matches.append(m)
-
-        if len(good_matches) < 4:
-            return None, None, None
-
-        pts_src = np.array([kpt_src[m.queryIdx].pt for m in good_matches], dtype=np.float32).reshape(-1, 2)
-        pts_dst = np.array([kpt_dst[m.trainIdx].pt for m in good_matches], dtype=np.float32).reshape(-1, 2)
-
-        homography, inliers = cv2.findHomography(pts_src, pts_dst, method = ransac_method, confidence = ransac_confidence,
-                                                 ransacReprojThreshold = ransac_epipolar_threshold, maxIters = ransac_max_iter)
-
-        if homography is None or inliers is None:
-            return None, None, None
-
-        stats_txt = f"Keypoints in {src_dst[0]} frame: {len(kpt_src)}, in {src_dst[1]}: {len(kpt_dst)}. Inliers: {inliers.sum()} out of {len(inliers)} matches"
-
-        return homography, stats_txt, inliers
-
-    max_features_to_try = max_features
-    while max_features_to_try > 10000:
-        homography, stats_txt, inliers = try_compute_homography(max_features_to_try)
-        if homography is not None:
-            if inliers.sum() < 50:
-                logger.warning(stats_txt)
-            else:
-                logger.info(stats_txt)
-            return homography, stats_txt
-        max_features_to_try //= 2
-        logger.warning(f"SIFT detection or matching failed with {max_features_to_try*2} max_features. Trying with {max_features_to_try} max_features.")
-
-    logger.error("SIFT detection failed with all attempted feature counts.")
-    sys.exit(1)
+    return homography, stats_txt
 
 
 def apply_homography(input_x: np.ndarray, input_y: np.ndarray, homography: np.ndarray) -> tuple:

@@ -117,6 +117,8 @@ stabilo:
   detector_name: 'orb'  # Feature detector/descriptor; choices: [orb, sift, rsift, brisk, kaze, akaze]
   max_features: 2000    # Maximum keypoints to detect per frame; higher = more robust but slower; [0, inf)
   ref_multiplier: 2.0   # Multiplier applied to max_features for the reference frame only; (0.0, inf)
+  sift_enable_precise_upscale: false  # SIFT/RSIFT only: precise sub-pixel upscaling at octave -1; [true, false]
+  rsift_eps: 0.00000001 # RSIFT only: epsilon added before RootSIFT L1-normalisation (1e-8); > 0.0, keep very small
 
   # Feature matching and filtering
   matcher_name: 'bf'    # Matching strategy; choices: [bf (brute-force), flann]
@@ -161,6 +163,10 @@ georef:
 
   # Feature matching (MAGSAC++ based image registration against orthophotos)
   matching:
+    detector_name: rsift               # Feature detector & descriptor; ['orb', 'sift', 'rsift', 'brisk', 'kaze', 'akaze'] (rsift = RootSIFT)
+    matcher_name: bf                   # Descriptor matcher; ['bf', 'flann'] (bf = brute force)
+    filter_type: ratio                 # Match filter; ['none', 'ratio', 'distance'] (ratio = Lowe's ratio test)
+    sift_enable_precise_upscale: true  # SIFT/RSIFT precise sub-pixel upscaling at octave -1; [true, false]
     max_features: 250000           # Maximum number of features to detect; [0, inf)
     filter_ratio: 0.55             # Lowe ratio-test threshold; lower = stricter (fewer but better matches); (0.0, 1.0]
     ransac_method: 38              # RANSAC method (same options as stabilization above)
