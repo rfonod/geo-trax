@@ -52,6 +52,8 @@ Visualization Options:
   --speed-unit, -su <choice> : Speed display unit: km/h or mi/h. Defaults to cfg -> visualization -> speed_unit.
   --speed-deadzone, -sdz <float> : Floor displayed speeds <= this value (in the chosen speed unit) to 0; 0 disables. Defaults to cfg -> visualization -> speed_deadzone.
   --class-filter, -cf <int> [<int> ...] : Vehicle class IDs to exclude (e.g., -cf 1 2). Defaults to cfg -> visualization -> class_filter.
+  --tail-length, -tl <int> : Number of past positions drawn as a fading track trail [frames]; [1, inf). Defaults to cfg -> visualization -> tail_length.
+  --line-width, -lw <int> : Bounding-box and track stroke width [px]; [1, inf). Defaults to cfg -> visualization -> line_width.
   --cut-frame-left, -cfl <int> : Skip the first N frames. Defaults to cfg -> processing -> cut_frame_left.
   --cut-frame-right, -cfr <int> : Stop processing after this frame. Defaults to cfg -> processing -> cut_frame_right.
 
@@ -126,6 +128,8 @@ def visualize_results(args: argparse.Namespace, logger: logging.Logger) -> None:
         'speed_unit': viz['speed_unit'],
         'speed_deadzone': viz['speed_deadzone'],
         'class_filter': viz['class_filter'],
+        'tail_length': viz['tail_length'],
+        'line_width': viz['line_width'],
         'cut_frame_left': proc['cut_frame_left'],
         'cut_frame_right': proc['cut_frame_right'],
         'output_folder': out_cfg_raw.get('folder', 'results'),
@@ -136,6 +140,8 @@ def visualize_results(args: argparse.Namespace, logger: logging.Logger) -> None:
                        "Set 'save' or 'show' in the config file, or pass --save / --show on the command line.")
     class_names = config['class_names']
     viz_config = config['visualization']
+    viz_config['tail_length'] = args.tail_length
+    viz_config['line_width'] = args.line_width
 
     viz_modes = normalize_viz_modes(args.viz_mode, logger)
     for viz_mode in viz_modes:
@@ -608,6 +614,10 @@ def add_visualization_args(group, include_frame_range: bool = True) -> None:
                        help='Floor displayed speeds at or below this value (in the chosen speed unit) to 0, hiding stationary-vehicle jitter; 0 disables. Defaults to cfg -> visualization -> speed_deadzone.')
     group.add_argument('--class-filter', '-cf', type=int, nargs='+', default=None,
                        help='Vehicle class IDs to exclude from visualization (e.g., -cf 1 2). Defaults to cfg -> visualization -> class_filter.')
+    group.add_argument('--tail-length', '-tl', type=int, default=None,
+                       help='Number of past positions drawn as a fading track trail [frames]; [1, inf). Defaults to cfg -> visualization -> tail_length.')
+    group.add_argument('--line-width', '-lw', type=int, default=None,
+                       help='Bounding-box and track stroke width [px]; [1, inf). Defaults to cfg -> visualization -> line_width.')
     if include_frame_range:
         group.add_argument('--cut-frame-left', '-cfl', type=int, default=None,
                            help='Skip the first N frames. Defaults to cfg -> processing -> cut_frame_left.')

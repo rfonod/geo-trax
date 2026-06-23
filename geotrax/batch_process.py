@@ -125,6 +125,10 @@ Visualization Options:
     --class-filter, -cf <int> [<int> ...] : Vehicle class IDs to exclude from visualization
                           (e.g., -cf 1 2 hides buses and trucks).
                           Defaults to cfg -> visualization -> class_filter.
+    --tail-length, -tl <int> : Number of past positions drawn as a fading track trail [frames]; [1, inf).
+                          Defaults to cfg -> visualization -> tail_length.
+    --line-width, -lw <int> : Bounding-box and track stroke width [px]; [1, inf).
+                          Defaults to cfg -> visualization -> line_width.
 
 Plotting Options:
     --plot-save / --no-plot-save, -ps  : Save plots as PDF files.
