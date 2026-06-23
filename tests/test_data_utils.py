@@ -16,8 +16,8 @@ def test_vizcolors_hex2rgb():
 
 def test_vizcolors_call_rgb_and_bgr():
     colors = VizColors()
-    assert colors(0) == (78, 121, 167)
-    assert colors(0, bgr=True) == (167, 121, 78)
+    assert colors(0) == (31, 119, 180)
+    assert colors(0, bgr=True) == (180, 119, 31)
 
 
 def test_vizcolors_index_wraps_around():

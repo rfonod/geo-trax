@@ -11,10 +11,15 @@ class VizColors:
     """Color palette for video visualization."""
     def __init__(self) -> None:
         """Initialise the fixed RGB colour palette."""
-        hexs = ('4E79A7', 'F28E2B', 'E15759', '76B7B2', '59A14F', 'EDC948',
-                'B07AA1', 'FF9DA7', '9C755F', 'BAB0AC', 'A0CBE8', 'FFBE7D',
-                'FF9D9A', '86BCB6', '8CD17D', 'F1CE63', 'D4A6C8', 'FABFD2',
-                'D7B5A6', 'C7C7C7')
+        # Colours are indexed by class id, so the first four are the vehicle-class
+        # colours (0=car blue, 1=bus red, 2=truck orange, 3=motorcycle green) and are
+        # kept stable across releases. The palette is ordered most-distinct-first: the
+        # first ten are saturated, well-separated hues; the last ten are lighter tints
+        # of them, so colours become closer toward the end of the list.
+        hexs = ('1F77B4', 'D62728', 'FF7F0E', '006400', '9467BD', '8C564B',
+                '17BECF', 'E377C2', 'BCBD22', '7F7F7F', 'AEC7E8', 'FF9896',
+                'FFBB78', '98DF8A', 'C5B0D5', 'C49C94', '9EDAE5', 'F7B6D2',
+                'DBDB8D', 'C7C7C7')
         self.palette = [self.hex2rgb(f'#{c}') for c in hexs]
         self.n = len(self.palette)
         self.txt_color = (255, 255, 255)
