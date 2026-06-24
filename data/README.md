@@ -38,7 +38,7 @@ geotrax batch data/U_video_cut.mp4 -orf data/orthophotos -osf data/segmentations
 
 ## Sample Videos and Data for Full Pipeline Testing
 
-The [Songdo Experiment](../README.md#field-deployment) provides ready-to-use files to test the full capabilities of the Geo-trax pipeline, including sample BEV drone footage from 20 different intersections (60-second clips), orthophotos and road segmentation masks for each intersection, and optional master frame files for consistent georeferencing.
+The [Songdo Experiment](../README.md#real-world-deployment-the-songdo-experiment) provides ready-to-use files to test the full capabilities of the Geo-trax pipeline, including sample BEV drone footage from 20 different intersections (60-second clips), orthophotos and road segmentation masks for each intersection, and optional master frame files for consistent georeferencing.
 
 All files are available from [Zenodo](https://doi.org/10.5281/zenodo.13828383). For detailed information about the experiment and dataset, see the [associated article](../README.md#citation).
 
@@ -83,7 +83,7 @@ unzip master_frames.zip && rm master_frames.zip
 
 ### Expected Directory Structure
 
-> **Note:** This is a **simplified, sample-only** layout. The orthophoto, master-frame, and segmentation folders sit flat under `data/` and are passed explicitly via `-orf` / `-osf` / `-mf`, which **bypasses** the default auto-detection (a `PROCESSED/` folder with a sibling `ORTHOPHOTOS/` containing nested `master_frames/` and `segmentations/`). For the recommended layout used in real multi-drone projects, see [Recommended project folder structure](../README.md#field-deployment) in the main README.
+> **Note:** This is a **simplified, sample-only** layout. The orthophoto, master-frame, and segmentation folders sit flat under `data/` and are passed explicitly via `-orf` / `-osf` / `-mf`, which **bypasses** the default auto-detection (a `PROCESSED/` folder with a sibling `ORTHOPHOTOS/` containing nested `master_frames/` and `segmentations/`). For the recommended layout used in real multi-drone projects, see [Recommended project folder structure](../README.md#real-world-deployment-the-songdo-experiment) in the main README.
 
 After downloading and extracting the four ZIPs, your `data/` directory should look like the tree below. Each entry is tagged by source: `download` (one of the Zenodo ZIPs above), `in repo` (already shipped with the repository), or `generated` (created locally).
 

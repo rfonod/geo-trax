@@ -12,7 +12,7 @@ This folder contains Bash scripts for training YOLOv8 object detection models an
 
 ## Prerequisites
 
-First set up a Python environment (venv, conda, or uv) and install geo-trax from source — see the [Installation](../README.md#installation) section of the main README. The core package covers training and Comet ML logging:
+First set up a Python environment (venv, conda, or uv) and install geo-trax from source; see the [Install](../README.md#install) section of the main README. The core package covers training and Comet ML logging:
 
 ```bash
 python -m pip install -e .   # pip

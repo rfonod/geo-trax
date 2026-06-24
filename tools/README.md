@@ -263,7 +263,7 @@ to the drone's mean hover position with the best detection coverage. Outputs
 python tools/find_master_frames.py /path/to/PROCESSED -of /path/to/master_frames -s -smf -sv
 ```
 
-Example `--visualize` output from the [Songdo experiment](../README.md#field-deployment) with 20 drones, showing the selected master frame location per intersection relative to the initial frame position of each flight clip.
+Example `--visualize` output from the [Songdo experiment](../README.md#real-world-deployment-the-songdo-experiment) with 20 drones, showing the selected master frame location per intersection relative to the initial frame position of each flight clip.
 
 ![Master frame selection result across intersection locations, showing the selected master frame and the initial frame position of each flight clip per intersection.](assets/best_master_frame_locations.jpg)
 
@@ -318,7 +318,7 @@ python tools/compare_tracking.py /path/to/videos/ --show
 python tools/compare_tracking.py /path/to/videos/ --trackers botsort ocsort --save
 ```
 
-Example output comparing BoT-SORT and ByteTrack on a sample flight session from the [Songdo Traffic](../README.md#field-deployment) dataset.
+Example output comparing BoT-SORT and ByteTrack on a sample flight session from the [Songdo Traffic](../README.md#real-world-deployment-the-songdo-experiment) dataset.
 
 ![Trajectory-length distribution comparison between BoT-SORT and ByteTrack: violin plot, CDF, mirrored histogram, and density difference.](assets/trajectory_length_distributions_analysis.png)
 
@@ -333,7 +333,7 @@ python tools/compute_bb_center_error.py /path/to/images/
 python tools/compute_bb_center_error.py /path/to/images/ --class-agnostic --save
 ```
 
-Example output showing the bounding-box center error distribution between human annotations from the [Songdo Vision](../README.md#field-deployment) dataset and [geo-trax](https://github.com/rfonod/geo-trax) model predictions.
+Example output showing the bounding-box center error distribution between human annotations from the [Songdo Vision](../README.md#real-world-deployment-the-songdo-experiment) dataset and [geo-trax](https://github.com/rfonod/geo-trax) model predictions.
 
 ![Bounding-box center error distribution between human annotations and geo-trax model predictions.](assets/bb_center_error_distribution.jpg)
 
@@ -359,7 +359,7 @@ python tools/viz_dimension_estimation.py path/to/video.mp4 --id 42 --show
 python tools/viz_dimension_estimation.py path/to/video.mp4 --id 42 --save
 ```
 
-Example output from the [Songdo experiment](../README.md#field-deployment) showing a vehicle trajectory with accepted (green) and rejected (red) bounding boxes (left) and the resulting dimension distribution with the final estimate (right).
+Example output from the [Songdo experiment](../README.md#real-world-deployment-the-songdo-experiment) showing a vehicle trajectory with accepted (green) and rejected (red) bounding boxes (left) and the resulting dimension distribution with the final estimate (right).
 
 ![Vehicle trajectory with accepted and rejected bounding boxes and the corresponding dimension distribution with the final estimate.](assets/vehicle_dimension_calculation.jpg)
 
@@ -374,7 +374,7 @@ python tools/compare_av_detections_and_tune_filters.py data/ --show
 python tools/compare_av_detections_and_tune_filters.py data/ --tune --save --filter savitzky_golay
 ```
 
-The figure below illustrates the two complementary trajectory sources (drone-derived BEV and on-board probe vehicle) and how positional differences between them are computed. In the [Songdo experiment](../README.md#field-deployment), the probe vehicle was an AV equipped with high-precision RTK-GNSS sensors, provided by Stanford Center at the Incheon Global Campus (SCIGC).
+The figure below illustrates the two complementary trajectory sources (drone-derived BEV and on-board probe vehicle) and how positional differences between them are computed. In the [Songdo experiment](../README.md#real-world-deployment-the-songdo-experiment), the probe vehicle was an AV equipped with high-precision RTK-GNSS sensors, provided by Stanford Center at the Incheon Global Campus (SCIGC).
 
 ![Dual trajectory sources (drone BEV and on-board probe vehicle) and the methodology for computing positional differences between drone-derived and sensor-derived trajectories.](assets/av_measurement_sources.jpg)
 
