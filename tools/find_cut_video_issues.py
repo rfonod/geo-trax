@@ -17,55 +17,37 @@ Usage:
   python tools/find_cut_video_issues.py <input_folder> [options]
 
 Arguments:
-  input_folder : str
-                 Path to the folder containing videos and flight logs (i.e., the PROCESSED folder).
+  input_folder : Path to the folder containing videos and flight logs (i.e., the PROCESSED folder).
 
 Options:
-  -h, --help            : Show this help message and exit.
-  -o, --output-folder <path> : str, optional
-                        Path to the folder where extracted flight log data will be saved
-                        (default: same as input folder).
-  -s, --save            : bool, optional
-                        Save extracted flight log data stats to a CSV file (default: False).
-  -f, --force           : bool, optional
-                        Force extraction even if output files already exist (default: False).
-  -rf, --ref-frame <int> : int, optional
-                        Reference frame used for stabilization/georeferencing (default: 0).
-  -viz, --visualize     : bool, optional
-                        Visualize flight logs and anomalies (default: False).
-  -sv, --save-viz       : bool, optional
-                        Save visualization to PDF file (default: False).
-  -m, --match-pattern <str> : str, optional
-                        Pattern to match flight logs (default: '??.CSV').
-  -fe, --folders-exclude <str> [<str> ...] : list of str, optional
-                        Folders to exclude from search
-                        (e.g., 'results' for non-flight log CSV files) (default: ['results']).
-  -tcrs, --target-crs <str> : str, optional
-                        Target CRS for local coordinates (default: 'epsg:5186').
-  -tc, --track-check    : bool, optional
-                        Check if all frames are present in tracking results and vice versa (default: False).
-  -v, --verbose         : bool, optional
-                        Print extracted flight log data (default: False).
+  -h, --help                               : Show this help message and exit.
+  -o, --output-folder <path>               : Folder where extracted flight-log data is saved (default: same as input folder).
+  -s, --save                               : Save extracted flight-log data stats to a CSV file (default: False).
+  -f, --force                              : Force extraction even if output files already exist (default: False).
+  -rf, --ref-frame <int>                   : Reference frame used for stabilization/georeferencing (default: 0).
+  -viz, --visualize                        : Visualize flight logs and anomalies (default: False).
+  -sv, --save-viz                          : Save visualization to a PDF file (default: False).
+  -m, --match-pattern <str>                : Glob pattern (case-insensitive) for flight-log files (default: '*.csv').
+                                             CSVs lacking flight-log columns are skipped automatically; narrow the
+                                             pattern (e.g. '??.csv' for short clip names like A1, B2) to limit the scan.
+  -c, --cfg <path>                         : Pipeline config used to resolve the output folder and filename postfixes.
+                                             Defaults to the bundled config (geotrax/cfg/default.yaml).
+  -fe, --folders-exclude <str> [<str> ...] : Folders to exclude from the search (default: [output.folder from config]).
+  -tcrs, --target-crs <str>                : Target CRS for local coordinates (default: 'epsg:5186').
+  -tc, --track-check                       : Check that all frames are present in the tracking results and vice versa (default: False).
+  -lp, --log-path <str>                    : Where to write logs: a directory or a full file path; defaults to a platform-specific log directory.
+  -q, --quiet                              : Reduce console verbosity to important messages only (default: show INFO-level detail).
 
 Anomaly Detection Thresholds:
-  -rdt, --radius-diff-threshold <float> : float, optional
-                        Max positional deviation from initial hover in meters (default: 15.0).
-  -adt, --altitude-diff-threshold <float> : float, optional
-                        Max altitude deviation from initial hover in meters (default: 5.0).
-  -fdt, --frame-diff-threshold <int> : int, optional
-                        Max frame difference threshold (default: 2).
-  -tdt, --timestamp-diff-threshold <float> : float, optional
-                        Max timestamp difference in seconds (default: 0.5).
-  -idt, --iso-diff-threshold <int> : int, optional
-                        Max ISO deviation threshold (default: 300).
-  -sdt, --shutter-diff-threshold <float> : float, optional
-                        Max shutter speed deviation threshold (default: 0.02).
-  -fndt, --fnum-diff-threshold <float> : float, optional
-                        Max f-number deviation threshold (default: 0.1).
-  -cdt, --ct-diff-threshold <int> : int, optional
-                        Max color temperature deviation threshold (default: 2000).
-  -fldt, --focal-len-diff-threshold <float> : float, optional
-                        Max focal length deviation threshold (default: 0.5).
+  -rdt, --radius-diff-threshold <float>     : Max positional deviation from initial hover, in meters (default: 15.0).
+  -adt, --altitude-diff-threshold <float>   : Max altitude deviation from initial hover, in meters (default: 5.0).
+  -fdt, --frame-diff-threshold <int>        : Max frame difference (default: 2).
+  -tdt, --timestamp-diff-threshold <float>  : Max timestamp difference, in seconds (default: 0.5).
+  -idt, --iso-diff-threshold <int>          : Max ISO deviation (default: 300).
+  -sdt, --shutter-diff-threshold <float>    : Max shutter-speed deviation (default: 0.02).
+  -fndt, --fnum-diff-threshold <float>      : Max f-number deviation (default: 0.1).
+  -cdt, --ct-diff-threshold <int>           : Max color-temperature deviation (default: 2000).
+  -fldt, --focal-len-diff-threshold <float> : Max focal-length deviation (default: 0.5).
 
 Examples:
 1. Basic analysis with saved results and visualization:
@@ -78,7 +60,7 @@ Examples:
    python tools/find_cut_video_issues.py /path/to/PROCESSED -viz -o /path/to/output/
 
 4. Comprehensive analysis with all options:
-   python tools/find_cut_video_issues.py /path/to/PROCESSED -s -f -viz -sv -tc -v
+   python tools/find_cut_video_issues.py /path/to/PROCESSED -s -f -viz -sv -tc
 
 Input:
 - PROCESSED folder containing drone flight logs in CSV format
@@ -104,8 +86,8 @@ Notes:
 
 import argparse
 import fnmatch
+import logging
 import os
-import sys
 from pathlib import Path
 
 import geopandas as gpd
@@ -115,8 +97,10 @@ import pandas as pd
 import tqdm
 from matplotlib.patches import Circle
 
-sys.path.append(str(Path(__file__).resolve().parents[1]))  # Add project root directory to Python path
-from utils.utils import detect_delimiter, determine_location_id
+from geotrax.utils.cli_utils import DEFAULT_CFG
+from geotrax.utils.config_utils import load_config
+from geotrax.utils.file_utils import DEFAULT_OUTPUT, detect_delimiter, determine_location_id, get_output_dir
+from geotrax.utils.logging_utils import setup_logger
 
 VIDEO_SUFFIX = '.MP4' # Video file format to report in the output file
 SESSION2TIME_WINDOW = {
@@ -133,46 +117,51 @@ SESSION2TIME_WINDOW = {
 } # Expected time window for each session
 WINDOW_TOLERANCE = 30  # +/- seconds
 
-def find_cut_video_issues(args: argparse.Namespace) -> None:
+def find_cut_video_issues(args: argparse.Namespace, logger: logging.Logger) -> None:
     """
     Find the issues with the cut videos.
     """
+    out_cfg = load_config(args.cfg, logger).get('output', DEFAULT_OUTPUT)
+    folder_name = out_cfg.get('folder', DEFAULT_OUTPUT['folder'])
+    if args.folders_exclude == [DEFAULT_OUTPUT['folder']] and folder_name != DEFAULT_OUTPUT['folder']:
+        args.folders_exclude = [folder_name]
+
     flight_logs_stats_filepath = args.output_folder / 'flight_log_stats.csv'
     if flight_logs_stats_filepath.exists() and not args.force:
-        print(f"Flight logs stats already exist in {flight_logs_stats_filepath}. Use --force to overwrite.")
-        print(f"Loading the existing flight logs stats from {flight_logs_stats_filepath}.")
+        logger.warning(f"Flight logs stats already exist in {flight_logs_stats_filepath}. Use --force to overwrite.")
+        logger.info(f"Loading the existing flight logs stats from {flight_logs_stats_filepath}.")
         df_flight_logs_stats = pd.read_csv(flight_logs_stats_filepath)
     else:
-        flight_logs_filepaths = find_all_flight_logs(args.input_folder, args.match_pattern, args.folders_exclude)
-        df_flight_logs_stats = extract_flight_logs_stats(flight_logs_filepaths, args.input_folder, args.ref_frame, args.target_crs, args.timestamp_diff_threshold, args.track_check)
+        flight_logs_filepaths = find_all_flight_logs(args.input_folder, args.match_pattern, args.folders_exclude, logger)
+        df_flight_logs_stats = extract_flight_logs_stats(flight_logs_filepaths, args.input_folder, args.ref_frame, args.target_crs, args.timestamp_diff_threshold, args.track_check, logger, out_cfg=out_cfg)
         if args.save:
-            save_flight_logs(df_flight_logs_stats, flight_logs_stats_filepath)
+            save_flight_logs(df_flight_logs_stats, flight_logs_stats_filepath, logger)
 
-    df_flight_logs_anomalies = find_anomalies(df_flight_logs_stats, args)
+    df_flight_logs_anomalies = find_anomalies(df_flight_logs_stats, args, logger)
     if args.save:
-        save_flight_logs(df_flight_logs_anomalies, args.output_folder / 'flight_log_anomalies.csv')
+        save_flight_logs(df_flight_logs_anomalies, args.output_folder / 'flight_log_anomalies.csv', logger)
 
     if args.visualize or args.save_viz:
-        visualize_flight_logs_data(df_flight_logs_stats, args.output_folder, args.visualize, args.save_viz)
+        visualize_flight_logs_data(df_flight_logs_stats, args.output_folder, args.visualize, args.save_viz, logger)
 
 
-def find_all_flight_logs(input_folder: Path, match_pattern: str, folders_exclude: list) -> list:
+def find_all_flight_logs(input_folder: Path, match_pattern: str, folders_exclude: list, logger: logging.Logger) -> list:
     """
     Find all the flight logs in the input folder.
     """
     flight_logs = []
     for item in input_folder.iterdir():
         if item.is_dir() and item.name not in folders_exclude:
-            flight_logs.extend(find_all_flight_logs(item, match_pattern, folders_exclude))
-        elif item.is_file() and fnmatch.fnmatch(item.name, match_pattern):
+            flight_logs.extend(find_all_flight_logs(item, match_pattern, folders_exclude, logger))
+        elif item.is_file() and fnmatch.fnmatch(item.name.lower(), match_pattern.lower()):
             flight_logs.append(item)
 
     if not flight_logs:
-        print(f"Warning: No flight logs found in the input folder {input_folder}.")
+        logger.warning(f"No flight logs found in the input folder {input_folder}.")
     return flight_logs
 
 
-def extract_flight_logs_stats(flight_logs: list, input_folder: Path, ref_frame: int, target_crs: str, timestamp_diff_threshold: float, track_check: bool) -> pd.DataFrame:
+def extract_flight_logs_stats(flight_logs: list, input_folder: Path, ref_frame: int, target_crs: str, timestamp_diff_threshold: float, track_check: bool, logger: logging.Logger, out_cfg: dict = None) -> pd.DataFrame:
     """
     Extract the flight logs stats.
     """
@@ -181,7 +170,7 @@ def extract_flight_logs_stats(flight_logs: list, input_folder: Path, ref_frame: 
     end_time_deviations = []
     for flight_log in tqdm.tqdm(flight_logs, desc='Extracting flight logs'):
         if not flight_log.exists():
-            print(f'Flight log {flight_log} could not be opened. Skipping...')
+            logger.warning(f"Flight log {flight_log} could not be opened. Skipping...")
             continue
 
         delimiter = detect_delimiter(flight_log)
@@ -193,7 +182,10 @@ def extract_flight_logs_stats(flight_logs: list, input_folder: Path, ref_frame: 
             longitude_ref, latitude_ref, rel_altitude_ref = df.loc[df['frame'] == ref_frame, ['longitude', 'latitude', 'rel_alt']].values[0]
             iso_ref, shutter_ref, fnum_ref, ct_ref, focal_len_ref = df.loc[df['frame'] == ref_frame, ['iso', 'shutter', 'fnum', 'ct', 'focal_len']].values[0]
         except IndexError:
-            print(f'Warning: Reference frame {ref_frame} not found in {flight_log}. Skipping...')
+            logger.warning(f"Reference frame {ref_frame} not found in {flight_log}. Skipping...")
+            continue
+        except KeyError:
+            logger.warning(f"{flight_log} is missing expected flight-log columns; not a flight log? Skipping...")
             continue
 
         try:
@@ -201,23 +193,25 @@ def extract_flight_logs_stats(flight_logs: list, input_folder: Path, ref_frame: 
             longitude, latitude, rel_altitude = df.loc[:, ['longitude', 'latitude', 'rel_alt']].values.T
             iso, shutter, fnum, ct, focal_len = df.loc[:, ['iso', 'shutter', 'fnum', 'ct', 'focal_len']].values.T
         except KeyError as e:
-            print(f'Warning: {e} not found in {flight_log}. Skipping...')
+            logger.warning(f"{e} not found in {flight_log}. Skipping...")
             continue
         except IndexError:
-            print(f'Warning: No data found in {flight_log}. Skipping...')
+            logger.warning(f"No data found in {flight_log}. Skipping...")
             continue
 
         # check if the all frame numbers are present in the tracking results (if tracking has been performed)
         if track_check:
-            tracking_results_filepath = flight_log.parent / 'results' / (flight_log.stem + '.txt')
+            cfg = out_cfg or DEFAULT_OUTPUT
+            tracks_postfix = cfg.get('tracks_postfix', DEFAULT_OUTPUT['tracks_postfix'])
+            tracking_results_filepath = get_output_dir(flight_log, cfg) / f"{flight_log.stem}{tracks_postfix}.txt"
             if tracking_results_filepath.exists():
                 tracking_frames = np.loadtxt(tracking_results_filepath, delimiter=detect_delimiter(tracking_results_filepath), usecols=0, dtype=int)
                 missing_in_tracking = set(frame) - set(tracking_frames)
                 missing_in_flight_log = set(tracking_frames) - set(frame)
                 if missing_in_tracking:
-                    print(f"\033[91mWarning: Missing frames {sorted(missing_in_tracking)} in the tracking results file {tracking_results_filepath} for flight log {flight_log}.\033[0m")
+                    logger.warning(f"Missing frames {sorted(missing_in_tracking)} in the tracking results file {tracking_results_filepath} for flight log {flight_log}.")
                 if missing_in_flight_log:
-                    print(f"\033[91mWarning: Missing frames {sorted(missing_in_flight_log)} in the flight log {flight_log} that are present in the tracking results file {tracking_results_filepath}.\033[0m")
+                    logger.warning(f"Missing frames {sorted(missing_in_flight_log)} in the flight log {flight_log} that are present in the tracking results file {tracking_results_filepath}.")
 
         # time-related data/checks
         frame_diff = np.diff(frame)
@@ -233,7 +227,7 @@ def extract_flight_logs_stats(flight_logs: list, input_folder: Path, ref_frame: 
         # check if the timestamps in the filename match the timestamps in the flight log
         date_in_filename = str(video_path).split(os.sep)[-4]
         if any(date_in_filename != ts.split(' ')[0] for ts in timestamp):
-            print(f"\033[91mWarning: Date mismatch found in {video_path}. The date differs from the video path.\033[0m")
+            logger.warning(f"Date mismatch found in {video_path}. The date differs from the video path.")
 
         # check if the timestamps are within the expected time window
         session = str(video_path).split(os.sep)[-2]
@@ -245,8 +239,8 @@ def extract_flight_logs_stats(flight_logs: list, input_folder: Path, ref_frame: 
             timestamp_end_margin = (timestamp_end + pd.Timedelta(seconds=WINDOW_TOLERANCE)).strftime('%H:%M:%S')
 
             if any(not (timestamp_start_margin <= ts.split(' ')[1] <= timestamp_end_margin) for ts in timestamp):
-                print(f"\033[91mWarning: Timestamp mismatch found in {video_path}. The timestamps are not within the expected time window.\033[0m")
-                print(f"Expected time window: {timestamp_start_margin} - {timestamp_end_margin}. First timestamp: {timestamp[0].split(' ')[1]}. Last timestamp: {timestamp[-1].split(' ')[1]}")
+                logger.warning(f"Timestamp mismatch found in {video_path}. The timestamps are not within the expected time window.")
+                logger.info(f"Expected time window: {timestamp_start_margin} - {timestamp_end_margin}. First timestamp: {timestamp[0].split(' ')[1]}. Last timestamp: {timestamp[-1].split(' ')[1]}")
 
             # collect the max time deviations for each hovering, if exists
             timestamp_start_actual = pd.to_datetime(timestamp[0].split(' ')[1], format='%H:%M:%S.%f')
@@ -258,13 +252,13 @@ def extract_flight_logs_stats(flight_logs: list, input_folder: Path, ref_frame: 
                 end_time_deviations.append((timestamp_end_actual - timestamp_end).total_seconds())
 
         else:
-            print(f"\033[91mWarning: Unknown session {session} found in {video_path}. The timestamps will not be checked.\033")
+            logger.warning(f"Unknown session {session} found in {video_path}. The timestamps will not be checked.")
 
         # spatial data
         longitude[longitude == 0] = np.nan
         latitude[latitude == 0] = np.nan
         if np.isnan(longitude).any() or np.isnan(latitude).any():
-            print(f'Warning: Missing GPS data in {flight_log}. Missing values will be ignored.')
+            logger.warning(f"Missing GPS data in {flight_log}. Missing values will be ignored.")
 
         x_local_ref = geo2local(np.array([latitude_ref]), np.array([longitude_ref]), target_crs=target_crs)[0][0]
         y_local_ref = geo2local(np.array([latitude_ref]), np.array([longitude_ref]), target_crs=target_crs)[1][0]
@@ -297,13 +291,13 @@ def extract_flight_logs_stats(flight_logs: list, input_folder: Path, ref_frame: 
                      iso_max_deviation, shutter_max_deviation, fnum_max_deviation, ct_max_deviation, focal_len_max_deviation,
                      longitude_ref, latitude_ref, rel_altitude_ref, x_local_ref, y_local_ref])
 
-    # print the start/end time deviation statistics
+    # report the start/end time deviation statistics
     if start_time_deviations:
-        print(f"There were {len(start_time_deviations)} hoverings that started before the expected time window.")
-        print(f"The mean ± std. dev. of these cases is: {np.mean(start_time_deviations).round(2)} ± {np.std(start_time_deviations).round(2)} seconds.")
+        logger.info(f"There were {len(start_time_deviations)} hoverings that started before the expected time window.")
+        logger.info(f"The mean ± std. dev. of these cases is: {np.mean(start_time_deviations).round(2)} ± {np.std(start_time_deviations).round(2)} seconds.")
     if end_time_deviations:
-        print(f"There were {len(end_time_deviations)} hoverings that ended after the expected time window.")
-        print(f"The mean ± std. dev. of these cases is: {np.mean(end_time_deviations).round(2)} ± {np.std(end_time_deviations).round(2)} seconds.")
+        logger.info(f"There were {len(end_time_deviations)} hoverings that ended after the expected time window.")
+        logger.info(f"The mean ± std. dev. of these cases is: {np.mean(end_time_deviations).round(2)} ± {np.std(end_time_deviations).round(2)} seconds.")
 
     df = pd.DataFrame(data, columns=['location_id', 'video_path', 'radius_max_deviation', 'x_max_deviation', 'y_max_deviation',
                                      'rel_altitude_max_deviation', 'frame_max_abs_diff', 'timestamp_max_abs_diff', 'timestamp_anomaly_location', 'timestamp_anomaly_frame',
@@ -315,7 +309,7 @@ def extract_flight_logs_stats(flight_logs: list, input_folder: Path, ref_frame: 
     return df
 
 
-def find_anomalies(df: pd.DataFrame, args: argparse.Namespace) -> pd.DataFrame:
+def find_anomalies(df: pd.DataFrame, args: argparse.Namespace, logger: logging.Logger) -> pd.DataFrame:
     """
     Find location anomalies in the flight logs.
     """
@@ -335,12 +329,12 @@ def find_anomalies(df: pd.DataFrame, args: argparse.Namespace) -> pd.DataFrame:
     for name, (column, threshold) in anomaly_conditions.items():
         condition_anomalies = df.loc[df[column] >= threshold]
         anomalies.append(condition_anomalies)
-        print(f"Found {len(condition_anomalies)} {name} anomalies - {column} >= {threshold}.")
+        logger.notice(f"Found {len(condition_anomalies)} {name} anomalies - {column} >= {threshold}.")
         if not condition_anomalies.empty:
             if name == 'timestamp':
-                print(condition_anomalies[['location_id', 'video_path', column, 'timestamp_anomaly_location', 'timestamp_anomaly_frame']].to_string(index=False))
+                logger.info("\n%s", condition_anomalies[['location_id', 'video_path', column, 'timestamp_anomaly_location', 'timestamp_anomaly_frame']].to_string(index=False))
             else:
-                print(condition_anomalies[['location_id', 'video_path', column]].to_string(index=False))
+                logger.info("\n%s", condition_anomalies[['location_id', 'video_path', column]].to_string(index=False))
 
     return pd.concat(anomalies, ignore_index=True)
 
@@ -358,16 +352,16 @@ def geo2local(latitude: np.ndarray, longitude: np.ndarray, source_crs: str = 'ep
     return x_local, y_local
 
 
-def save_flight_logs(df: pd.DataFrame, flight_logs_filepath: Path) -> None:
+def save_flight_logs(df: pd.DataFrame, flight_logs_filepath: Path, logger: logging.Logger) -> None:
     """
     Save all the extracted flight log stats to a CSV file.
     """
     flight_logs_filepath.parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(flight_logs_filepath, index=False)
-    print(f"Flight logs stats saved to {flight_logs_filepath}")
+    logger.info(f"Flight logs stats saved to {flight_logs_filepath}")
 
 
-def visualize_flight_logs_data(df_all: pd.DataFrame, output_folder: Path, visualize: bool, save: bool) -> None:
+def visualize_flight_logs_data(df_all: pd.DataFrame, output_folder: Path, visualize: bool, save: bool, logger: logging.Logger) -> None:
     """
     Visualize the flight logs and anomalies.
     """
@@ -419,7 +413,7 @@ def visualize_flight_logs_data(df_all: pd.DataFrame, output_folder: Path, visual
     if save:
         filepath = output_folder / 'flight_logs_hovering_stats_viz.pdf'
         plt.savefig(filepath, transparent=True, bbox_inches='tight')
-        print(f"Hovering stats visualization saved to {filepath}")
+        logger.info(f"Hovering stats visualization saved to {filepath}")
     plt.close()
 
     # Plot selected camera settings deviations
@@ -453,11 +447,11 @@ def visualize_flight_logs_data(df_all: pd.DataFrame, output_folder: Path, visual
     if save:
         filepath = output_folder / 'flight_logs_camera_stats_viz.pdf'
         plt.savefig(filepath, transparent=True, bbox_inches='tight')
-        print(f"Visualization saved to {filepath}")
+        logger.info(f"Visualization saved to {filepath}")
     plt.close()
 
 
-def get_cli_arguments() -> argparse.Namespace:
+def parse_cli_args() -> argparse.Namespace:
     """
     Parse command-line arguments.
     """
@@ -471,11 +465,13 @@ def get_cli_arguments() -> argparse.Namespace:
     parser.add_argument("--ref-frame", "-rf", type=int, default=0, help="Reference frame used for stabilization/georeferencing.")
     parser.add_argument("--visualize", "-viz", action="store_true", help="Visualize the flight logs and anomalies.")
     parser.add_argument("--save-viz", "-sv", action="store_true", help="Save the visualization to a PDF file.")
-    parser.add_argument("--match-pattern", "-m", type=str, default='??.CSV', help="Pattern to match the flight logs.")
-    parser.add_argument("--folders-exclude", "-fe", type=str, nargs='+', default=['results'], help="Folders to exclude from the search (e.g, 'results' as these may contain non-flight log .CSV files).")
+    parser.add_argument("--cfg", "-c", type=Path, default=DEFAULT_CFG, help="Pipeline config used to resolve the output folder and filename postfixes. Defaults to the bundled config.")
+    parser.add_argument("--match-pattern", "-m", type=str, default='*.csv', help="Glob pattern (case-insensitive) for flight-log files. Default '*.csv' matches any naming; narrow it (e.g. '??.csv' for short clip names like A1, B2) to skip auxiliary CSVs.")
+    parser.add_argument("--folders-exclude", "-fe", type=str, nargs='+', default=[DEFAULT_OUTPUT['folder']], help="Folders to exclude from the search (default: [output.folder from config]).")
     parser.add_argument("--target-crs", "-tcrs", default='epsg:5186', help="Target CRS for local coordinates")
     parser.add_argument("--track-check", "-tc", action="store_true", help="Check if all frames are present in the tracking results and vice versa.")
-    parser.add_argument("--verbose", "-v", action="store_true", help="Print the extracted flight log data.")
+    parser.add_argument("--log-path", "-lp", type=Path, default=None, help="Where to write logs: a directory or a full file path; defaults to a platform-specific log directory.")
+    parser.add_argument("--quiet", "-q", action="store_true", help="Reduce console verbosity to important messages only (default: show INFO-level detail).")
 
     # Anomalies detection related arguments
     parser.add_argument("--radius-diff-threshold", "-rdt", type=float, default=15, help="Threshold for the maximal positional deviation (in meters) from the initial hover.")
@@ -496,6 +492,15 @@ def get_cli_arguments() -> argparse.Namespace:
     return cli_args
 
 
+def main() -> None:
+    """
+    Command-line entry point.
+    """
+    args = parse_cli_args()
+    logger = setup_logger(Path(__file__).stem, verbose=not args.quiet, log_path=args.log_path)
+
+    find_cut_video_issues(args, logger)
+
+
 if __name__ == "__main__":
-    cli_args = get_cli_arguments()
-    find_cut_video_issues(cli_args)
+    main()

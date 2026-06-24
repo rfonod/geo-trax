@@ -38,6 +38,10 @@ Options:
     Debugging:
     --debug, -d                     : Preview changes without modifying files.
 
+    Logging:
+    --log-path, -lp <str>           : Where to write logs: a directory or a full file path; defaults to a platform-specific log directory.
+    --quiet, -q                     : Reduce console verbosity to important messages only (default: show INFO-level detail).
+
 Examples:
   1. Remove embedded image data to reduce file size:
      python tools/fix_json_annotations.py path/to/annotations/ --remove-image-data
@@ -79,19 +83,22 @@ Notes:
   - Use --debug to safely preview all changes before applying them
 """
 
+import argparse
 import json
-from argparse import ArgumentParser
+import logging
 from pathlib import Path
 
+from geotrax.utils.logging_utils import setup_logger
 
-def process_input(args):
+
+def process_input(args: argparse.Namespace, logger: logging.Logger) -> None:
     """
     Remove image data from COCO annotations and correct the image path.
     """
 
     # Check if the labels path is provided
     if not args.labels_dir:
-        print("Error: Labels path not provided.")
+        logger.error("Labels path not provided.")
         return
 
     # Load all label paths
@@ -99,27 +106,26 @@ def process_input(args):
 
     # Check if there are any label files in the input directory
     if not label_paths:
-        print(f"Error: No label files found in input directory '{args.labels_dir}'.")
+        logger.error(f"No label files found in input directory '{args.labels_dir}'.")
         return
 
-    print(f"Found {len(label_paths)} JSON annotation files in '{args.labels_dir}'.")
+    logger.notice(f"Found {len(label_paths)} JSON annotation files in '{args.labels_dir}'.")
     if args.debug:
-        print("Running in DEBUG mode - no files will be modified.")
+        logger.info("Running in DEBUG mode - no files will be modified.")
     if args.remove_image_data:
-        print("Image data removal enabled - will remove embedded base64 image data.")
+        logger.info("Image data removal enabled - will remove embedded base64 image data.")
     if args.to_obb:
-        print("HBB to OBB conversion - rectangles will be converted to 4-point polygons.")
+        logger.info("HBB to OBB conversion - rectangles will be converted to 4-point polygons.")
     if args.to_hbb:
-        print("OBB to HBB conversion - polygons will be converted to axis-aligned rectangles.")
+        logger.info("OBB to HBB conversion - polygons will be converted to axis-aligned rectangles.")
     if args.normalize_to_unix:
-        print("Path normalization to Unix format - converting backslashes to forward slashes.")
+        logger.info("Path normalization to Unix format - converting backslashes to forward slashes.")
     if args.normalize_to_windows:
-        print("Path normalization to Windows format - converting forward slashes to backslashes.")
+        logger.info("Path normalization to Windows format - converting forward slashes to backslashes.")
     if args.remove_from_path:
-        print(f"Path substring removal - will remove '{args.remove_from_path}' from image paths.")
+        logger.info(f"Path substring removal - will remove '{args.remove_from_path}' from image paths.")
     if args.replace_path:
-        print(f"Path substring replacement - will replace '{args.replace_path[0]}' with '{args.replace_path[1]}' in image paths.")
-    print()
+        logger.info(f"Path substring replacement - will replace '{args.replace_path[0]}' with '{args.replace_path[1]}' in image paths.")
 
     processed_count = 0
     image_data_removed_count = 0
@@ -146,27 +152,27 @@ def process_input(args):
             old_path = coco_annotations["imagePath"]
             coco_annotations["imagePath"] = coco_annotations["imagePath"].replace("\\", "/")
             path_normalized_count += 1
-            print(f"  Path normalized to Unix: '{old_path}' -> '{coco_annotations['imagePath']}'")
+            logger.info(f"  Path normalized to Unix: '{old_path}' -> '{coco_annotations['imagePath']}'")
 
         if args.normalize_to_windows and "/" in coco_annotations["imagePath"]:
             old_path = coco_annotations["imagePath"]
             coco_annotations["imagePath"] = coco_annotations["imagePath"].replace("/", "\\")
             path_normalized_count += 1
-            print(f"  Path normalized to Windows: '{old_path}' -> '{coco_annotations['imagePath']}'")
+            logger.info(f"  Path normalized to Windows: '{old_path}' -> '{coco_annotations['imagePath']}'")
 
         # Remove substring from the image path
         if args.remove_from_path and args.remove_from_path in coco_annotations["imagePath"]:
             old_path = coco_annotations["imagePath"]
             coco_annotations["imagePath"] = coco_annotations["imagePath"].replace(args.remove_from_path, "")
             path_modified_count += 1
-            print(f"  Path modified: '{old_path}' -> '{coco_annotations['imagePath']}'")
+            logger.info(f"  Path modified: '{old_path}' -> '{coco_annotations['imagePath']}'")
 
         # Replace part of the image path
         if args.replace_path and args.replace_path[0] in coco_annotations["imagePath"]:
             old_path = coco_annotations["imagePath"]
             coco_annotations["imagePath"] = coco_annotations["imagePath"].replace(args.replace_path[0], args.replace_path[1])
             path_modified_count += 1
-            print(f"  Path replaced: '{old_path}' -> '{coco_annotations['imagePath']}'")
+            logger.info(f"  Path replaced: '{old_path}' -> '{coco_annotations['imagePath']}'")
 
         # Convert between HBB and OBB formats
         rectangles_converted = 0
@@ -185,12 +191,12 @@ def process_input(args):
 
             if rectangles_converted > 0:
                 obb_converted_count += 1
-                print(f"  Converted {rectangles_converted} HBB rectangle(s) to OBB polygon(s) in '{label_path.name}'")
+                logger.info(f"  Converted {rectangles_converted} HBB rectangle(s) to OBB polygon(s) in '{label_path.name}'")
 
             # Check if all "points" contain exactly 4 points
             for annotation in coco_annotations["shapes"]:
                 if annotation["shape_type"] == "polygon" and len(annotation["points"]) != 4:
-                    print(f"\033[91mError: Polygon in '{label_path}' does not contain exactly 4 points.\033[0m")
+                    logger.error(f"Polygon in '{label_path}' does not contain exactly 4 points.")
 
         if args.to_hbb:
             for annotation in coco_annotations["shapes"]:
@@ -207,38 +213,35 @@ def process_input(args):
 
             if polygons_converted > 0:
                 hbb_converted_count += 1
-                print(f"  Converted {polygons_converted} OBB polygon(s) to HBB rectangle(s) in '{label_path.name}'")
+                logger.info(f"  Converted {polygons_converted} OBB polygon(s) to HBB rectangle(s) in '{label_path.name}'")
 
         # Save the COCO annotations
         if not args.debug:
             with open(label_path, "w") as file:
                 json.dump(coco_annotations, file, indent=2)
 
-        print(f"✓ Processed '{label_path.name}'")
+        logger.info(f"Processed '{label_path.name}'")
 
         processed_count += 1
 
-    print()
-    print("Summary:")
-    print(f"  Total files processed: {processed_count}")
+    summary = [f"Total files processed: {processed_count}"]
     if args.remove_image_data:
-        print(f"  Files with image data removed: {image_data_removed_count}")
+        summary.append(f"Files with image data removed: {image_data_removed_count}")
     if args.normalize_to_unix or args.normalize_to_windows:
-        print(f"  Files with normalized paths: {path_normalized_count}")
+        summary.append(f"Files with normalized paths: {path_normalized_count}")
     if args.remove_from_path or args.replace_path:
-        print(f"  Files with modified paths: {path_modified_count}")
+        summary.append(f"Files with modified paths: {path_modified_count}")
     if args.to_obb:
-        print(f"  Files with HBB to OBB conversions: {obb_converted_count}")
+        summary.append(f"Files with HBB to OBB conversions: {obb_converted_count}")
     if args.to_hbb:
-        print(f"  Files with OBB to HBB conversions: {hbb_converted_count}")
-    if args.debug:
-        print("  Note: No files were modified (debug mode)")
-    else:
-        print("  All changes saved successfully.")
+        summary.append(f"Files with OBB to HBB conversions: {hbb_converted_count}")
+    summary.append("Note: No files were modified (debug mode)" if args.debug else "All changes saved successfully.")
+    logger.notice("Summary:\n  %s", "\n  ".join(summary))
 
 
-if __name__ == "__main__":
-    parser = ArgumentParser(description="Clean and fix JSON annotation files for COCO-like datasets")
+def parse_cli_args() -> argparse.Namespace:
+    """Parse command-line arguments."""
+    parser = argparse.ArgumentParser(description="Clean and fix JSON annotation files for COCO-like datasets")
     parser.add_argument("labels_dir", type=Path, help="Path to directory containing JSON annotation files")
 
     # Image data options
@@ -257,6 +260,19 @@ if __name__ == "__main__":
     parser.add_argument("--remove-from-path", "-r", type=str, help="Remove specified substring from image paths")
     parser.add_argument("--replace-path", "-p", nargs=2, metavar=("OLD", "NEW"), help="Replace substring in image paths")
     parser.add_argument("--debug", "-d", action="store_true", help="Debug mode - show changes without modifying files")
-    args = parser.parse_args()
+    parser.add_argument("--log-path", "-lp", type=Path, default=None, help="Where to write logs: a directory or a full file path; defaults to a platform-specific log directory.")
+    parser.add_argument("--quiet", "-q", action="store_true", help="Reduce console verbosity to important messages only (default: show INFO-level detail).")
 
-    process_input(args)
+    return parser.parse_args()
+
+
+def main() -> None:
+    """Command-line entry point."""
+    args = parse_cli_args()
+    logger = setup_logger(Path(__file__).stem, verbose=not args.quiet, log_path=args.log_path)
+
+    process_input(args, logger)
+
+
+if __name__ == "__main__":
+    main()

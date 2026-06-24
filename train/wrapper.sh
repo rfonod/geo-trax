@@ -9,10 +9,12 @@
 #
 # Examples:
 #   sbatch train/wrapper.sh train/train.sh -m 8 -e 1 -s s
+#   sbatch train/wrapper.sh geotrax extract path/to/video.mp4 --cfg geotrax/cfg/default.yaml
 #
 # Notes:
 #   - Update --chdir to the absolute path of your geo-trax project root.
-#   - Update the conda environment name if it differs from 'geo-trax'.
+#   - Edit the "Activate your Python environment" block below to match your setup
+#     (venv, conda, or uv). venv is the default; conda is shown as a commented alternative.
 #   - Adjust --cpus-per-task, --mem, --time, and --gres to match your cluster's resources.
 
 #SBATCH --job-name GeoTrax-Train
@@ -31,17 +33,24 @@ echo STARTING AT $(date)
 echo "Job run at: $(hostname)"
 
 #-------------------------------------------------------------------------------
-# Activate conda virtual environment
+# Activate your Python environment (edit to match your setup: venv, conda, or uv)
 #-------------------------------------------------------------------------------
-echo -e "\nActivating conda environment..."
-eval "$(conda shell.bash hook)"
-conda activate geo-trax  # update to match your conda environment name
-echo -e "Activated virtual environment: $CONDA_DEFAULT_ENV"
+echo -e "\nActivating Python environment..."
+# Option A (default): venv / uv — activate the environment created with `python -m venv` or `uv venv`
+source .venv/bin/activate
+# Option B: conda — uncomment and set your environment name
+# eval "$(conda shell.bash hook)"
+# conda activate geo-trax
+echo -e "Using Python: $(which python)"
 
 if [[ $1 == *.py ]]
 then
     echo "python ${@:1}"
     python -u "${@:1}"
+elif [[ $1 == geotrax ]]
+then
+    echo "python -m geotrax ${@:2}"
+    python -u -m geotrax "${@:2}"
 else
     echo "bash ${@:1}"
     bash "${@:1}"

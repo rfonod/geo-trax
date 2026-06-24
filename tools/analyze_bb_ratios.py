@@ -20,21 +20,24 @@ Arguments:
   source              : Path to a video/yaml file or a directory containing tracking data.
 
 Options:
-  -h, --help          : Show this help message and exit.
-  -v, --verbose       : Print detailed statistical results for each video file processed.
-  -hs, --hist         : Generate and display a histogram of length-to-width ratios for each vehicle class.
-  -p, --plot          : Plot length and height histogram per video and vehicle ID.
-  -i, --id <int>      : Specify a vehicle ID for detailed analysis.
+  -h, --help            : Show this help message and exit.
+  -hs, --hist           : Generate and display a histogram of length-to-width ratios for each vehicle class.
+  -p, --plot            : Plot length and height histogram per video and vehicle ID.
+  -i, --id <int>        : Specify a vehicle ID for detailed analysis.
+  -c, --cfg <path>      : Pipeline config used to resolve the output folder and filename postfixes.
+                          Defaults to the bundled config (geotrax/cfg/default.yaml).
+  -lp, --log-path <str> : Where to write logs: a directory or a full file path; defaults to a platform-specific log directory.
+  -q, --quiet           : Reduce console verbosity to important messages only (default: show INFO-level per-video detail).
 
 Examples:
-1. Analyze a single video file with verbose output:
-   python tools/analyze_bb_ratios.py video.yaml --verbose
+1. Analyze a single video file:
+   python tools/analyze_bb_ratios.py video.yaml
 
 2. Perform a batch analysis on a directory and show histograms:
    python tools/analyze_bb_ratios.py data/ --hist
 
 3. Analyze a specific vehicle ID from a video:
-   python tools/analyze_bb_ratios.py video.yaml --id 42 --verbose
+   python tools/analyze_bb_ratios.py video.yaml --id 42
 
 Input:
 - A path to a video file (e.g., .mp4, .mov), a YAML configuration file, or a directory.
@@ -57,15 +60,17 @@ Notes:
 
 import argparse
 import copy
-import sys
+import logging
 from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
 from compare_dimension_estimators import estimate_vehicle_dimensions_new
 
-sys.path.append(str(Path(__file__).resolve().parents[1]))  # Add project root directory to Python path
-from utils.utils import detect_delimiter
+from geotrax.utils.cli_utils import DEFAULT_CFG
+from geotrax.utils.config_utils import load_config
+from geotrax.utils.file_utils import DEFAULT_OUTPUT, detect_delimiter, get_output_dir
+from geotrax.utils.logging_utils import setup_logger
 
 DEFAULT_CLASS_NAMES = ['Car', 'Bus', 'Truck', 'Motorcycle', 'Pedestrian', 'Bicycle']
 VIDEO_FORMATS = {'.mp4', '.mov', '.avi', '.mkv'}
@@ -82,30 +87,31 @@ tau_c_restrictive = {
 theta_bar_deg_restrictive = 5
 
 
-def main(args):
+def analyze_bb_ratios(args: argparse.Namespace, logger: logging.Logger) -> None:
+    """Analyze vehicle bounding-box length-to-width ratios for the input file or directory."""
     # Initialize results
     results = {}
 
     # Check if input is a file or a directory
     if args.source.is_file():
-        results = process_file(args.source, args)
+        results = process_file(args.source, args, logger)
     elif args.source.is_dir():
-        results = process_dir(args.source, args)
+        results = process_dir(args.source, args, logger)
     else:
         raise FileNotFoundError(f"File or directory {args.source} not found.")
 
     # Analyze the results
-    analyze_results(results, args)
+    analyze_results(results, args, logger)
 
 
-def process_dir(directory, args):
+def process_dir(directory, args, logger):
     all_class_ratios = {}
     for file in sorted(directory.iterdir()):
         if file.is_file():
-            class_ratios = process_file(file, args)
+            class_ratios = process_file(file, args, logger)
             all_class_ratios = append_results(all_class_ratios, class_ratios)
         elif file.is_dir():
-            sub_dir_ratios = process_dir(file, args)
+            sub_dir_ratios = process_dir(file, args, logger)
             all_class_ratios = append_results(all_class_ratios, sub_dir_ratios)
         else:
             raise FileNotFoundError(f"File or directory {file} not found.")
@@ -113,16 +119,20 @@ def process_dir(directory, args):
     return all_class_ratios
 
 
-def process_file(file, args):
+def process_file(file, args, logger):
     # Check if the input is a valid video file or a YAML file
     if file.suffix.lower() not in {'.yaml'} | VIDEO_FORMATS:
         return None
-    # Check if the file is in the results directory
-    if file.parent.name == 'results':
+    # Skip files that live inside the output folder itself
+    output_cfg = load_config(args.cfg, logger).get('output', DEFAULT_OUTPUT)
+    folder_name = output_cfg.get('folder', DEFAULT_OUTPUT['folder'])
+    if file.parent.name == folder_name:
         return None
 
     # Load tracks
-    tracks_txt_file = Path(f"{str(file.parent / 'results' / file.stem)}.txt")
+    tracks_postfix = output_cfg.get('tracks_postfix', DEFAULT_OUTPUT['tracks_postfix'])
+    out_dir = get_output_dir(file, output_cfg)
+    tracks_txt_file = out_dir / f"{file.stem}{tracks_postfix}.txt"
     if not tracks_txt_file.exists():
         return None
 
@@ -137,17 +147,17 @@ def process_file(file, args):
     args.source = file
 
     # Estimate vehicle dimensions
-    print(f"Processing: {tracks_txt_file}")
-    tracks = estimate_vehicle_dimensions_new(tracks, args, tau_c=tau_c_restrictive, theta_bar_deg=theta_bar_deg_restrictive)
+    logger.info(f"Processing: {tracks_txt_file}")
+    tracks = estimate_vehicle_dimensions_new(tracks, args, logger, tau_c=tau_c_restrictive, theta_bar_deg=theta_bar_deg_restrictive)
 
     # Extract the width and length ratios per vehicle class
     class2ratios = extract_ratios(tracks)
-    if args.verbose:
+    if not args.quiet:
         for class_id, ratios in class2ratios.items():
-            print(f"  Class: {DEFAULT_CLASS_NAMES[class_id]} - N: {len(ratios)}")
+            logger.info(f"  Class: {DEFAULT_CLASS_NAMES[class_id]} - N: {len(ratios)}")
 
         # Analyze the results per video
-        analyze_results(class2ratios, args)
+        analyze_results(class2ratios, args, logger)
 
     return class2ratios
 
@@ -180,7 +190,7 @@ def append_results(results, new_results):
     return results
 
 
-def analyze_results(class2ratios, args):
+def analyze_results(class2ratios, args, logger):
     for class_id, ratios in class2ratios.items():
         if len(ratios) == 0:
             continue
@@ -193,16 +203,18 @@ def analyze_results(class2ratios, args):
         ratios_q10 = np.percentile(ratios, 10)
         ratios_q5 = np.percentile(ratios, 5)
         ratios_q1 = np.percentile(ratios, 1)
-        print(f"\nClass: {DEFAULT_CLASS_NAMES[class_id]}")
-        print(f"  N: {ratios_N}")
-        print(f"  Mean: {ratios_mean:.2f}")
-        print(f"  Std: {ratios_std:.2f}")
-        print(f"  Median: {ratios_median:.2f}")
-        print(f"  Min: {ratios_min:.2f}")
-        print(f"  Max: {ratios_max:.2f}")
-        print(f"  Q10: {ratios_q10:.2f}")
-        print(f"  Q5: {ratios_q5:.2f}")
-        print(f"  Q1: {ratios_q1:.2f}")
+        logger.notice(
+            f"Class: {DEFAULT_CLASS_NAMES[class_id]}\n"
+            f"  N: {ratios_N}\n"
+            f"  Mean: {ratios_mean:.2f}\n"
+            f"  Std: {ratios_std:.2f}\n"
+            f"  Median: {ratios_median:.2f}\n"
+            f"  Min: {ratios_min:.2f}\n"
+            f"  Max: {ratios_max:.2f}\n"
+            f"  Q10: {ratios_q10:.2f}\n"
+            f"  Q5: {ratios_q5:.2f}\n"
+            f"  Q1: {ratios_q1:.2f}"
+        )
 
         if args.hist:
             plt.figure()
@@ -230,17 +242,26 @@ def analyze_results(class2ratios, args):
     plt.show()
 
 
-def get_cli_arguments():
+def parse_cli_args() -> argparse.Namespace:
     """Parse command-line arguments."""
     parser = argparse.ArgumentParser(description="Analyze vehicle bounding box ratios from tracking data")
     parser.add_argument("source", type=Path, help="Path to a directory containing detection and tracking results or to a specific video/yaml file")
-    parser.add_argument("--verbose", "-v", action="store_true", help="Print detailed results per video")
     parser.add_argument("--hist", "-hs", action="store_true", help="Plot ratio histograms per vehicle class")
     parser.add_argument("--plot", "-p", action="store_true", help="Plot length and height histogram per video and vehicle ID")
     parser.add_argument("--id", "-i", type=int, default=0, help="Vehicle ID to analyze in detail (default: User prompt)")
+    parser.add_argument("--cfg", "-c", type=Path, default=DEFAULT_CFG, help="Pipeline config used to resolve the output folder and filename postfixes. Defaults to the bundled config.")
+    parser.add_argument("--log-path", "-lp", type=Path, default=None, help="Where to write logs: a directory or a full file path; defaults to a platform-specific log directory.")
+    parser.add_argument("--quiet", "-q", action="store_true", help="Reduce console verbosity to important messages only (default: show INFO-level per-video detail).")
     return parser.parse_args()
 
 
+def main() -> None:
+    """Command-line entry point."""
+    args = parse_cli_args()
+    logger = setup_logger(Path(__file__).stem, verbose=not args.quiet, log_path=args.log_path)
+
+    analyze_bb_ratios(args, logger)
+
+
 if __name__ == "__main__":
-    args = get_cli_arguments()
-    main(args)
+    main()

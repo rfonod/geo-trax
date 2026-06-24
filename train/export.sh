@@ -3,21 +3,22 @@
 # Author: Robert Fonod (robert.fonod@ieee.org)
 #
 # Description:
-# This script exports all *.pt files in the specified directory and its 
-# subdirectories to the desired format (onnx or engine).
+# This script exports all *.pt files in the specified directory and its
+# subdirectories to the desired format (onnx or engine) via the Ultralytics
+# `yolo export` command.
 #
 # Arguments:
 # 1. <input_path> - The directory containing *.pt files.
 # 2. <format> - The desired export format (onnx or engine).
 # 3. [-o] - Optional flag to overwrite existing exported files.
-# 4. [-c <config_file>] - Optional path to a custom configuration file.
+# 4. [-c <config_file>] - Optional path to an Ultralytics config (a flat YAML).
 #
 # Usage:
 # ./train/export.sh <input_path> <format> [-o] [-c <config_file>]
 #
 # Examples:
 # ./train/export.sh models onnx
-# ./train/export.sh models onnx -o -c cfg/ultralytics/custom.yaml
+# ./train/export.sh models onnx -o -c ultralytics_export.yaml
 #
 # Notes:
 # - Exported files will be saved in the same directory as the input files.
@@ -26,14 +27,22 @@
 # - TensorRT (engine) export requires a CUDA-capable GPU and a separate
 #   TensorRT installation (not pip-installable; install via NVIDIA SDK or
 #   https://docs.nvidia.com/deeplearning/tensorrt/install-guide).
-# - The default configuration file is cfg/ultralytics/default.yaml.
+# - Without -c, the Ultralytics built-in export defaults are used. Note that
+#   Ultralytics defaults to imgsz=640, whereas geo-trax models are trained at
+#   imgsz=1920 — so to export them faithfully, pass an Ultralytics config via -c.
+#   Two easy ways to obtain one:
+#     * Download the Ultralytics default and edit it:
+#       https://github.com/ultralytics/ultralytics/blob/main/ultralytics/cfg/default.yaml
+#     * Or extract the 'ultralytics:' section of a geo-trax pipeline config into a
+#       flat YAML (geotrax config show default prints the pipeline config), e.g.:
+#       python -c "import yaml; yaml.safe_dump(yaml.safe_load(open('geotrax/cfg/default.yaml'))['ultralytics'], open('ultralytics_export.yaml','w'), sort_keys=False)"
 
 #-------------------------------------------------------------------------------
 # Default values
 #-------------------------------------------------------------------------------
 batch_size=1                          # export batch size
 overwrite=false                       # overwrite existing exported files
-cfg_file="cfg/ultralytics/default.yaml"  # Ultralytics configuration file
+cfg_file=""                           # Ultralytics config (empty = use Ultralytics built-in export defaults)
 
 #-------------------------------------------------------------------------------
 # Validate positional arguments
@@ -108,9 +117,13 @@ while IFS= read -r file; do
         continue
     fi
 
-    # Run the export
+    # Run the export (include cfg= only when a config file is provided)
     echo -e "\033[1;32mExporting:\033[0m $file"
-    cmd="yolo cfg=${cfg_file} mode=export model=${file} format=${format} batch=${batch_size} ${device}"
+    cfg_arg=""
+    if [ -n "$cfg_file" ]; then
+        cfg_arg="cfg=${cfg_file} "
+    fi
+    cmd="yolo ${cfg_arg}mode=export model=${file} format=${format} batch=${batch_size} ${device}"
     echo -e "$cmd\n"
     $cmd
 done

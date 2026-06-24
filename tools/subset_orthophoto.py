@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-# Authors: Haechan Cho (gkqkemwh@kaist.ac.kr)
+# Author: Haechan Cho (gkqkemwh@kaist.ac.kr) and Robert Fonod (robert.fonod@ieee.org)
 
 """
 subset_orthophoto.py - Orthophoto Subset Extraction Tool
@@ -26,6 +26,8 @@ Options:
   -h, --help                      : Show this help message and exit.
   --crop-size <int>               : Square crop size in pixels (default: 15000).
   --scale-factor <float>          : Downscaling factor for output images (default: 0.533).
+  -lp, --log-path <str>           : Where to write logs: a directory or a full file path; defaults to a platform-specific log directory.
+  -q, --quiet                     : Reduce console verbosity to important messages only (default: show INFO-level detail).
 
 Examples:
 1. Basic orthophoto subsetting:
@@ -49,14 +51,17 @@ Output:
 
 import argparse
 import json
+import logging
 from pathlib import Path
 
 import cv2
 import numpy as np
 from tifffile import TiffFile
 
+from geotrax.utils.logging_utils import setup_logger
 
-def process_ortho(orthophoto_filepath, ortho_cutout_folder, location_dict_filepath, crop_size, scale_factor):
+
+def process_ortho(orthophoto_filepath, ortho_cutout_folder, location_dict_filepath, crop_size, scale_factor, logger: logging.Logger):
     """
     Subset the orthophoto for each location in location_path and save the down-scaled one.
     """
@@ -86,7 +91,7 @@ def process_ortho(orthophoto_filepath, ortho_cutout_folder, location_dict_filepa
         png_output_filename = ortho_cutout_folder / f'{location}.png'
         cv2.imwrite(str(png_output_filename), cv2.cvtColor(cropped_resized, cv2.COLOR_RGB2BGR))
 
-        print(f"Processed and saved orthophoto for intersection: {location}")
+        logger.notice(f"Processed and saved orthophoto for intersection: {location}")
 
 
 def get_tiled_crop(page, i0, j0, h, w):
@@ -143,17 +148,33 @@ def get_tiled_crop(page, i0, j0, h, w):
     return out[0, im_i0: im_i0 + h, im_j0: im_j0 + w, :]
 
 
-def parse_opt():
+def parse_cli_args() -> argparse.Namespace:
+    """Parse command-line arguments."""
     parser = argparse.ArgumentParser(description="Subset large orthophotos around specified geographic locations.")
     parser.add_argument('--orthophoto-filepath', type=Path, help='Filepath to the orthophoto file to be subsetted.')
     parser.add_argument('--ortho-cutout-folder', type=Path, help='Path to the folder to save the cut orthophotos and meta files.')
     parser.add_argument('--location-dict-filepath', type=Path, help='Filepath to the location dictionary that maps location name to its geographic coordinates.')
     parser.add_argument('--crop-size', type=int, default=15000, help='Square crop size of the orthophoto (in pixels)')
     parser.add_argument('--scale-factor', default=8/15, type=float, help='Factor by which to downscale the cropped orthophoto before saving.')
-    opt = parser.parse_args()
-    return opt
+    parser.add_argument('--log-path', '-lp', type=Path, default=None, help='Where to write logs: a directory or a full file path; defaults to a platform-specific log directory.')
+    parser.add_argument('--quiet', '-q', action='store_true', help='Reduce console verbosity to important messages only (default: show INFO-level detail).')
+    return parser.parse_args()
+
+
+def main() -> None:
+    """Command-line entry point."""
+    args = parse_cli_args()
+    logger = setup_logger(Path(__file__).stem, verbose=not args.quiet, log_path=args.log_path)
+
+    process_ortho(
+        args.orthophoto_filepath,
+        args.ortho_cutout_folder,
+        args.location_dict_filepath,
+        args.crop_size,
+        args.scale_factor,
+        logger,
+    )
 
 
 if __name__ == '__main__':
-    opt = parse_opt()
-    process_ortho(**vars(opt))
+    main()

@@ -15,11 +15,13 @@ Arguments:
   input : Path to CSV file, directory with CSV files, or dataset root directory.
 
 Options:
-  -h, --help                     : Show this help message and exit.
-  -at, --acceleration-threshold <float> : Acceleration threshold in m/s² (default: 12).
+  -h, --help                             : Show this help message and exit.
+  -at, --acceleration-threshold <float>  : Acceleration threshold in m/s² (default: 12).
   -st, --speed-threshold <float>         : Speed threshold in km/h (default: 130).
-  -lf, --log-file <str>                  : Log filename saved in logs/ folder (default: None).
-  -v, --verbose                          : Set verbosity to INFO level (default: WARNING).
+  -c, --cfg <path>                       : Pipeline config used to resolve the output folder name where georeferenced CSVs are located.
+                                           Defaults to the bundled config (geotrax/cfg/default.yaml).
+  -lp, --log-path <str>                  : Where to write logs: a directory or a full file path; defaults to a platform-specific log directory.
+  -q, --quiet                            : Reduce console verbosity to important messages only (default: show INFO-level detail).
 
 Examples:
 1. Check single CSV file:
@@ -28,8 +30,8 @@ Examples:
 2. Check dataset with custom thresholds:
    python tools/check_dataset.py dataset/ --speed-threshold 100 --acceleration-threshold 10
 
-3. Verbose output with logging:
-   python tools/check_dataset.py dataset/ --verbose --log-file validation.log
+3. Quiet output, logging to a custom file:
+   python tools/check_dataset.py dataset/ --quiet --log-path validation.log
 
 Input:
 - CSV files with vehicle tracking data including Vehicle_Speed and Vehicle_Acceleration columns
@@ -50,24 +52,100 @@ import argparse
 import logging
 import sys
 from pathlib import Path
+from typing import Union
 
 import pandas as pd
 import tqdm
 
-sys.path.append(str(Path(__file__).resolve().parents[1]))
-from tools.find_source_id import find_source_id
-from utils.utils import setup_logger
+from geotrax.utils.cli_utils import DEFAULT_CFG
+from geotrax.utils.config_utils import load_config
+from geotrax.utils.file_utils import DEFAULT_OUTPUT
+from geotrax.utils.logging_utils import setup_logger
+
+
+def find_source_id(dataset_filepath: Path, vehicle_id: int, processed_folder: Union[Path, None] = None, folder_name: str = None) -> tuple:
+    """
+    Trace an aggregated-dataset vehicle ID back to its original ID and source video, by
+    reversing the per-drone ID offset applied during aggregation.
+    """
+    if not dataset_filepath.exists():
+        print(f"Input folder '{dataset_filepath}' does not exist.")
+        return None, None
+
+    processed_folder = get_processed_folder(dataset_filepath, processed_folder)
+
+    df = pd.read_csv(dataset_filepath, dtype={'Column14': str}, low_memory=False)
+    if df[df['Vehicle_ID'] == vehicle_id].empty:
+        print(f"Vehicle ID {vehicle_id} not found in the dataset.")
+        return None, None
+
+    date, location_id, flight_session = dataset_filepath.stem.split('_')[0:3]
+    folder = folder_name or DEFAULT_OUTPUT['folder']
+    search_space = f"{date}/D*/{flight_session}/{folder}/{location_id}*.csv"
+    csv_files = list(processed_folder.rglob(search_space))
+    if not csv_files:
+        print(f"No CSV files found in '{processed_folder}'.")
+        return None, None
+
+    files = []
+    for source_results in csv_files:
+        try:
+            drone_id = source_results.parents[2].name
+            files.append((source_results, drone_id))
+        except Exception as e:
+            print(f"Skipping invalid file path: {source_results} ({str(e)})")
+    files = sorted(files, key=lambda x: (int(x[1][1:]), x[0]))
+
+    source_id, source_video = None, None
+    vehicle_id_offset = 0
+    for source_results, _drone_id in files:
+        try:
+            df = pd.read_csv(source_results)
+            df['Vehicle_ID'] = df['Vehicle_ID'] + vehicle_id_offset
+            if vehicle_id in df['Vehicle_ID'].values:
+                source_id = vehicle_id - vehicle_id_offset
+                source_video = source_results.parents[1] / (source_results.stem + '.MP4')
+                break
+            vehicle_id_offset = df['Vehicle_ID'].max()
+        except Exception as e:
+            print(f"Error processing file {source_results}: {str(e)}")
+
+    return source_id, source_video
+
+
+def get_processed_folder(source: Path, processed_folder: Union[Path, None]) -> Path:
+    """
+    Resolve the PROCESSED folder from the provided path or the default folder structure.
+    """
+    if processed_folder is None:
+        processed_folder = source.parent
+        while processed_folder != processed_folder.parent:
+            if processed_folder.name == 'DATASET':
+                break
+            processed_folder = processed_folder.parent
+
+        if processed_folder.name != 'DATASET':
+            print(f"Failed to find the processed folder for source {source}. "
+                  f"Use the --processed-folder argument to provide a custom path or "
+                  f"ensure the default folder structure.")
+            sys.exit(1)
+
+        processed_folder = processed_folder.parent / 'PROCESSED'
+
+    return processed_folder
 
 
 def validate_speed_acceleration(args: argparse.Namespace, logger: logging.Logger) -> None:
     """
     Check the dataset for high speed and acceleration values.
     """
+    out_cfg = load_config(args.cfg, logger).get('output', DEFAULT_OUTPUT)
+    folder_name = out_cfg.get('folder', DEFAULT_OUTPUT['folder'])
     csv_files = determine_files_to_process(args.input, logger)
-    check_for_excessive_values(csv_files, args, logger)
+    check_for_excessive_values(csv_files, args, logger, folder_name=folder_name)
 
 
-def check_for_excessive_values(csv_files: list, args: argparse.Namespace, logger: logging.Logger) -> None:
+def check_for_excessive_values(csv_files: list, args: argparse.Namespace, logger: logging.Logger, folder_name: str = None) -> None:
     """
     Check for excessive speed and acceleration values in the dataset files.
     """
@@ -87,17 +165,17 @@ def check_for_excessive_values(csv_files: list, args: argparse.Namespace, logger
         speed_violations_df = pd.concat([speed_violations_df, speed_violations])
 
         acc_violations = df[df['Vehicle_Acceleration'].abs() > args.acceleration_threshold][columns]
-        acc_violations = acc_violations.loc[acc_violations.groupby('Vehicle_ID')['Vehicle_Acceleration'].idxmax()]
+        acc_violations = acc_violations.loc[acc_violations.groupby('Vehicle_ID')['Vehicle_Acceleration'].abs().idxmax()]
         acceleration_violations_df = pd.concat([acceleration_violations_df, acc_violations])
 
     logger.notice(f"Checking for excessive speed values above {args.speed_threshold} km/h in the dataset...")
-    report_violations(speed_violations_df, 'speed', logger)
+    report_violations(speed_violations_df, 'speed', logger, folder_name=folder_name)
 
     logger.notice(f"Checking for excessive absolute acceleration values above {args.acceleration_threshold} m/s^2 in the dataset...")
-    report_violations(acceleration_violations_df, 'acceleration', logger)
+    report_violations(acceleration_violations_df, 'acceleration', logger, folder_name=folder_name)
 
 
-def report_violations(violations_df: pd.DataFrame, violation_type: str, logger: logging.Logger) -> None:
+def report_violations(violations_df: pd.DataFrame, violation_type: str, logger: logging.Logger, folder_name: str = None) -> None:
     """
     Report violations found in the dataset.
     """
@@ -112,7 +190,7 @@ def report_violations(violations_df: pd.DataFrame, violation_type: str, logger: 
         violations_df = violations_df.sort_values(by='Vehicle_Speed', ascending=False)
 
     for index, row in violations_df.iterrows():
-        source_id, source_video = find_source_id(Path(row['Dataset']), row['Vehicle_ID'])
+        source_id, source_video = find_source_id(Path(row['Dataset']), row['Vehicle_ID'], folder_name=folder_name)
         violations_df.at[index, 'Dataset'] = row['Dataset'].name
         if source_id is None:
             continue
@@ -121,7 +199,7 @@ def report_violations(violations_df: pd.DataFrame, violation_type: str, logger: 
 
     suppress_logging_format(logger)
     with pd.option_context('display.max_colwidth', None):
-        logger.warning(f"\n%s", repr(violations_df))
+        logger.warning("\n%s", repr(violations_df))
     restore_logging_format(logger)
 
 
@@ -173,14 +251,20 @@ def parse_cli_args() -> argparse.Namespace:
     parser.add_argument("input", type=Path, help="Path to CSV file or directory containing CSV files")
     parser.add_argument("--acceleration-threshold", "-at", type=float, default=12, help="Acceleration threshold in m/s² (default: 12)")
     parser.add_argument("--speed-threshold", "-st", type=float, default=130, help="Speed threshold in km/h (default: 130)")
-    parser.add_argument("--log-file", "-lf", type=str, default=None, help="Log filename saved in logs/ folder")
-    parser.add_argument("--verbose", "-v", action="store_true", help="Set verbosity to INFO level")
+    parser.add_argument("--cfg", "-c", type=Path, default=DEFAULT_CFG, help="Pipeline config used to resolve the output folder name where georeferenced CSVs are located. Defaults to the bundled config.")
+    parser.add_argument("--log-path", "-lp", type=Path, default=None, help="Where to write logs: a directory or a full file path; defaults to a platform-specific log directory.")
+    parser.add_argument("--quiet", "-q", action="store_true", help="Reduce console verbosity to important messages only (default: show INFO-level detail).")
 
     return parser.parse_args()
 
 
-if __name__ == '__main__':
+def main() -> None:
+    """Command-line entry point."""
     args = parse_cli_args()
-    logger = setup_logger(Path(__file__).name, args.verbose, args.log_file)
+    logger = setup_logger(Path(__file__).stem, verbose=not args.quiet, log_path=args.log_path)
 
     validate_speed_acceleration(args, logger)
+
+
+if __name__ == '__main__':
+    main()

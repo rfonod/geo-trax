@@ -12,25 +12,21 @@ This folder contains Bash scripts for training YOLOv8 object detection models an
 
 ## Prerequisites
 
-Install the core package (covers training and Comet ML logging):
+First set up a Python environment (venv, conda, or uv) and install geo-trax from source; see the [Install](../README.md#install) section of the main README. The core package covers training and Comet ML logging:
 
 ```bash
-pip install -e .
+python -m pip install -e .   # pip
+# uv pip install -e .        # uv
+# poetry install             # Poetry
 ```
 
 For model export, additional dependencies are required depending on the format:
 
 - **ONNX** (`onnx` format): install the `export` extras:
   ```bash
-  pip install -e ".[export]"
+  python -m pip install -e '.[export]'
   ```
 - **TensorRT** (`engine` format): requires a CUDA-capable GPU and a separate TensorRT installation (not pip-installable). See the [TensorRT install guide](https://docs.nvidia.com/deeplearning/tensorrt/install-guide).
-
-Or install the minimum required packages manually:
-
-```bash
-pip install ultralytics comet_ml
-```
 
 ---
 
@@ -93,6 +89,8 @@ projects/
                 └── last.pt
 ```
 
+You must create `cfg.yaml` (Ultralytics training hyperparameters) and `data.yaml` (dataset paths) before running. For `cfg.yaml`, start from the [Ultralytics default config](https://github.com/ultralytics/ultralytics/blob/main/ultralytics/cfg/default.yaml), or extract the `ultralytics:` section from a geo-trax pipeline config into a flat YAML (see [Export configuration](#export-configuration) for the one-liner).
+
 ---
 
 ## `export.sh` — Model Export
@@ -112,40 +110,53 @@ Recursively searches a directory for `.pt` files and exports them to the specifi
 | `<input_path>` | Directory to search recursively for `.pt` files |
 | `<format>` | Export format: `onnx` or `engine` (TensorRT) |
 | `-o` | Overwrite already-exported files |
-| `-c <config_file>` | Path to a custom Ultralytics config (default: `cfg/ultralytics/default.yaml`) |
+| `-c <config_file>` | Optional Ultralytics config (a flat YAML). Omit it to use the Ultralytics built-in export defaults |
 
-> **Note:** TensorRT (`engine`) export requires a CUDA-capable GPU and a separate TensorRT installation (not pip-installable). ONNX export has no GPU requirement. Additional packages (`onnx`, `onnxslim`, `onnxruntime`) are needed for ONNX export and are included in the `export` extras: `pip install -e ".[export]"`.
+> **Note:** TensorRT (`engine`) export requires a CUDA-capable GPU and a separate TensorRT installation (not pip-installable). ONNX export has no GPU requirement. Additional packages (`onnx`, `onnxslim`, `onnxruntime`) are needed for ONNX export and are included in the `export` extras: `python -m pip install -e ".[export]"`.
+
+#### Export configuration
+
+`export.sh` calls Ultralytics' `yolo export`. Without `-c`, the **Ultralytics built-in export defaults** are used. Those default to `imgsz=640`, whereas geo-trax models are trained at `imgsz=1920` — so to export them faithfully, pass an Ultralytics config via `-c`. There are two easy ways to obtain one:
+
+1. **Download the Ultralytics default** and edit it: [`ultralytics/cfg/default.yaml`](https://github.com/ultralytics/ultralytics/blob/main/ultralytics/cfg/default.yaml).
+2. **Extract the `ultralytics:` section** from a geo-trax pipeline config into a flat YAML (it already carries `imgsz: 1920` and the geo-trax-tuned settings). `geotrax config show default` prints the pipeline config; to pull out just the detection section:
+   ```bash
+   python -c "import yaml; yaml.safe_dump(yaml.safe_load(open('geotrax/cfg/default.yaml'))['ultralytics'], open('ultralytics_export.yaml','w'), sort_keys=False)"
+   ```
 
 ### Examples
 
 ```bash
-# Export all .pt files in models/ to ONNX
+# Export all .pt files in models/ to ONNX (Ultralytics built-in defaults)
 ./train/export.sh models onnx
 
 # Export to TensorRT, overwriting existing engine files
 ./train/export.sh models engine -o
 
-# Export to ONNX using a custom config file
-./train/export.sh models onnx -c cfg/ultralytics/custom.yaml
+# Export to ONNX using a config extracted from the pipeline config (preserves imgsz=1920)
+./train/export.sh models onnx -c ultralytics_export.yaml
 
 # Export to ONNX, overwriting, with a custom config
-./train/export.sh models onnx -o -c cfg/ultralytics/custom.yaml
+./train/export.sh models onnx -o -c ultralytics_export.yaml
 ```
 
 ---
 
 ## `wrapper.sh` — SLURM Job Wrapper
 
-A SLURM batch script that activates the conda environment and dispatches a training or inference script on an HPC cluster. It automatically detects whether the first argument is a Python (`.py`) or Bash (`.sh`) script and invokes the appropriate interpreter.
+A SLURM batch script that activates your Python environment and dispatches a training or inference script on an HPC cluster. It automatically detects whether the first argument is a Python (`.py`) or Bash (`.sh`) script and invokes the appropriate interpreter.
 
 ### Setup
 
-Before using `wrapper.sh`, edit the two cluster-specific lines near the top of the file:
+Before using `wrapper.sh`, edit the cluster- and environment-specific lines near the top of the file:
 
 ```bash
 #SBATCH --chdir /path/to/geo-trax
-...
-conda activate geo-trax  # update to match your conda environment name
+
+# Activate your Python environment (venv is the default; conda shown as a commented alternative):
+source .venv/bin/activate
+# eval "$(conda shell.bash hook)"
+# conda activate geo-trax
 ```
 
 Also adjust the resource directives (`--cpus-per-task`, `--mem`, `--time`, `--gres`, `--partition`, `--qos`) to match your cluster's policies.
@@ -162,8 +173,8 @@ sbatch train/wrapper.sh <script> [ARGS...]
 # Submit a training job (merger8, experiment 1, small-scale model)
 sbatch train/wrapper.sh train/train.sh -m 8 -e 1 -s s
 
-# Submit a detection/tracking run
-sbatch train/wrapper.sh detect_track_stabilize.py --cfg cfg/default.yaml
+# Submit a detection/tracking run (geotrax CLI; requires geo-trax installed in the active environment)
+sbatch train/wrapper.sh geotrax extract path/to/video.mp4 --cfg geotrax/cfg/default.yaml
 ```
 
 ---
@@ -176,7 +187,7 @@ The training script integrates with [Comet ML](https://www.comet.com/) for exper
 
 1. **Install Comet ML** (already included in the `dev` extras):
    ```bash
-   pip install comet_ml
+   python -m pip install comet_ml
    ```
 
 2. **Set your Comet API key** as an environment variable:

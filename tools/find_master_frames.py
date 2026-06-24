@@ -14,53 +14,43 @@ mean hover locations, and applies selection criteria based on spatial proximity 
 detection coverage to identify the best master frames for each intersection location.
 
 Usage:
-  python tools/find_master_frames.py <input_folder> <output_folder> [options]
+  python tools/find_master_frames.py <input_folder> [options]
 
 Arguments:
-  input_folder : str
-                 Path to the folder containing videos, flight logs, and optional detection/tracking results.
-  output_folder : str
-                 Path to the output folder to save results (e.g., ../ORTHOPHOTOS/master_frames).
+  input_folder  : Path to the folder containing videos, flight logs, and optional detection/tracking results.
 
 Options:
-  -h, --help            : Show this help message and exit.
-  -s, --save            : bool, optional
-                        Save extracted reference frame stats and best master frames list (default: False).
-  -smf, --save-master-frames : bool, optional
-                        Save best master frames extracted from videos (existing files overwritten) (default: False).
-  -f, --force           : bool, optional
-                        Force extraction of flight log data (do not use existing data) (default: False).
-  -rf, --ref-frame <int> : int, optional
-                        Custom reference frame used for stabilization/georeferencing (default: 0).
-  -viz, --visualize     : bool, optional
-                        Visualize best master frame selection (default: False).
-  -sv, --save-viz       : bool, optional
-                        Save best master frames visualization to PDF (default: False).
-  -n, --best_n <int>    : int, optional
-                        Number of reference frames to consider for best master frame selection (default: 20).
-  -m, --match-pattern <str> : str, optional
-                        Pattern to match files in folder (case-sensitive) (default: '??.CSV').
-  -fe, --folders-exclude <str> [<str> ...] : list of str, optional
-                        Folders to exclude from search
-                        (e.g., 'results' for already georeferenced data) (default: ['results']).
-  -b, --bounding-box-cols <int> [<int> ...] : list of int, optional
-                        Columns of bounding box in detection/tracking results (default: [2, 3, 4, 5]).
-  -tcrs, --target-crs <str> : str, optional
-                        Target CRS for local coordinates (default: 'epsg:5186').
-  -fw, --frame-width <int> : int, optional
-                        Video frame width in pixels (default: 3840).
-  -fh, --frame-height <int> : int, optional
-                        Video frame height in pixels (default: 2160).
+  -h, --help                                : Show this help message and exit.
+  -of, --output-folder <path>               : Output folder for results (default: same as input_folder).
+  -s, --save                                : Save extracted reference-frame stats and the best master frames list (default: False).
+  -smf, --save-master-frames                : Save best master frames extracted from videos (existing files overwritten) (default: False).
+  -f, --force                               : Force re-extraction of flight log data (ignore existing data) (default: False).
+  -rf, --ref-frame <int>                    : Reference frame used for stabilization/georeferencing (default: 0).
+  -viz, --visualize                         : Visualize the best master frame selection (default: False).
+  -sv, --save-viz                           : Save the best master frames visualization to PDF (default: False).
+  -n, --best-n <int>                        : Number of reference frames to consider for selection (default: 20).
+  -m, --match-pattern <str>                 : Glob pattern (case-insensitive) for flight-log files (default: '*.csv').
+                                              CSVs lacking flight-log columns are skipped automatically; narrow the
+                                              pattern (e.g. '??.csv' for short clip names like A1, B2) to limit the scan.
+  -c, --cfg <path>                          : Pipeline config used to resolve the output folder and filename postfixes.
+                                              Defaults to the bundled config (geotrax/cfg/default.yaml).
+  -fe, --folders-exclude <str> [<str> ...]  : Folders to exclude from the search (default: [output.folder from config]).
+  -b, --bounding-box-cols <int> [<int> ...] : Bounding-box columns in detection/tracking results (default: [2, 3, 4, 5]).
+  -tcrs, --target-crs <str>                 : Target CRS for local coordinates (default: 'epsg:5186').
+  -fw, --frame-width <int>                  : Video frame width in pixels (default: 3840).
+  -fh, --frame-height <int>                 : Video frame height in pixels (default: 2160).
+  -lp, --log-path <str>                     : Where to write logs: a directory or a full file path; defaults to a platform-specific log directory.
+  -q, --quiet                               : Reduce console verbosity to important messages only (default: show INFO-level detail).
 
 Examples:
 1. Basic master frame selection with saved results and visualization:
-   python tools/find_master_frames.py /path/to/PROCESSED /path/to/ORTHOPHOTOS/master_frames -s -smf -sv -f
+   python tools/find_master_frames.py /path/to/PROCESSED -of /path/to/ORTHOPHOTOS/master_frames -s -smf -sv -f
 
 2. Selection with custom parameters and tracking data:
-   python tools/find_master_frames.py /path/to/PROCESSED /path/to/output --best_n 10 --ref-frame 5
+   python tools/find_master_frames.py /path/to/PROCESSED -of /path/to/output --best-n 10 --ref-frame 5
 
 3. Analysis with custom frame dimensions and CRS:
-   python tools/find_master_frames.py /path/to/PROCESSED /path/to/output -fw 1920 -fh 1080 -tcrs epsg:32633
+   python tools/find_master_frames.py /path/to/PROCESSED -fw 1920 -fh 1080 -tcrs epsg:32633
 
 Input:
 - PROCESSED folder containing drone flight logs in CSV format
@@ -85,7 +75,7 @@ Notes:
 
 import argparse
 import fnmatch
-import sys
+import logging
 from pathlib import Path
 
 import cv2
@@ -96,61 +86,71 @@ import pandas as pd
 import tqdm
 from shapely.geometry import Point
 
-sys.path.append(str(Path(__file__).resolve().parents[1]))  # Add project root directory to Python path
-from utils.utils import detect_delimiter, determine_location_id
+from geotrax.utils.cli_utils import DEFAULT_CFG
+from geotrax.utils.config_utils import load_config
+from geotrax.utils.file_utils import DEFAULT_OUTPUT, detect_delimiter, determine_location_id, get_output_dir
+from geotrax.utils.logging_utils import setup_logger
 
 VIDEO_SUFFIX = '.MP4' # video file format to report in the output file
 
 
-def find_master_frames(args: argparse.Namespace) -> None:
+def find_master_frames(args: argparse.Namespace, logger: logging.Logger) -> None:
     """
     Find the best master frame for georeferencing.
     """
+    out_cfg = load_config(args.cfg, logger).get('output', DEFAULT_OUTPUT)
+    args.output_cfg = out_cfg
+    folder_name = out_cfg.get('folder', DEFAULT_OUTPUT['folder'])
+    if args.folders_exclude == [DEFAULT_OUTPUT['folder']] and folder_name != DEFAULT_OUTPUT['folder']:
+        args.folders_exclude = [folder_name]
+
+    args.output_folder = args.output_folder or args.input_folder
+
     ref_frames_filepath = args.output_folder / 'reference_frame_stats.csv'
     if ref_frames_filepath.exists() and not args.force:
-        print(f"Reference frame data already exists in {ref_frames_filepath}. Use --force to overwrite.")
-        print(f"Reading existing reference frame data from {ref_frames_filepath}")
+        logger.warning(f"Reference frame data already exists in {ref_frames_filepath}. Use --force to overwrite.")
+        logger.info(f"Reading existing reference frame data from {ref_frames_filepath}")
         df_ref_frames_all = pd.read_csv(ref_frames_filepath)
     else:
-        flight_logs = find_all_flight_logs(args.input_folder, args.match_pattern, args.folders_exclude)
-        df_ref_frames_all = extract_ref_frame_data(flight_logs, args)
+        flight_logs = find_all_flight_logs(args.input_folder, args.match_pattern, args.folders_exclude, logger)
+        df_ref_frames_all = extract_ref_frame_data(flight_logs, args, logger)
         if args.save:
             save_df(df_ref_frames_all, ref_frames_filepath)
-            print(f"Reference frame data saved to {ref_frames_filepath}")
+            logger.info(f"Reference frame data saved to {ref_frames_filepath}")
 
     df_best_master_frames = find_best_master_frames(df_ref_frames_all, args.best_n)
-    print(f"Best master frames found for {len(df_best_master_frames)} unique location IDs:")
-    print(df_best_master_frames.iloc[:,:6].to_string(index=False))
+    logger.notice(f"Best master frames found for {len(df_best_master_frames)} unique location IDs:")
+    logger.notice("\n%s", df_best_master_frames.iloc[:, :6].to_string(index=False))
 
     if args.save:
         best_master_frames_filepath = args.output_folder / 'best_master_frames.csv'
         save_df(df_best_master_frames, best_master_frames_filepath)
-        print(f"Best master frames saved to {best_master_frames_filepath}")
+        logger.info(f"Best master frames saved to {best_master_frames_filepath}")
 
     if args.save_master_frames:
-        extract_and_save_master_frames(df_best_master_frames, args)
+        extract_and_save_master_frames(df_best_master_frames, args, logger)
 
     if args.visualize or args.save_viz:
-        visualize_best_master_frames(df_best_master_frames, df_ref_frames_all, args.output_folder, args.visualize, args.save_viz)
+        visualize_best_master_frames(df_best_master_frames, df_ref_frames_all, args.output_folder, args.visualize, args.save_viz, logger)
 
 
-def find_all_flight_logs(input_folder: Path, match_pattern: str, folders_exclude: list) -> list:
+def find_all_flight_logs(input_folder: Path, match_pattern: str, folders_exclude: list, logger: logging.Logger) -> list:
     """
     Find all the flight logs in the input folder.
     """
     flight_logs = []
     for item in input_folder.iterdir():
         if item.is_dir() and item.name not in folders_exclude:
-            flight_logs.extend(find_all_flight_logs(item, match_pattern, folders_exclude))
-        elif item.is_file() and fnmatch.fnmatch(item.name, match_pattern):
+            flight_logs.extend(find_all_flight_logs(item, match_pattern, folders_exclude, logger))
+        elif item.is_file() and fnmatch.fnmatch(item.name.lower(), match_pattern.lower()):
             flight_logs.append(item)
 
     if not flight_logs:
-        print(f"Warning: No flight logs found in the input folder {input_folder}.")
+        logger.warning(f"No flight logs found in the input folder {input_folder}.")
     return flight_logs
 
 
-def extract_ref_frame_data(flight_logs: list, args: argparse.Namespace) -> pd.DataFrame:
+def extract_ref_frame_data(flight_logs: list, args: argparse.Namespace, logger: logging.Logger) -> pd.DataFrame:
     """
     Extract the longitude, latitude, and relative altitude for the reference frame.
     Extract the number of detections and the area covered by the detections for the reference frame (if available).
@@ -158,7 +158,7 @@ def extract_ref_frame_data(flight_logs: list, args: argparse.Namespace) -> pd.Da
     data = []
     for flight_log in tqdm.tqdm(flight_logs, desc='Extracting flight logs and detection results'):
         if not flight_log.exists():
-            print(f"Warning: {flight_log} does not exist. Skipping...")
+            logger.warning(f"{flight_log} does not exist. Skipping...")
             continue
 
         delimiter = detect_delimiter(flight_log)
@@ -171,7 +171,10 @@ def extract_ref_frame_data(flight_logs: list, args: argparse.Namespace) -> pd.Da
             latitude = df.loc[df['frame'] == args.ref_frame, 'latitude'].values[0]
             relative_altitude = df.loc[df['frame'] == args.ref_frame, 'rel_alt'].values[0]
         except IndexError:
-            print(f'Reference frame {args.ref_frame} not found in {flight_log}. Skipping...')
+            logger.warning(f"Reference frame {args.ref_frame} not found in {flight_log}. Skipping...")
+            continue
+        except KeyError:
+            logger.warning(f"{flight_log} is missing expected flight-log columns; not a flight log? Skipping...")
             continue
 
         geo_gdf = gpd.GeoDataFrame(geometry=[Point(longitude, latitude)], crs='epsg:4326')
@@ -211,7 +214,7 @@ def extract_ref_frame_data(flight_logs: list, args: argparse.Namespace) -> pd.Da
     return df
 
 
-def extract_and_save_master_frames(df_best: pd.DataFrame, args: argparse.Namespace) -> None:
+def extract_and_save_master_frames(df_best: pd.DataFrame, args: argparse.Namespace, logger: logging.Logger) -> None:
     """
     Extract and save the best master frames from the videos using OpenCV.
     """
@@ -228,9 +231,9 @@ def extract_and_save_master_frames(df_best: pd.DataFrame, args: argparse.Namespa
 
         if ret:
             cv2.imwrite(str(output_filepath), frame)
-            print(f"Master frame {output_filepath} saved.")
+            logger.info(f"Master frame {output_filepath} saved.")
         else:
-            print(f"Failed to extract frame {frame_number} from {video_path}.")
+            logger.error(f"Failed to extract frame {frame_number} from {video_path}.")
         cap.release()
 
 
@@ -238,7 +241,9 @@ def get_objects_and_area_covered(flight_log: Path, args: argparse.Namespace) -> 
     """
     Get the number of objects and the area covered by the objects in the reference frame.
     """
-    detection_file = flight_log.parent / 'results' / (flight_log.stem + '.txt')
+    output_cfg = getattr(args, 'output_cfg', DEFAULT_OUTPUT)
+    tracks_postfix = output_cfg.get('tracks_postfix', DEFAULT_OUTPUT['tracks_postfix'])
+    detection_file = get_output_dir(flight_log, output_cfg) / f"{flight_log.stem}{tracks_postfix}.txt"
     if not detection_file.exists():
         return 'N/A', 'N/A'
 
@@ -299,7 +304,7 @@ def save_df(df: pd.DataFrame, filepath: Path) -> None:
     df.to_csv(filepath, index=False)
 
 
-def visualize_best_master_frames(df_best: pd.DataFrame, df_all: pd.DataFrame, output_folder: Path, visualize: bool, save_viz: bool) -> None:
+def visualize_best_master_frames(df_best: pd.DataFrame, df_all: pd.DataFrame, output_folder: Path, visualize: bool, save_viz: bool, logger: logging.Logger) -> None:
     """
     Visualize the best master frames among all the locations.
     """
@@ -369,38 +374,50 @@ def visualize_best_master_frames(df_best: pd.DataFrame, df_all: pd.DataFrame, ou
     if save_viz:
         filepath = output_folder / 'best_master_frames.pdf'
         plt.savefig(filepath, transparent=False, bbox_inches='tight')
-        print(f"Best master frames visualization saved to {filepath}")
+        logger.info(f"Best master frames visualization saved to {filepath}")
     plt.close()
 
 
-def get_cli_arguments() -> argparse.Namespace:
+def parse_cli_args() -> argparse.Namespace:
     """
     Parse command-line arguments.
     """
     parser = argparse.ArgumentParser(description='Find the best master frame for georeferencing.')
 
-    # Input and output paths
+    # Input path
     parser.add_argument("input_folder", type=Path, help="Path to the folder containing the videos and flight logs and optional detection/tracking results.")
-    parser.add_argument("output_folder", type=Path, help="Path to the output folder to save the results (e.g., ../ORTHOPHOTOS/master_frames).")
 
     # Optional arguments
+    parser.add_argument("--output-folder", "-of", type=Path, default=None, help="Output folder for results (default: same as input_folder).")
     parser.add_argument("--save", "-s", action="store_true", help="Save the extracted reference frame stats and the list of best master frames.")
     parser.add_argument("--save-master-frames", "-smf", action="store_true", help="Save the best master frames extracted from the videos (existing files will be overwritten).")
     parser.add_argument("--force", "-f", action="store_true", help="Force the extraction of the flight log data (do not use the existing data).")
     parser.add_argument("--ref-frame", "-rf", type=int, default=0, help="Use custom reference frame that is used for stabilization/georeferencing.")
     parser.add_argument("--visualize", "-viz", action="store_true", help="Visualize the best master frame selection.")
     parser.add_argument("--save-viz", "-sv", action="store_true", help="Save the best master frames visualization.")
-    parser.add_argument("--best_n", "-n", type=int, default=20, help="Number of reference frames to consider for the best master frame selection.")
-    parser.add_argument("--match-pattern", "-m", type=str, default='??.CSV', help="Pattern to match (case-sensitive) the files in the folder.")
-    parser.add_argument("--folders-exclude", "-fe", type=str, nargs='+', default=['results'], help="Folders to exclude from the search (e.g, 'results' as these may already contain georeferenced data).")
+    parser.add_argument("--best-n", "-n", type=int, default=20, help="Number of reference frames to consider for the best master frame selection (default: 20).")
+    parser.add_argument("--cfg", "-c", type=Path, default=DEFAULT_CFG, help="Pipeline config used to resolve the output folder and filename postfixes. Defaults to the bundled config.")
+    parser.add_argument("--match-pattern", "-m", type=str, default='*.csv', help="Glob pattern (case-insensitive) for flight-log files. Default '*.csv' matches any naming; narrow it (e.g. '??.csv' for short clip names like A1, B2) to skip auxiliary CSVs.")
+    parser.add_argument("--folders-exclude", "-fe", type=str, nargs='+', default=[DEFAULT_OUTPUT['folder']], help="Folders to exclude from the search (default: [output.folder from config]).")
     parser.add_argument("--bounding-box-cols", "-b", type=int, nargs='+', default=[2, 3, 4, 5], dest="bbox_cols", help="Columns of the bounding box in the detection/tracking results.")
     parser.add_argument("--target-crs", "-tcrs", default='epsg:5186', help="Target CRS for local coordinates")
     parser.add_argument("--frame-width", "-fw", type=int, default=3840, help="Default width of the video frames.")
     parser.add_argument("--frame-height", "-fh", type=int, default=2160, help="Default height of the video frames.")
+    parser.add_argument("--log-path", "-lp", type=Path, default=None, help="Where to write logs: a directory or a full file path; defaults to a platform-specific log directory.")
+    parser.add_argument("--quiet", "-q", action="store_true", help="Reduce console verbosity to important messages only (default: show INFO-level detail).")
 
     return parser.parse_args()
 
 
+def main() -> None:
+    """
+    Command-line entry point.
+    """
+    args = parse_cli_args()
+    logger = setup_logger(Path(__file__).stem, verbose=not args.quiet, log_path=args.log_path)
+
+    find_master_frames(args, logger)
+
+
 if __name__ == "__main__":
-    args = get_cli_arguments()
-    find_master_frames(args)
+    main()

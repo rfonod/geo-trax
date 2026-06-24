@@ -41,9 +41,11 @@ poetry.lock
 .idea/
 *.code-workspace
 .history/
+.ruff_cache/
 
 # Runtime / tooling logs
 *.log
+logs/
 .comet.config
 
 # Python test / typecheck / build caches
@@ -55,16 +57,33 @@ poetry.lock
 coverage.xml
 htmlcov/
 __pypackages__/
+.ipynb_checkpoints/
 
 # System files
 .DS_Store
 Thumbs.db
 desktop.ini
 
+# ML model weights and export artifacts (all formats)
+models/
+*.pt
+*.pth
+*.onnx
+*.engine
+*.tflite
+*.torchscript
+*.pb
+*.h5
+*.keras
+*.mlmodel
+*.mlpackage
+*.weights
+*.safetensors
+
 # Project-specific sensitive/local data
+runs/
 data-private/
 projects/
-assets/*.drawio
 
 # Data directories that should not be committed
 data/sample_videos/
@@ -72,7 +91,7 @@ data/orthophotos/
 data/segmentations/
 data/master_frames/
 data/results/
-*.yaml
+data/**/*.yaml
 
 # Optional Google Drive temporary files
 .tmp.driveupload
