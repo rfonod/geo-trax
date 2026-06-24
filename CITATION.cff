@@ -16,7 +16,7 @@ repository-code: 'https://github.com/rfonod/geo-trax'
 url: 'https://github.com/rfonod/geo-trax'
 license: MIT
 version: 1.0.0
-date-released: '2026-06-12'
+date-released: '2026-06-24'
 preferred-citation:
   type: article
   title: "Advanced computer vision for extracting georeferenced vehicle trajectories from drone imagery"  
