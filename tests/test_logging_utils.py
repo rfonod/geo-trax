@@ -7,8 +7,6 @@ import logging
 import sys
 from pathlib import Path
 
-import pytest
-
 from geotrax.utils.logging_utils import ColoredFormatter, default_log_dir
 
 

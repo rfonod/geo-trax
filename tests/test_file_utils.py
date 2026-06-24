@@ -68,10 +68,11 @@ def test_determine_location_id_without_alpha_exits():
 
 
 def test_convert_to_serializable():
-    args = argparse.Namespace(source=Path('/tmp/v.mp4'), conf=0.5)
+    src = Path('/tmp/v.mp4')
+    args = argparse.Namespace(source=src, conf=0.5)
     result = convert_to_serializable({'args': args, 'paths': [Path('a'), Path('b')]})
     assert result == {
-        'args': {'source': '/tmp/v.mp4', 'conf': 0.5},
+        'args': {'source': str(src), 'conf': 0.5},
         'paths': ['a', 'b'],
     }
 
