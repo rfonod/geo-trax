@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-# Author: Robert Fonod (robert.fonod@ieee.org)
+# Authors: Sohyeong Kim (sohyeong.kim@epfl.ch) and Robert Fonod (robert.fonod@ieee.org)
 
 """
 merge_videos_and_logs.py - Video and Flight Log Merging Tool

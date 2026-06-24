@@ -2,155 +2,19 @@
 
 [![GitHub Release](https://img.shields.io/github/v/release/rfonod/geo-trax?include_prereleases)](https://github.com/rfonod/geo-trax/releases) [![PyPI - Version](https://img.shields.io/pypi/v/geo-trax)](https://pypi.org/project/geo-trax/) [![PyPI - Total Downloads](https://img.shields.io/pepy/dt/geo-trax?label=total%20downloads)](https://pepy.tech/project/geo-trax) [![PyPI - Downloads per Month](https://img.shields.io/pypi/dm/geo-trax?color=%234c1)](https://pypi.org/project/geo-trax/) [![CI](https://github.com/rfonod/geo-trax/actions/workflows/ci.yml/badge.svg)](https://github.com/rfonod/geo-trax/actions/workflows/ci.yml) [![Python](https://img.shields.io/badge/python-3.9--3.13-blue)](https://www.python.org/) [![License](https://img.shields.io/github/license/rfonod/geo-trax)](https://github.com/rfonod/geo-trax/blob/main/LICENSE) [![GitHub Issues](https://img.shields.io/github/issues/rfonod/geo-trax)](https://github.com/rfonod/geo-trax/issues) [![Open Access](https://img.shields.io/badge/Journal-10.1016%2Fj.trc.2025.105205-blue)](https://doi.org/10.1016/j.trc.2025.105205) [![arXiv](https://img.shields.io/badge/arXiv-2411.02136-b31b1b.svg)](https://arxiv.org/abs/2411.02136) [![Archived Code](https://img.shields.io/badge/Zenodo-Software%20Archive-blue)](https://zenodo.org/doi/10.5281/zenodo.12119542) [![Hugging Face](https://img.shields.io/badge/🤗%20Model-rfonod%2Fgeo--trax-yellow)](https://huggingface.co/rfonod/geo-trax) [![Project Website](https://img.shields.io/badge/REAL%20Lab-Geo--trax-informational)](https://www.real-lab.ch/geo-trax) [![YouTube](https://img.shields.io/badge/YouTube-Video-red?logo=youtube&logoColor=red)](https://youtu.be/gOGivL9FFLk)
 
-**Geo-trax** (GEO-referenced TRAjectory eXtraction) is a comprehensive pipeline for extracting high-accuracy georeferenced vehicle trajectories from high-altitude drone imagery. Designed specifically for quasi-stationary aerial monitoring in urban traffic scenarios, Geo-trax transforms raw, bird's-eye view (BEV) video footage into precise, real-world vehicle trajectories. The framework integrates state-of-the-art computer vision and deep learning modules for vehicle detection, tracking, and trajectory stabilization, followed by a georeferencing stage that employs image registration to align the stabilized video frames with an orthophoto. This registration enables the accurate mapping of vehicle trajectories to real-world coordinates. The resulting pipeline supports large-scale traffic studies by delivering spatially and temporally consistent trajectory data suitable for traffic behavior analysis and simulation. Geo-trax is optimized for urban intersections and arterial corridors, where high-fidelity vehicle-level insights are essential for intelligent transportation systems and digital twin applications.
+**Geo-trax** (GEO-referenced TRAjectory eXtraction) is a comprehensive pipeline that extracts high-accuracy, georeferenced vehicle trajectories from high-altitude drone imagery. Designed specifically for quasi-stationary aerial monitoring in urban traffic scenarios, Geo-trax transforms raw, bird's-eye view (BEV) video footage into precise, real-world vehicle trajectories. The framework integrates YOLO detection, multi-object tracking, and video stabilization, followed by a robust georeferencing pipeline with orthophoto-based image registration, delivering GNSS-tagged, lane-resolved trajectory data ready for large-scale urban traffic analysis, delivering spatially and temporally consistent trajectory data suitable for traffic behavior analysis and simulation. Geo-trax is optimized for urban intersections and arterial corridors, where high-fidelity vehicle-level insights are essential for intelligent transportation systems and digital twin applications.
 
 ![Geo-trax Output Visualization](https://raw.githubusercontent.com/rfonod/geo-trax/v1.0.0/assets/geo-trax_visualization.webp)
 
 🎬 This accelerated animation previews some of the capabilities of Geo-trax. Watch the full demonstration (~4 min) on [YouTube](https://youtu.be/gOGivL9FFLk).
 
-## Pipeline diagram
+## Pipeline
 
 ![Geo-trax pipeline diagram: raw drone video → detection → tracking → stabilization → georeferencing → dataset](assets/geo-trax_pipeline.svg)
 
-🔍 The core pipeline (solid box) transforms raw drone video into stabilized, pixel-coordinate vehicle trajectories. Optional extensions include: georeferencing to real-world coordinates via orthophoto image registration; vision dataset creation through (pre-)annotation of sampled frames for custom detector training; and bundled visualization, analysis, and probe vehicle validation tools, applicable to both pixel-coordinate and georeferenced outputs.
+🔍 The core pipeline (solid box) produces stabilized, pixel-coordinate vehicle trajectories. Optional extensions add georeferencing via orthophoto image registration, vision dataset creation through frame (pre-)annotation for custom detector fine-tuning, and visualization, analysis, and probe vehicle validation tools, all applicable to both pixel-coordinate and georeferenced outputs.
 
-## Features
-
-1. **Vehicle Detection**: Utilizes a pre-trained YOLO model to detect vehicles (cars, buses, trucks, and motorcycles) in the video frames using horizontal bounding boxes (HBB).
-2. **Vehicle Tracking**: Implements the selected tracking algorithm to follow detected vehicles, ensuring robust trajectory data and continuity across frames.
-3. **Trajectory Stabilization**: Corrects for unintentional drone movement by aligning trajectories to a reference frame, using bounding boxes of detected vehicles to enhance stability. Leverages the [Stabilo](https://github.com/rfonod/stabilo) 🌀 library, fine-tuned by [Stabilo-Optimize](https://github.com/rfonod/stabilo-optimize) 🎯, to achieve reliable, consistent stabilization.
-4. **Georeferencing**: Maps stabilized trajectories to real-world coordinates using an orthophoto and an image registration technique.
-5. **Dataset Creation**: Compiles trajectory and related metadata (e.g., velocity, acceleration, dimension estimates) into a structured dataset, with optional aggregation of results across multiple drones and flights covering the same location.
-6. **Visualization**: Overlays trajectories, bounding boxes, IDs, class labels, speeds, and lane information on the video, in three rendering modes (original, stabilized, or static reference frame).
-7. **Plotting & Analysis**: Generates trajectory maps (optionally overlaid on the orthophoto) together with kinematic (speed, acceleration), class, and vehicle-dimension distribution charts, for individual videos or aggregated across drones and flights.
-8. **Auxiliary Tools**: Provides data wrangling, analysis, and model training scripts/tools to support dataset preparation, advanced analytics, and custom model development. See [`tools/README.md`](tools/README.md) for a categorized index of all utilities.
-9. **Customization and Configuration**: Flexible configuration options to adjust pipeline settings, including detection/tracking parameters, stabilization methods, and visualization modes.
-
-<details>
-<summary><b>🚀 Planned Enhancements</b></summary>
-
-- Comprehensive documentation in a dedicated `docs/` folder. A [`tools/README.md`](tools/README.md) index already covers the auxiliary scripts.
-- Modularized, OOP-based pipeline with custom reference frame support and georeferencing leveraging Stabilo's image-matching backend.
-- Rationalized single-file YAML configuration.
-- Per-class confidence thresholds and oriented bounding box visualization (using azimuth and dimension estimates).
-- Trajectory interpolation and SAHI-based small-object detection.
-- Batch inference, GPU-accelerated image registration, and multi-thread processing.
-- Real-world map visualization (e.g., MovingPandas, contextily) and interactive web app.
-
-</details>
-
-<details>
-<summary><b>🔗 Related Projects</b></summary>
-
-Geo-trax integrates with and complements several specialized tools:
-
-- **[Stabilo](https://github.com/rfonod/stabilo) 🌀** — Python library for video and trajectory stabilization using robust homography transformations. Supports various feature detectors, RANSAC algorithms, and user-defined masks. Used as Geo-trax's core stabilization engine.
-
-- **[Stabilo-Optimize](https://github.com/rfonod/stabilo-optimize) 🎯** — Benchmarking and hyperparameter optimization framework for Stabilo. Evaluates stabilization performance through ground truth-free assessment using random perturbations. Used to fine-tune Geo-trax stabilization parameters.
-
-- **[HBB2OBB](https://github.com/rfonod/hbb2obb) 📦** — Converts horizontal bounding boxes to oriented bounding boxes using SAM segmentation models. Can enhance Geo-trax outputs when object orientation is needed for downstream analysis.
-
-</details>
-
-## Field Deployment
-
-Geo-trax was validated in a large-scale urban traffic monitoring experiment conducted in Songdo, South Korea. In this study, Geo-trax was used to process aerial video data captured by a fleet of 10 drones, resulting in the creation of the [**Songdo Traffic**](https://doi.org/10.5281/zenodo.13828383) dataset. The underlying vehicle detection model in Geo-trax was trained using the [**Songdo Vision**](https://doi.org/10.5281/zenodo.13828407) dataset. Both datasets are described in detail in the associated publication, see the [citation](#citation) section below.
-
-🎥 *Demo video of Geo-trax applied to the Songdo field experiment:* [https://youtu.be/gOGivL9FFLk](https://youtu.be/gOGivL9FFLk)
-
-<details>
-<summary><b>📂 Recommended project folder structure</b></summary>
-
-The layout below mirrors how data was organized in the Songdo experiment and matches what the pipeline auto-detects by default. It is a recommendation rather than a hard requirement; following it lets `geotrax batch` run with no path flags. Two conventions do the heavy lifting:
-
-- **A `PROCESSED/` folder anchors auto-detection.** When georeferencing/plotting need orthophotos, master frames, or segmentations and no explicit path is given, Geo-trax walks *up* from the video until it finds a folder named `PROCESSED`, then looks for a sibling `ORTHOPHOTOS/` folder next to it.
-- **A location ID ties each video to its assets.** The location ID is the leading run of letters in the clip's filename (`A1.mp4` → `A`). Every per-location asset shares that stem, so `A1.mp4` automatically resolves to `ORTHOPHOTOS/A.png`, `ORTHOPHOTOS/master_frames/A.png`, and `ORTHOPHOTOS/segmentations/A.csv`.
-
-### Directory tree
-
-```text
-<project>/                                 # project root (name arbitrary)
-├── RAW/                                   # untouched drone footage + flight logs (never modified)
-│   └── 2022-10-07/D1/PM1/                 # arbitrary nesting, e.g. date / drone / session
-│       ├── DJI_0001.MP4  DJI_0001.SRT
-│       └── DJI_0002.MP4  DJI_0002.SRT     # drone splits a recording into segments (file-size limit)
-├── PROCESSED/                             # pipeline input (auto-detect anchor)
-│   └── 2022-10-07/D1/PM1/
-│       ├── 0_merged.mp4  0_merged.srt     # merged flight video + log (temporary, deletable)
-│       ├── 0_merged.txt                   # cut list: start/end frames, one cut per line (temporary)
-│       ├── A1.mp4  A1.csv                 # cut clip + flight log; 'A' = location ID, '1' = sequence
-│       ├── A2.mp4  A2.csv                 # next clip at the same location
-│       ├── A1.yaml                        # run metadata, saved next to the clip (not in results/)
-│       └── results/                       # pipeline outputs, written next to each clip
-│           ├── A1.txt                     # pixel-coordinate tracks
-│           ├── A1_vid_transf.txt          # stabilization homographies
-│           ├── A1_geo_transf.txt          # georeferencing homography
-│           ├── A1.csv                     # georeferenced trajectories + kinematics
-│           ├── A1_mode_0.mp4              # video with overlaid boxes & trajectories (modes 0/1/2)
-│           └── plots/                     # various trajectory & distribution plots
-├── ORTHOPHOTOS/                           # auto-detected sibling of PROCESSED / DATASET
-│   ├── A.png                              # orthophoto cut-out, per location
-│   ├── A.txt  (or A.tif)                  # georeferencing parameters (or a georeferenced GeoTIFF)
-│   ├── ortho_parameters.txt               # (alternative) shared params + per-location A_center.txt
-│   ├── master_frames/                     # optional; consistent reference frame per location
-│   │   ├── A.png                          #   reference frame image
-│   │   └── A.txt                          #   cached master->ortho homography
-│   └── segmentations/                     # optional; per-location lane/road geometry
-│       ├── A.csv                          #   lane & road-section polygons
-│       └── A.png                          #   overlay image (used for plotting only)
-└── DATASET/                               # `geotrax aggregate` output (sibling of PROCESSED)
-    └── 2022-10-07_A/                      # one intersection-day
-        ├── 2022-10-07_A_AM1.csv           # one CSV per flight session (AM1-AM5, PM1-PM5),
-        └── 2022-10-07_A_PM1.csv           #   trajectories merged across drones for that session
-```
-
-`RAW/` is kept immutable; everything downstream lives under `PROCESSED/`. The `0_merged.*` files are temporary and can be deleted once cutting is done. The `master_frames/` and `segmentations/` sub-folders are optional; provide them only when you need cross-flight georeferencing consistency or lane-level analysis. `DATASET/` is created by `geotrax aggregate` next to `PROCESSED/` and groups per-clip results by location and flight session, merging across drones; it is also a valid auto-detection anchor for `ORTHOPHOTOS/`.
-
-### Naming conventions
-
-Only the **leading location letters** of a clip filename are required by the code (parsed by `determine_location_id`). The contextual metadata (date, drone, session) normally lives in the **folder path**, so each clip can be named compactly as location ID + sequence number:
-
-```text
-2022-10-07/D10/PM5/U1.mp4
-│          │   │   └── clip: location ID 'U' + sequence number '1'
-│          │   └────── flight session: AM1-AM5 (morning) / PM1-PM5 (afternoon)
-│          └────────── drone ID (D1, D2, ...)
-└───────────────────── capture date (ISO 8601, YYYY-MM-DD)
-```
-
-These compact names are assigned automatically by the cutting step, not typed by hand: given a location map (a JSON file pairing each label with its `[lat, lon]` center), [`tools/cut_merged_videos_and_logs.py`](tools/cut_merged_videos_and_logs.py) labels every clip with the location nearest to its GPS centroid and appends a per-location sequence number (`U1`, `U2`, ...).
-
-Because only the leading letters matter, the same context can instead be packed into a single self-contained filename when clips are detached from this tree. This is how the sample videos published on Zenodo are named, e.g. `U_D10_2022-10-07_PM5_60s.mp4` (location `U`, drone `D10`, date `2022-10-07`, session `PM5`). Here the per-location sequence number is replaced by a time marker showing where the clip falls within the session: `60s` denotes the first 60 seconds of that session at the location. Either way, the code still extracts location `U`.
-
-| Clip filename | Location ID | Resolves to |
-|---|---|---|
-| `U1.mp4` | `U` | `ORTHOPHOTOS/U.png`, `master_frames/U.png`, `segmentations/U.csv` |
-| `U2.mp4` | `U` | `ORTHOPHOTOS/U.png`, … |
-| `U_D10_2022-10-07_PM5_60s.mp4` | `U` | `ORTHOPHOTOS/U.png`, … |
-
-`geotrax aggregate` groups results by location (and date/session), merging clips from different drones that cover the same place into a unified dataset.
-
-### From RAW to trajectories
-
-The `tools/` directory provides the wrangling scripts that take you from raw footage to pipeline-ready clips (see [`tools/README.md`](tools/README.md) for the full index):
-
-1. **Merge** the recorded video segments and their logs into one video + log per flight session → [`tools/merge_videos_and_logs.py`](tools/merge_videos_and_logs.py)
-2. **Cut** each merged flight into per-location clips: list the start/end frames of each stable hover in `0_merged.txt`, then split (converting the DJI SRT log to a per-clip CSV) → [`tools/cut_merged_videos_and_logs.py`](tools/cut_merged_videos_and_logs.py)
-3. **QA / repair** the cut logs → [`tools/find_cut_video_issues.py`](tools/find_cut_video_issues.py), [`tools/fix_timestamp_anomalies.py`](tools/fix_timestamp_anomalies.py), [`tools/interpolate_missing_timestamps.py`](tools/interpolate_missing_timestamps.py)
-4. **Build the georeferencing assets**: orthophoto cut-outs per location → [`tools/subset_orthophoto.py`](tools/subset_orthophoto.py); master frames → [`tools/find_master_frames.py`](tools/find_master_frames.py); lane segmentations are drawn manually, with overlays rendered via [`tools/viz_segmentations.py`](tools/viz_segmentations.py)
-5. **Run the pipeline**: `geotrax batch PROCESSED/ ...`; orthophotos, master frames, and segmentations are auto-detected from the sibling `ORTHOPHOTOS/` folder.
-6. **(Optional) Aggregate** results across drones and flights for the same location → `geotrax aggregate PROCESSED/`, which writes a unified dataset to a sibling `DATASET/` folder.
-
-### Lessons from the Songdo experiment
-
-- Treat `RAW/` as read-only archival storage and derive everything under `PROCESSED/`; the wrangling steps are reproducible from the raw footage.
-- The **master frame** is an intermediary coordinate system per location: aligning every flight to one shared reference frame keeps trajectories from different drones, altitudes, and viewpoints in a single consistent coordinate system.
-- Coordinates were projected to a local CRS (EPSG:5186, KGD2002 / Central Belt 2010) alongside WGS84 lat/lon; set your own CRS in the `georef:` config section.
-- Imagery was captured at ~140–150 m altitude in 4K, giving a ground sampling distance of ≈ 0.027 m/px (the default `extraction.gsd`). Re-tune the GSD for different altitudes or cameras.
-
-</details>
-
-## Installation
+## Install
 
 It is recommended to create and activate a **Python virtual environment** (Python >= 3.9 and <= 3.13) first:
 
@@ -206,34 +70,87 @@ python -m pip install -e '.[dev]'   # pip
 ```
 
 > [!NOTE]
-> The default detection model is hosted on Hugging Face ([`rfonod/geo-trax`](https://huggingface.co/rfonod/geo-trax), file `geotrax_hbb_yolov8s_1920_v1.pt`) and **downloads automatically on first use** into the Hugging Face cache (`~/.cache/huggingface/hub`, overridable via `HF_HOME`). To use your own weights, set the model — in a custom config (`extraction -> model`) or with `--model` — to either a local file path or an `hf://<org>/<repo>/<path/to/file>.pt` reference.
+> The default model auto-downloads from [🤗 Hugging Face](https://huggingface.co/rfonod/geo-trax) on first use (cached in `~/.cache/huggingface/hub`, overridable via `HF_HOME`). To use your own weights, set `--model` or `extraction.model` in the config to a local `.pt` path or `hf://<org>/<repo>/<path/to/file>.pt`.
+
+## Quick Start
+
+`data/U_video_cut.mp4` is a 5-second sample clip included for immediate testing. See [data/README.md](data/README.md) for matching orthophotos.
+
+```bash
+# Pixel-coordinate trajectories — no orthophoto required
+geotrax batch data/U_video_cut.mp4 --no-geo --save
+
+# Full pipeline: detection → stabilization → georeferencing → visualization
+geotrax batch data/U_video_cut.mp4 -orf data/orthophotos -mf data/master_frames --save --show-lanes
+```
+
+Results are written to `results/` next to the input file. Run `geotrax -h` or `geotrax batch -h` for all options.
+
+## Features
+
+- **Detection** — YOLOv8s on aerial BEV imagery; detects car (incl. vans), bus, truck, and motorcycle.
+- **Tracking** — Six multi-object trackers (BoT-SORT default); see [Tracking](#tracking) for comparison.
+- **Stabilization** — Homography-based trajectory correction via [Stabilo](https://github.com/rfonod/stabilo) 🌀, tuned with [Stabilo-Optimize](https://github.com/rfonod/stabilo-optimize) 🎯.
+- **Georeferencing** — Frame-to-orthophoto registration; outputs lat/lon, local CRS, speed, acceleration, and lane assignment per vehicle.
+- **Visualization** — Track overlays on original, stabilized, or static-reference video; three rendering modes.
+- **Analysis** — Trajectory maps, kinematic distributions, and class/dimension charts; per-video or aggregated across drones and sessions.
+- **Scaling & Tooling** — Batch-processes directory trees and aggregates multi-drone data; includes standalone utilities for end-to-end data preparation, training, evaluation, and validation.
+
+<details>
+<summary><b>🚀 Planned Enhancements</b></summary>
+
+- Comprehensive documentation in a dedicated `docs/` folder. A [`tools/README.md`](tools/README.md) index already covers the auxiliary scripts.
+- Modularized, OOP-based pipeline with custom reference frame support and georeferencing leveraging Stabilo's image-matching backend.
+- Rationalized single-file YAML configuration.
+- Per-class confidence thresholds and oriented bounding box visualization (using azimuth and dimension estimates).
+- Trajectory interpolation and SAHI-based small-object detection.
+- Batch inference, GPU-accelerated image registration, and multi-thread processing.
+- Real-world map visualization (e.g., MovingPandas, contextily) and interactive web app.
+
+</details>
+
+<details>
+<summary><b>🔗 Related Projects</b></summary>
+
+Geo-trax integrates with and complements several specialized tools:
+
+- **[Stabilo](https://github.com/rfonod/stabilo) 🌀** — Python library for video and trajectory stabilization using robust homography transformations. Supports various feature detectors, RANSAC algorithms, and user-defined masks. Used as Geo-trax's core stabilization engine.
+
+- **[Stabilo-Optimize](https://github.com/rfonod/stabilo-optimize) 🎯** — Benchmarking and hyperparameter optimization framework for Stabilo. Evaluates stabilization performance through ground truth-free assessment using random perturbations. Used to fine-tune Geo-trax stabilization parameters.
+
+- **[HBB2OBB](https://github.com/rfonod/hbb2obb) 📦** — Converts horizontal bounding boxes to oriented bounding boxes using SAM segmentation models. Can enhance Geo-trax outputs when object orientation is needed for downstream analysis.
+
+</details>
 
 ## Configuration
 
-The entire pipeline is driven by a **single, self-contained pipeline config file**. Every setting — detection, tracking, stabilization, georeferencing, visualization, and plotting — lives in one YAML file; there are no linked sub-config files. The defaults ship bundled inside the installed package, so there is nothing to download. Four ready-made presets are bundled and can be selected by name with `-c <name>` (e.g. `geotrax extract video.mp4 -c confident`): `default` (balanced baseline), `confident` (tuned for precision — fewer false positives), `lenient` (tuned for recall — catches more vehicles), and `stable` (tuned for higher-quality stabilization).
+The entire pipeline is driven by a **single, self-contained YAML config** — one file for detection, tracking, stabilization, georeferencing, visualization, and plotting. Four presets ship with the package:
+
+| Preset | Focus |
+|--------|-------|
+| `default` | Balanced baseline |
+| `confident` | Precision — fewer false positives |
+| `lenient` | Recall — catches more vehicles |
+| `stable` | Stabilization quality |
+
+```bash
+geotrax batch video.mp4 -c confident   # use a bundled preset by name
+geotrax batch video.mp4 -c ./my.yaml   # use a custom config file
+```
 
 <details>
-<summary><b>⚙️ Inspecting, selecting, and customizing the pipeline config</b></summary>
+<summary><b>⚙️ Inspect, copy, and customize configs</b></summary>
 
 Manage the bundled configs with the `geotrax config` command:
 
 ```bash
-geotrax config show              # show where the bundled configs live and list the presets
-geotrax config show default      # print a preset's full contents to the terminal
-geotrax config copy              # copy the presets into the current directory as <name>_copy.yaml
+geotrax config show              # list bundled presets and their location
+geotrax config show default      # print a preset's full contents
+geotrax config copy              # copy presets into the current directory as <name>_copy.yaml
 geotrax config copy -o ~/myproj  # copy into a specific directory
 ```
 
-**Selecting a preset.** Pass a bundled preset name straight to `-c` — no file path needed:
-
-```bash
-geotrax extract video.mp4 -c confident   # uses the bundled 'confident' preset
-geotrax batch  video.mp4 -c stable       # uses the bundled 'stable' preset
-```
-
-`-c` is resolved as given (absolute or relative to the working directory) and then against the bundled config directory, so a bare preset name like `confident` works from anywhere, while a path like `./my_config.yaml` points to your own file.
-
-**Customizing.** Copy a preset and pass your edited copy to any command with `-c`:
+Copy a preset, edit it, then pass it with `-c`:
 
 ```bash
 geotrax config copy
@@ -241,26 +158,13 @@ geotrax config copy
 geotrax extract video.mp4 -c default_copy.yaml
 ```
 
-To switch the tracking algorithm, set `tracker.active` in the config (see [Tracking Algorithms](#tracking-algorithms)).
+To switch the tracking algorithm, set `tracker.active` in the config (see [Tracking](#tracking)).
 
 </details>
 
 ## Detection Model
 
-The default vehicle detector is a **YOLOv8s** model (HBB, 1920 × 1920 px input) trained for high-altitude drone BEV imagery. It is hosted on the [🤗 Hugging Face Hub](https://huggingface.co/rfonod/geo-trax) and **downloads automatically on first use** (no manual setup). It detects four vehicle classes (car incl. vans, bus, truck, and motorcycle) and underpins the results reported in the [publication](https://doi.org/10.1016/j.trc.2025.105205). To use a different model, point `extraction.model` in the config (or the `--model`/`-m` CLI flag) to a local `.pt` path or another `hf://<org>/<repo>/<path/to/file>.pt` reference; it must be an [Ultralytics](https://github.com/ultralytics/ultralytics)-supported model.
-
-<details>
-<summary><b>🎯 Model details and detection performance</b></summary>
-
-| Property | Value |
-|---|---|
-| Architecture | YOLOv8s (HBB) |
-| Input resolution | 1920 × 1920 px |
-| Parameters | ~11 M |
-| Framework | [Ultralytics](https://github.com/ultralytics/ultralytics) ≥ 8.4.64 |
-| Validated on | [Songdo Vision](https://doi.org/10.5281/zenodo.13828407) test set (1,084 images) |
-
-Metrics on the [Songdo Vision](https://doi.org/10.5281/zenodo.13828407) test split (see Table 3 of the [publication](https://doi.org/10.1016/j.trc.2025.105205) for full results):
+The default detector is **YOLOv8s** (HBB, 1920 × 1920 px, ~11 M parameters) trained on aerial BEV imagery. Hosted on [🤗 Hugging Face](https://huggingface.co/rfonod/geo-trax) and **downloads automatically on first use**. Results on the Songdo Vision test split (1,084 images; full results in [Table 3](https://doi.org/10.1016/j.trc.2025.105205)):
 
 | ID | Label | Precision | Recall | mAP@50 | mAP@50-95 |
 |---|---|---|---|---|---|
@@ -270,73 +174,49 @@ Metrics on the [Songdo Vision](https://doi.org/10.5281/zenodo.13828407) test spl
 | 3 | Motorcycle | 0.827 | 0.866 | 0.888 | 0.463 |
 | **All** | | **0.911** | **0.935** | **0.951** | **0.711** |
 
-> The model was also trained on pedestrian and bicycle instances, but those classes are underrepresented, unevaluated, and **not recommended for use**; Geo-trax filters to the four classes above by default. See the [model card](https://huggingface.co/rfonod/geo-trax) for full details, usage examples, and evaluation plots.
+> Pedestrian and bicycle classes exist in the weights but are underrepresented, unevaluated, and filtered by default. See the [model card](https://huggingface.co/rfonod/geo-trax) for full details.
 
-</details>
+To use a different model, point `--model` (CLI) or `extraction.model` (config) to a local `.pt` path or `hf://<org>/<repo>/<file>.pt`; any [Ultralytics](https://github.com/ultralytics/ultralytics)-compatible model works.
 
 ### Custom Model Training
 
-The `train/` directory contains scripts for training and exporting custom YOLOv8 detection models using the [Ultralytics](https://github.com/ultralytics/ultralytics) framework, along with a SLURM wrapper for HPC clusters. See [train/README.md](train/README.md) for full usage instructions.
+Training and export scripts for custom YOLO detectors live in `train/`, with a SLURM wrapper for HPC clusters. See [train/README.md](train/README.md).
 
-## Tracking Algorithms
+## Tracking
 
-Geo-trax supports six multi-object trackers bundled with [Ultralytics](https://github.com/ultralytics/ultralytics) (`>=8.4.63`): **BoT-SORT** (default), **ByteTrack**, **OC-SORT**, **Deep OC-SORT**, **FastTracker**, and **TrackTrack**. The full parameter block for all six is inlined in the `tracker:` section of the pipeline config; selection is purely config-driven — set `tracker.active` to the desired name. No code changes are needed.
-
-> 💡 Run `geotrax config show default` to print the bundled config and inspect the `tracker:` section (all six blocks, every parameter documented inline).
-
-<details>
-<summary><b>🚗 Tracker comparison and selection guidance</b></summary>
+Six multi-object trackers ship with [Ultralytics](https://github.com/ultralytics/ultralytics) `>=8.4.63`. Selection is config-driven: set `tracker.active` — no code changes needed. Default: **BoT-SORT**.
 
 | Tracker | `tracker.active` | ReID | GMC¹ | Pros | Cons |
 |---------|------------------|:----:|:----:|------|------|
-| **BoT-SORT** (default) | `botsort` | optional | ✅ | Strong all-round accuracy; motion-based with optional appearance (ReID) and in-tracker camera-motion compensation. | Slower than ByteTrack; ReID adds compute and weights. |
-| **ByteTrack** | `bytetrack` | ❌ | ❌ | Fastest and simplest; two-stage association recovers low-confidence detections. | No appearance or motion compensation → more ID switches under occlusion or camera motion. |
-| **OC-SORT** | `ocsort` | ❌ | ❌ | Observation-centric motion model; robust to non-linear motion and brief occlusions; lightweight, ReID-free. | No appearance cues; weaker on long occlusions and dense, visually similar targets. |
-| **Deep OC-SORT** | `deepocsort` | optional | optional | OC-SORT plus appearance embeddings and optional GMC; fewer ID switches in crowded scenes. | Heaviest OC-SORT variant when ReID is enabled; more tuning. |
-| **FastTracker** | `fasttrack` | ❌ | ❌ | Occlusion-aware ByteTrack variant with Kalman rollback and init-IoU suppression; good ID retention through brief occlusions at low cost. | Newer/less battle-tested; ReID-free; several occlusion knobs to tune. |
-| **TrackTrack** | `tracktrack` | optional | ✅ | Multi-cue cost (HMIoU + ReID + confidence + angle) with iterative assignment and track-aware initialisation. | Most parameters to tune; higher compute. |
+| **BoT-SORT** (default) | `botsort` | opt | ✅ | Strong accuracy; motion + optional appearance | Slower; ReID adds compute |
+| **ByteTrack** | `bytetrack` | ❌ | ❌ | Fastest; two-stage association | More ID switches under occlusion |
+| **OC-SORT** | `ocsort` | ❌ | ❌ | Robust to non-linear motion; lightweight | Weaker on long occlusions |
+| **Deep OC-SORT** | `deepocsort` | opt | opt | OC-SORT + appearance; dense scenes | Heaviest variant with ReID |
+| **FastTracker** | `fasttrack` | ❌ | ❌ | Occlusion-aware ByteTrack variant | Newer; several knobs to tune |
+| **TrackTrack** | `tracktrack` | opt | ✅ | Multi-cue cost; best ID retention | Most parameters; highest compute |
 
-> ¹ **GMC** (global motion compensation) corrects for camera/drone movement *inside the tracker's association step*. It runs during tracking and is independent of Geo-trax's separate [Stabilo](https://github.com/rfonod/stabilo) stage, which stabilizes the already-extracted trajectories against a reference frame as post-processing and has no effect on tracking itself.
+¹ GMC (in-tracker camera-motion compensation) runs during tracking and is independent of Stabilo's post-hoc trajectory stabilization stage.
 
-**Guidance for drone (BEV) footage:** start with **BoT-SORT** (the default). If throughput matters more than identity consistency, try **ByteTrack** or **OC-SORT**. For dense scenes with frequent occlusions, **Deep OC-SORT** or **TrackTrack** (with ReID enabled) tend to retain identities best, at the cost of speed. To compare two or more trackers on your own data, see [`tools/compare_tracking.py`](tools/compare_tracking.py).
+> 💡 Run `geotrax config show default` to print the full `tracker:` block — every parameter for all six trackers documented inline. Run `geotrax config copy` to get an editable local copy. For a head-to-head comparison on your own data, see [`tools/compare_tracking.py`](tools/compare_tracking.py).
 
-</details>
+## Usage
 
-All tracker parameters (confidence thresholds, track buffer, matching thresholds, ReID, GMC, etc.) live in the `tracker:` section of the pipeline config alongside every other pipeline setting, with one block per tracker. Run `geotrax config copy` to get an editable local copy. For full algorithm details, see the [Ultralytics tracking docs](https://docs.ultralytics.com/modes/track/).
-
-## Batch Processing Example
-
-Installing geo-trax provides a single `geotrax` command with one subcommand per pipeline stage: `batch` (primary entry point), `extract`, `georeference`, `visualize`, `plot`, `aggregate`, and `config` (config management). Run `geotrax -h` for the overview and `geotrax <command> -h` for the per-command option reference (`python -m geotrax …` works identically).
-
-The `geotrax batch` command processes a single video file or a whole directory tree of videos (run `geotrax batch -h` for all options). The examples below show common usage.
-
-#### Example 1: Process all files in a directory without georeferencing
+The `geotrax` CLI provides one subcommand per stage: `batch` (primary entry point), `extract`, `georeference`, `visualize`, `plot`, `aggregate`, and `config`. Run `geotrax -h` or `geotrax <subcommand> -h` for the full reference (`python -m geotrax` works identically).
 
 ```bash
+# Process recursively a directory or a single video without georeferencing
 geotrax batch path/to/videos/ --no-geo
-```
 
-#### Example 2: Customize arguments for a specific video
-
-```bash
+# Use a custom config
 geotrax batch video.mp4 -c path/to/custom_config.yaml
-```
 
-#### Example 3: Save tracking results in a video without re-running extraction
-
-```bash
+# Regenerate visualization without re-running extraction
 geotrax batch video.mp4 --viz-only --save
-```
 
-#### Example 4: Show lane IDs and hide speeds in the visualization (requires georeferencing)
-
-```bash
+# Show lane IDs, hide speed overlay (requires georeferencing)
 geotrax batch video.mp4 --viz-only --save --show-lanes --hide-speeds
-```
 
-#### Example 5: Generate aggregated trajectory plots only from existing results, excluding buses and trucks
-
-```bash
+# Aggregated trajectory plots, excluding buses and trucks
 geotrax batch path/to/processed-data/ --plot-only --plot-aggregate --plot-class-filter 1 2
 ```
 
@@ -344,8 +224,9 @@ geotrax batch path/to/processed-data/ --plot-only --plot-aggregate --plot-class-
 > See [data/README.md](data/README.md) for sample data and testing examples.
 
 <details>
-<summary><b>📁 Output File Formats</b></summary>
-Suppose the input video is named `video_file.mp4`. By default, output files are saved in a `results` sub-folder next to the input video. The output folder and all filename postfixes are configurable via the `output:` section of the pipeline config (or `--output-folder` / `-of` for the folder). The examples below use the default naming. The following files will be generated:
+<summary><b>📁 Output file formats</b></summary>
+
+Suppose the input video is `video_file.mp4`. By default, outputs are written to a `results/` sub-folder next to the input; the folder and all filename postfixes are configurable via the `output:` section of the pipeline config (or `--output-folder` / `-of` for the folder).
 
 - **video_file.txt** (`<stem><tracks_postfix>.txt`): Contains the extracted vehicle trajectories in the following format:
 
@@ -376,10 +257,10 @@ Suppose the input video is named `video_file.mp4`. By default, output files are 
 
 - **video_file.yaml**: Video metadata and the configuration settings used for processing `video_file.mp4`. (This file is saved in the same directory as the input video, not in the output folder.)
 
-- **video_file_mode_X.mp4** (`<stem><visualization_postfix>_mode_<X>.mp4`): Processed video in various visualization modes (X = 0, 1, 2):
-  - **Mode 0**: Results overlaid on the original (unstabilized) video.
-  - **Mode 1**: Results overlaid on the stabilized video.
-  - **Mode 2**: Results plotted on top of the static reference frame.
+- **video_file_mode_X.mp4** (`<stem><visualization_postfix>_mode_<X>.mp4`): Annotated video in three rendering modes (X = 0 / 1 / 2):
+  - **Mode 0** — overlaid on the original (unstabilized) video
+  - **Mode 1** — overlaid on the stabilized video
+  - **Mode 2** — plotted on the static reference frame 
 
   Each version can display vehicle bounding boxes, IDs, class labels, confidence scores, and short trajectory trails that fade and vary in thickness to indicate the recency of the movement. If an input `video_file.csv` file is available in the same directory as the input video, i.e., the converted flight logs, vehicle speed and lane information can also be displayed.
 
@@ -414,11 +295,109 @@ Suppose the input video is named `video_file.mp4`. By default, output files are 
 
 </details>
 
+## Field Deployment
+
+Geo-trax was validated in a large-scale urban traffic monitoring experiment conducted in Songdo, South Korea. In this study, Geo-trax was used to process the video data captured by a fleet of 10 drones, producing [**Songdo Traffic**](https://doi.org/10.5281/zenodo.13828383) dataset. The detection model was trained on [**Songdo Vision**](https://doi.org/10.5281/zenodo.13828407) dataset. Both datasets are described in the [publication](#citation).
+
+🎥 *Demo video of Geo-trax applied to the Songdo field experiment:* [https://youtu.be/gOGivL9FFLk](https://youtu.be/gOGivL9FFLk)
+
+<details>
+<summary><b>📂 Recommended project folder structure</b></summary>
+
+The layout below mirrors the Songdo experiment and matches the pipeline's auto-detection defaults, letting `geotrax batch` run with no path flags. Two conventions do the heavy lifting:
+
+- **A `PROCESSED/` folder anchors auto-detection.** When georeferencing or plotting needs orthophotos, master frames, or segmentations and no explicit path is given, Geo-trax walks *up* from the video until it finds `PROCESSED`, then looks for a sibling `ORTHOPHOTOS/` folder.
+- **A location ID ties each video to its assets.** The location ID is the leading letters in the clip filename (`A1.mp4` → `A`), so `A1.mp4` automatically resolves to `ORTHOPHOTOS/A.png`, `ORTHOPHOTOS/master_frames/A.png`, and `ORTHOPHOTOS/segmentations/A.csv`.
+
+### Directory tree
+
+```text
+<project>/                                 # project root (name arbitrary)
+├── RAW/                                   # untouched drone footage + flight logs (never modified)
+│   └── 2022-10-07/D1/PM1/                 # arbitrary nesting, e.g. date / drone / session
+│       ├── DJI_0001.MP4  DJI_0001.SRT
+│       └── DJI_0002.MP4  DJI_0002.SRT     # drone splits a recording into segments (file-size limit)
+├── PROCESSED/                             # pipeline input (auto-detect anchor)
+│   └── 2022-10-07/D1/PM1/
+│       ├── 0_merged.mp4  0_merged.srt     # merged flight video + log (temporary, deletable)
+│       ├── 0_merged.txt                   # cut list: start/end frames, one cut per line (temporary)
+│       ├── A1.mp4  A1.csv                 # cut clip + flight log; 'A' = location ID, '1' = sequence
+│       ├── A2.mp4  A2.csv                 # next clip at the same location
+│       ├── A1.yaml                        # run metadata, saved next to the clip (not in results/)
+│       └── results/                       # pipeline outputs, written next to each clip
+│           ├── A1.txt                     # pixel-coordinate tracks
+│           ├── A1_vid_transf.txt          # stabilization homographies
+│           ├── A1_geo_transf.txt          # georeferencing homography
+│           ├── A1.csv                     # georeferenced trajectories + kinematics
+│           ├── A1_mode_0.mp4              # video with overlaid boxes & trajectories (modes 0/1/2)
+│           └── plots/                     # various trajectory & distribution plots
+├── ORTHOPHOTOS/                           # auto-detected sibling of PROCESSED / DATASET
+│   ├── A.png                              # orthophoto cut-out, per location
+│   ├── A.txt  (or A.tif)                  # georeferencing parameters (or a georeferenced GeoTIFF)
+│   ├── ortho_parameters.txt               # (alternative) shared params + per-location A_center.txt
+│   ├── master_frames/                     # optional; consistent reference frame per location
+│   │   ├── A.png                          #   reference frame image
+│   │   └── A.txt                          #   cached master->ortho homography
+│   └── segmentations/                     # optional; per-location lane/road geometry
+│       ├── A.csv                          #   lane & road-section polygons
+│       └── A.png                          #   overlay image (used for plotting only)
+└── DATASET/                               # `geotrax aggregate` output (sibling of PROCESSED)
+    └── 2022-10-07_A/                      # one intersection-day
+        ├── 2022-10-07_A_AM1.csv           # one CSV per flight session (AM1-AM5, PM1-PM5),
+        └── 2022-10-07_A_PM1.csv           #   trajectories merged across drones for that session
+```
+
+`RAW/` is kept immutable; everything downstream lives under `PROCESSED/`. The `master_frames/` and `segmentations/` sub-folders are optional — provide them only when you need cross-flight georeferencing consistency or lane-level analysis. `DATASET/` is created by `geotrax aggregate` and is also a valid auto-detection anchor for `ORTHOPHOTOS/`.
+
+### Naming conventions
+
+Only the **leading location letters** of a clip filename are required by the code (parsed by `determine_location_id`). The contextual metadata (date, drone, session) normally lives in the **folder path**, so each clip can be named compactly as location ID + sequence number:
+
+```text
+2022-10-07/D10/PM5/U1.mp4
+│          │   │   └── clip: location ID 'U' + sequence number '1'
+│          │   └────── flight session: AM1-AM5 (morning) / PM1-PM5 (afternoon)
+│          └────────── drone ID (D1, D2, ...)
+└───────────────────── capture date (ISO 8601, YYYY-MM-DD)
+```
+
+These compact names are assigned automatically by the cutting step, not typed by hand: given a location map (a JSON file pairing each label with its `[lat, lon]` center), [`tools/cut_merged_videos_and_logs.py`](tools/cut_merged_videos_and_logs.py) labels every clip with the location nearest to its GPS centroid and appends a per-location sequence number (`U1`, `U2`, ...).
+
+Because only the leading letters matter, the same context can instead be packed into a single self-contained filename when clips are detached from this tree. This is how the sample videos published on Zenodo are named, e.g. `U_D10_2022-10-07_PM5_60s.mp4` (location `U`, drone `D10`, date `2022-10-07`, session `PM5`). Here the per-location sequence number is replaced by a time marker showing where the clip falls within the session: `60s` denotes the first 60 seconds of that session at the location. Either way, the code still extracts location `U`.
+
+| Clip filename | Location ID | Resolves to |
+|---|---|---|
+| `U1.mp4` | `U` | `ORTHOPHOTOS/U.png`, `master_frames/U.png`, `segmentations/U.csv` |
+| `U2.mp4` | `U` | `ORTHOPHOTOS/U.png`, … |
+| `U_D10_2022-10-07_PM5_60s.mp4` | `U` | `ORTHOPHOTOS/U.png`, … |
+
+`geotrax aggregate` groups results by location (and date/session), merging clips from different drones that cover the same place into a unified dataset.
+
+### From RAW to trajectories
+
+The `tools/` directory provides the wrangling scripts that take you from raw footage to pipeline-ready clips (see [`tools/README.md`](tools/README.md) for the full index):
+
+1. **Merge** the recorded video segments and their logs into one video + log per flight session → [`tools/merge_videos_and_logs.py`](tools/merge_videos_and_logs.py)
+2. **Cut** each merged flight into per-location clips: list the start/end frames of each stable hover in `0_merged.txt`, then split (converting the DJI SRT log to a per-clip CSV) → [`tools/cut_merged_videos_and_logs.py`](tools/cut_merged_videos_and_logs.py)
+3. **QA / repair** the cut logs → [`tools/find_cut_video_issues.py`](tools/find_cut_video_issues.py), [`tools/fix_timestamp_anomalies.py`](tools/fix_timestamp_anomalies.py), [`tools/interpolate_missing_timestamps.py`](tools/interpolate_missing_timestamps.py)
+4. **Build the georeferencing assets**: orthophoto cut-outs per location → [`tools/subset_orthophoto.py`](tools/subset_orthophoto.py); master frames → [`tools/find_master_frames.py`](tools/find_master_frames.py); lane segmentations are drawn manually, with overlays rendered via [`tools/viz_segmentations.py`](tools/viz_segmentations.py)
+5. **Run the pipeline**: `geotrax batch PROCESSED/ ...`; orthophotos, master frames, and segmentations are auto-detected from the sibling `ORTHOPHOTOS/` folder.
+6. **(Optional) Aggregate** results across drones and flights for the same location → `geotrax aggregate PROCESSED/`, which writes a unified dataset to a sibling `DATASET/` folder.
+
+### Lessons from the Songdo experiment
+
+- Treat `RAW/` as read-only archival storage and derive everything under `PROCESSED/`; the wrangling steps are reproducible from the raw footage.
+- The **master frame** is an intermediary coordinate system per location: aligning every flight to one shared reference frame keeps trajectories from different drones, altitudes, and viewpoints in a single consistent coordinate system.
+- Coordinates were projected to a local CRS (EPSG:5186, KGD2002 / Central Belt 2010) alongside WGS84 lat/lon; set your own CRS in the `georef:` config section.
+- Imagery was captured at ~140–150 m altitude in 4K, giving a ground sampling distance of ≈ 0.027 m/px (the default `extraction.gsd`). Re-tune the GSD for different altitudes or cameras.
+
+</details>
+
 ## Citation
 
-If you use **Geo-trax** in your research, software, or dataset generation, please cite the following resources appropriately:
+If you use **Geo-trax** in your research or software, please cite:
 
-1. **Preferred Citation:** Please cite the associated article for any use of the Geo-trax framework, including research, applications, and derivative work:
+1. **Journal article** (preferred for any use of the framework):
 
     ```bibtex
     @article{fonod2025advanced,
@@ -434,27 +413,25 @@ If you use **Geo-trax** in your research, software, or dataset generation, pleas
     }
     ```
 
-2. **Repository Citation:** If you reference, modify, or build upon the Geo-trax software itself, please also cite the corresponding Zenodo release:
+2. **Software archive** (when referencing or building on the code itself):
 
     ```bibtex
     @software{fonod2026geo-trax,
       author = {Fonod, Robert},
-      license = {MIT},
-      month = jun,
       title = {Geo-trax: A Comprehensive Framework for Georeferenced Vehicle Trajectory Extraction from Drone Imagery},
-      url = {https://github.com/rfonod/geo-trax},
-      doi = {10.5281/zenodo.12119542},
+      year = {2026},
+      month = jun,
       version = {1.0.0},
-      year = {2026}
+      doi = {10.5281/zenodo.12119542},
+      url = {https://github.com/rfonod/geo-trax},
+      license = {MIT}
     }
     ```
 
 ## Contributions
 
-Some georeferencing-related code received early contributions from [Haechan Cho](https://github.com/cho-96).
-
-Contributions from the community are welcome! If you encounter any issues or have suggestions for improvements, please open a [GitHub Issue](https://github.com/rfonod/geo-trax/issues) or submit a pull request.
+Early code received key contributions from [Haechan Cho](https://github.com/cho-96) (georeferencing) and [Sohyeong Kim](https://github.com/shgold) (video/flight-log merging). Community contributions are welcome — open a [GitHub Issue](https://github.com/rfonod/geo-trax/issues) or submit a pull request.
 
 ## License
 
-This project is distributed under the MIT License. See the [LICENSE](LICENSE) file for more details.
+This project is distributed under the MIT License. See the [LICENSE](LICENSE) for more details.
