@@ -6,7 +6,7 @@
 
 ![Geo-trax Output Visualization](https://raw.githubusercontent.com/rfonod/geo-trax/v1.0.0/assets/geo-trax_visualization.webp)
 
-🎬 This accelerated animation previews some of the capabilities of Geo-trax. Watch the full demonstration (~4 min) in 4K resolution on [YouTube](https://youtu.be/gOGivL9FFLk).
+🎬 An accelerated preview of Geo-trax's capabilities. Watch the full ~4 min 4K demo on [YouTube](https://youtu.be/gOGivL9FFLk).
 
 ### Why Geo-trax
 
@@ -124,7 +124,6 @@ Run `geotrax -h` or `geotrax batch -h` for all options. The scale-up commands ab
 
 - Comprehensive documentation in a dedicated `docs/` folder. A [`tools/README.md`](tools/README.md) index already covers the auxiliary scripts.
 - Modularized, OOP-based pipeline with custom reference frame support and georeferencing leveraging Stabilo's image-matching backend.
-- Rationalized single-file YAML configuration.
 - Per-class confidence thresholds and oriented bounding box visualization (using azimuth and dimension estimates).
 - Trajectory interpolation and SAHI-based small-object detection.
 - Batch inference, GPU-accelerated image registration, and multi-thread processing.
@@ -240,7 +239,7 @@ geotrax plot video.mp4                     # trajectory and distribution plots
 > See [data/README.md](data/README.md) for sample data and testing examples.
 
 <details>
-<summary><b>More Examples & Advanced Usage</b></summary>
+<summary><b>💡 More Examples & Advanced Usage</b></summary>
 
 ```bash
 # Use a custom config (bundled preset by name, or a path to your own file)
@@ -265,6 +264,13 @@ geotrax batch path/to/PROCESSED/ --plot-only --plot-aggregate --plot-class-filte
 # Merge multi-drone results for the same locations into a unified dataset
 geotrax aggregate path/to/PROCESSED/
 ```
+
+> [!NOTE]
+> **Why use master frames?** When georeferencing, geo-trax can route each video's homography through a shared *master frame* per location ID. A master frame is a high-quality, near-nadir BEV frame chosen once per location (see [`tools/find_master_frames.py`](tools/find_master_frames.py)), used instead of registering every video's reference frame directly to the orthophoto. The mapping is split into two homographies: `reference → master` (recomputed per video) and `master → orthophoto` (computed **once per location ID and cached**, validated by a hash of the master image). This gives two benefits:
+> - **Speed**: the expensive cross-domain `master → orthophoto` registration runs once and is reused across every drone and flight at that location, instead of once per video.
+> - **Consistency & robustness**: every video is matched against the *same* master frame. This same-modality BEV-to-BEV registration is far more reliable than a direct BEV-to-orthophoto match, so trajectories from different drones, altitudes, and viewpoints resolve into one coherent coordinate system.
+>
+> Master frames are enabled by default. Disable them with `--no-master`, or force re-computation of the cached `master → orthophoto` homography with `--recompute`.
 
 </details>
 
