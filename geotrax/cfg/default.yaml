@@ -79,7 +79,7 @@ batch:
 # Stabilization, short-track removal, and vehicle dimension estimation for 'geotrax extract'.
 extraction:
   model: hf://rfonod/geo-trax/geotrax_hbb_yolov8s_1920_v1.pt  # Detection model: a local file path OR an 'hf://<org>/<repo>/<path/to/file>.pt' reference (auto-downloaded & cached); default = the bundled geo-trax model — CLI: --model
-  class_rename: null    # Rename class-id → labels (inline dict or .yaml/.json path); null = use the model's own names — CLI: --class-names
+  class_rename: null    # class-id → label override, e.g. {0: vehicle, 1: bus, 2: truck, 3: bike}; or a .yaml/.json path; null = model's own names — CLI: --class-names / -cn 0=vehicle 1=bus
   stabilize: true       # Stabilize extracted bounding boxes; appends 4 columns (x_stab, y_stab, w_stab, h_stab) to results/video.txt
   save_stab: true       # Save per-frame stabilization homographies to results/video_vid_transf.txt
   min_track_length: 3   # Discard tracks shorter than this many frames; [1, inf)

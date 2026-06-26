@@ -74,6 +74,9 @@ Examples:
 
 4. Plot with lane segmentation overlays as backgrounds, excluding buses:
    geotrax plot /path/to/videos/ -orf /path/to/orthophotos/ -osf /path/to/segmentations/ -pseg -pcf 1
+
+5. Rename class labels in plots (overrides the model's built-in names):
+   geotrax plot /path/to/video.mp4 -cn 0=vehicle 1=bus 2=truck 3=bike
 """
 
 import argparse

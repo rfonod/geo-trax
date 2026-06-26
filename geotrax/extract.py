@@ -54,6 +54,9 @@ Examples:
   3. Skip the first 100 frames and stop processing after frame 500:
         geotrax extract path/to/video.mp4 --cut-frame-left 100 --cut-frame-right 500
 
+  4. Rename class labels for visualization (overrides the model's built-in names):
+        geotrax extract path/to/video.mp4 -cn 0=vehicle 1=bus 2=truck 3=bike
+
 Notes:
   - Detection, tracking, and stabilization parameters all live in a single pipeline config file
     (cfg -> ultralytics, cfg -> tracker, cfg -> stabilo). Run 'geotrax config copy' to copy the

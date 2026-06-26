@@ -73,6 +73,9 @@ Examples:
 5. Visualize tracking results on a stabilized video without speed estimates:
    geotrax visualize path/to/video.mp4 --show --viz-mode 1 --hide-speed
 
+6. Rename class labels in the visualization output:
+   geotrax visualize path/to/video.mp4 --show -cn 0=vehicle 1=bus 2=truck 3=bike
+
 Notes:
 - The script reads tracking results from '<stem><tracks_postfix>.txt' in the output folder (default: 'results/').
   Output folder and postfixes are configured via cfg -> output; use --output-folder to redirect at runtime.
