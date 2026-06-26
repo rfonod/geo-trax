@@ -100,8 +100,10 @@ Visualization Options:
     --show / --no-show, -sh : Open a live preview window during processing.
                           Defaults to cfg -> visualization -> show.
     --viz-mode, -vm <int> [<int> ...] : Annotation source frame(s): 0=original, 1=stabilized,
-                          2=reference frame. Accepts multiple values (e.g. 0 1 2) to render one
-                          video per mode. Defaults to cfg -> visualization -> viz_mode.
+                          2=reference frame, 3=oriented best-fit boxes on the original frame
+                          (rotated to per-frame heading; requires stabilization). Accepts multiple
+                          values (e.g. 0 1 3) to render one video per mode. Defaults to cfg ->
+                          visualization -> viz_mode.
     --plot-trajectories, -pt : Overlay all trajectory positions on the first frame before the
                           main annotation pass. Defaults to cfg -> visualization -> plot_trajectories.
     --plot-delay, -pd <int> : Frames to hold the trajectory overlay; only relevant with

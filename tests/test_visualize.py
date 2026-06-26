@@ -6,9 +6,10 @@
 import logging
 
 import numpy as np
+import pandas as pd
 import pytest
 
-from geotrax.visualize import normalize_viz_modes, read_transforms
+from geotrax.visualize import compute_headings, normalize_viz_modes, read_transforms
 
 logger = logging.getLogger(__name__)
 
@@ -16,21 +17,68 @@ logger = logging.getLogger(__name__)
 @pytest.mark.parametrize(
     'given, expected',
     [
-        (0, [0]),                  # scalar from config
-        ([1], [1]),                # single-element list from CLI
-        ([0, 1, 2], [0, 1, 2]),    # multiple modes
-        ((2, 0), [2, 0]),          # tuple, order preserved
-        ([0, 0, 1], [0, 1]),       # duplicates removed
+        (0, [0]),                        # scalar from config
+        ([1], [1]),                      # single-element list from CLI
+        ([0, 1, 2, 3], [0, 1, 2, 3]),    # all modes (incl. oriented)
+        ([0, 3], [0, 3]),                # original + oriented
+        ((2, 0), [2, 0]),                # tuple, order preserved
+        ([0, 0, 1], [0, 1]),             # duplicates removed
     ],
 )
 def test_normalize_viz_modes(given, expected):
     assert normalize_viz_modes(given, logger) == expected
 
 
-@pytest.mark.parametrize('given', [3, -1, [0, 3], 'all'])
+@pytest.mark.parametrize('given', [4, -1, [0, 4], 'all'])
 def test_normalize_viz_modes_invalid_exits(given):
     with pytest.raises(SystemExit):
         normalize_viz_modes(given, logger)
+
+
+# --- compute_headings --------------------------------------------------------
+
+def _tracks_with_centers(track_id, xs, ys, w=10.0, h=10.0):
+    """Build a minimal tracks frame with raw bbox w/h in cols 4/5 and stabilized centers in 6/7."""
+    n = len(xs)
+    df = pd.DataFrame(np.zeros((n, 8)))
+    df[0] = np.arange(n)        # frame ids
+    df[1] = track_id            # vehicle id
+    df[4] = w                   # raw bbox width
+    df[5] = h                   # raw bbox height
+    df[6] = xs                  # stabilized center x
+    df[7] = ys                  # stabilized center y
+    return df
+
+
+def test_compute_headings_straight_line_constant():
+    # Vehicle moving along +x (image coords) -> heading ~ 0 rad everywhere.
+    tracks = _tracks_with_centers(1, xs=np.arange(30) * 5.0, ys=np.full(30, 100.0))
+    headings = compute_headings(tracks, smoothing=5, min_speed=0.5, logger=logger)
+    assert not headings.isna().any()
+    np.testing.assert_allclose(headings.to_numpy(), 0.0, atol=1e-6)
+
+
+def test_compute_headings_diagonal():
+    # Vehicle moving along +x/+y (down-right in image coords) -> heading ~ +pi/4.
+    tracks = _tracks_with_centers(1, xs=np.arange(30) * 5.0, ys=np.arange(30) * 5.0)
+    headings = compute_headings(tracks, smoothing=5, min_speed=0.5, logger=logger)
+    np.testing.assert_allclose(headings.to_numpy(), np.pi / 4, atol=1e-6)
+
+
+def test_compute_headings_stationary_vertical_box():
+    # Stationary vehicle whose detection is taller than wide -> oriented vertically (heading pi/2).
+    tracks = _tracks_with_centers(1, xs=np.full(30, 50.0), ys=np.full(30, 50.0), w=10.0, h=25.0)
+    headings = compute_headings(tracks, smoothing=5, min_speed=0.5, logger=logger)
+    assert not headings.isna().any()
+    np.testing.assert_allclose(headings.to_numpy(), np.pi / 2)
+
+
+def test_compute_headings_stationary_horizontal_box():
+    # Stationary vehicle whose detection is wider than tall -> oriented horizontally (heading 0).
+    tracks = _tracks_with_centers(1, xs=np.full(30, 50.0), ys=np.full(30, 50.0), w=25.0, h=10.0)
+    headings = compute_headings(tracks, smoothing=5, min_speed=0.5, logger=logger)
+    assert not headings.isna().any()
+    np.testing.assert_allclose(headings.to_numpy(), 0.0)
 
 
 # --- read_transforms ---------------------------------------------------------

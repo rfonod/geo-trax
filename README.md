@@ -252,8 +252,8 @@ geotrax batch video.mp4 -c path/to/custom_config.yaml
 # Regenerate visualization without re-running extraction
 geotrax batch video.mp4 --viz-only --save
 
-# Render specific visualization modes (0: original, 1: stabilized, 2: reference frame)
-geotrax visualize video.mp4 --save --viz-mode 0 2
+# Render specific visualization modes (0: original, 1: stabilized, 2: reference frame, 3: oriented best-fit boxes)
+geotrax visualize video.mp4 --save --viz-mode 0 3
 
 # Show lane IDs, hide the speed overlay (requires georeferencing)
 geotrax batch video.mp4 --viz-only --save --show-lanes --hide-speed
@@ -311,10 +311,11 @@ Suppose the input video is `video_file.mp4`. By default, outputs are written to 
 
 - **video_file.yaml**: Video metadata and the configuration settings used for processing `video_file.mp4`. (This file is saved in the same directory as the input video, not in the output folder.)
 
-- **video_file_mode_X.mp4** (`<stem><visualization_postfix>_mode_<X>.mp4`): Annotated video in three rendering modes (X = 0 / 1 / 2):
+- **video_file_mode_X.mp4** (`<stem><visualization_postfix>_mode_<X>.mp4`): Annotated video in four rendering modes (X = 0 / 1 / 2 / 3):
   - **Mode 0**: overlaid on the original (unstabilized) video
   - **Mode 1**: overlaid on the stabilized video
   - **Mode 2**: plotted on the static reference frame
+  - **Mode 3**: oriented best-fit boxes on the original video — each box is sized to the vehicle's best-estimated length/width and rotated to its per-frame heading (derived from the camera-motion-free stabilized trajectory and projected back onto the original frame). Requires stabilization to have been run.
 
   Each version can display vehicle bounding boxes, IDs, class labels, confidence scores, and short trajectory trails that fade and vary in thickness to indicate the recency of the movement. If an input `video_file.csv` file is available in the same directory as the input video, i.e., the converted flight logs, vehicle speed and lane information can also be displayed.
 
