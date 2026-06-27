@@ -15,7 +15,8 @@ Five rendering modes are available (see --viz-mode): the annotations can be draw
 the stabilized frame (1), or the static reference frame (2). Modes 3 and 4 instead draw a rotated bounding box
 per vehicle, sized to its estimated physical dimensions and rotated to its per-frame heading (computed from the
 camera-motion-free stabilized trajectory), projected back onto the original frame (3) or drawn directly on the
-stabilized frame (4); both require stabilization.
+stabilized frame (4); both require stabilization. When a vehicle is only partially in frame (entering or exiting),
+its oriented box is clipped to the visible detection footprint so it does not overhang the edge at full size.
 
 Usage:
   geotrax visualize <source> [options]
@@ -65,6 +66,8 @@ Visualization Options:
   --line-width, -lw <int> : Bounding-box and track stroke width [px]; [1, inf). Defaults to cfg -> visualization -> line_width.
   --heading-smoothing, -hsm <int> : (modes 3, 4) Gaussian smoothing window [frames] for the per-frame heading; larger = steadier, slower to follow turns. Defaults to cfg -> visualization -> heading_smoothing.
   --heading-min-speed, -hms <float> : (modes 3, 4) Minimum smoothed pixel speed [px/frame] for a reliable heading; below this the heading is held from the last reliable frame. Defaults to cfg -> visualization -> heading_min_speed.
+  --edge-clip-margin, -ecm <float> : (modes 3, 4) Distance [px] within which a detection box is treated as touching a frame edge, triggering clipping of the oriented box to the visible part (absorbs HBB inaccuracy). Defaults to cfg -> visualization -> edge_clip_margin.
+  --edge-clip-smoothing, -ecs <float> : (modes 3, 4) Gaussian window [frames] for smoothing the clip rectangle of edge-touching boxes; larger = steadier shape as the vehicle exits, 0 disables. Defaults to cfg -> visualization -> edge_clip_smoothing.
   --cut-frame-left, -cfl <int> : Skip the first N frames. Defaults to cfg -> processing -> cut_frame_left.
   --cut-frame-right, -cfr <int> : Stop processing after this frame. Defaults to cfg -> processing -> cut_frame_right.
 
@@ -120,6 +123,7 @@ from geotrax.utils.file_utils import (
     detect_delimiter,
     determine_suffix_and_fourcc,
     get_output_dir,
+    get_video_dimensions,
 )
 from geotrax.utils.logging_utils import setup_logger
 
@@ -151,6 +155,8 @@ def visualize_results(args: argparse.Namespace, logger: logging.Logger) -> None:
         'line_width': viz['line_width'],
         'heading_smoothing': viz['heading_smoothing'],
         'heading_min_speed': viz['heading_min_speed'],
+        'edge_clip_margin': viz['edge_clip_margin'],
+        'edge_clip_smoothing': viz['edge_clip_smoothing'],
         'cut_frame_left': proc['cut_frame_left'],
         'cut_frame_right': proc['cut_frame_right'],
         'output_folder': out_cfg_raw.get('folder', 'results'),
@@ -394,13 +400,21 @@ def read_tracks_oriented(tracks: pd.DataFrame, tracks_txt_filepath: Path, class_
     Build the slim per-row layout for the rotated box modes (3 and 4).
 
     Requires the full stabilized + dimension-estimate layout (14 columns). Emits columns
-    ``[frame, id, stab_xc, stab_yc, length, width, class, conf, heading, is_fallback]`` where
-    ``length`` / ``width`` are the best-fit estimates from :func:`extract.estimate_vehicle_dimensions`
-    (cols 12/13), or — when those are NaN — a per-vehicle Q25 aggregate of the raw bbox extents
-    from :func:`_estimate_fallback_dims`. ``heading`` is the per-frame smoothed travel direction
-    (radians, image coordinates) from :func:`compute_headings`. ``is_fallback`` (col 9) is ``True``
-    for rows where the best-fit estimator yielded no result; those boxes are drawn with a dashed
-    outline by :func:`draw_oriented_box` to distinguish them visually.
+    ``[frame, id, stab_xc, stab_yc, length, width, class, conf, heading, is_fallback,
+    stab_w, stab_h, on_border]`` where ``length`` / ``width`` are the best-fit estimates from
+    :func:`extract.estimate_vehicle_dimensions` (cols 12/13), or — when those are NaN — a per-vehicle
+    Q25 aggregate of the raw bbox extents from :func:`_estimate_fallback_dims`. ``heading`` is the
+    per-frame smoothed travel direction (radians, image coordinates) from :func:`compute_headings`.
+    ``is_fallback`` (col 9) is ``True`` for rows where the best-fit estimator yielded no result; those
+    boxes are drawn with a dashed outline by :func:`draw_oriented_box` to distinguish them visually.
+
+    ``stab_w`` / ``stab_h`` (cols 10/11) are the stabilized detection bbox extents, per-track Gaussian
+    smoothed via :func:`_smooth_clip_dims` to de-jitter the clip, and ``on_border`` (col 12) flags rows
+    whose *raw* detection touches a frame edge (within ``edge_clip_margin``, mirroring
+    :func:`extract.estimate_vehicle_dimensions`). For those rows a full-size oriented box would overhang
+    the frame and cover empty road, since the detection only sees the visible part of the vehicle (its
+    center is shifted inward and its extent truncated); :func:`draw_oriented_box` clips the box to
+    ``stab_w`` x ``stab_h`` so it ends at the visible footprint.
     """
     if tracks.shape[1] < 14:
         logger.error(
@@ -420,6 +434,20 @@ def read_tracks_oriented(tracks: pd.DataFrame, tracks_txt_filepath: Path, class_
     length = tracks[12].where(~is_fallback, fb_length)
     width = tracks[13].where(~is_fallback, fb_width)
 
+    # Per-row partial-visibility flag: a detection whose RAW bbox (cols 2-5) reaches a frame edge
+    # only covers the visible part of the vehicle, so its oriented box must be clipped (see
+    # draw_oriented_box). The margin treats the box as edge-touching once it comes within
+    # `edge_clip_margin` px of the border, since the YOLO HBB may stop a few pixels short of the
+    # true edge rather than reaching it exactly.
+    eps = getattr(args, 'edge_clip_margin', 3)
+    source = getattr(args, 'source', None)
+    w_I, h_I = get_video_dimensions(source) if source is not None else (np.inf, np.inf)
+    xc, yc, w, h = tracks[2], tracks[3], tracks[4], tracks[5]
+    on_border = (
+        (xc - w / 2 <= eps) | (yc - h / 2 <= eps)
+        | (xc + w / 2 >= w_I - 1 - eps) | (yc + h / 2 >= h_I - 1 - eps)
+    )
+
     oriented = pd.DataFrame({
         0: tracks[0],              # frame id
         1: tracks[1],              # vehicle id
@@ -431,7 +459,16 @@ def read_tracks_oriented(tracks: pd.DataFrame, tracks_txt_filepath: Path, class_
         7: tracks[11],             # confidence
         8: headings,               # per-frame heading [rad, image coords]; NaN -> axis-aligned box
         9: is_fallback.astype(bool),  # True = raw-bbox fallback (dashed outline); False = estimated
+        10: tracks[8],             # stabilized bbox width [px]  (clip rectangle)
+        11: tracks[9],             # stabilized bbox height [px] (clip rectangle)
+        12: on_border.astype(bool),   # True = detection touches a frame edge -> clip to visible part
     })
+
+    # De-jitter the clip rectangle. The oriented box and the clip share a center, so the box's shape
+    # only changes with the clip *size* (cols 10/11); smoothing that per-track removes the frame-to-
+    # frame detection noise that makes a partially-visible box jump between shapes, while preserving
+    # the genuine shrink as the vehicle leaves the frame.
+    oriented[[10, 11]] = _smooth_clip_dims(oriented, getattr(args, 'edge_clip_smoothing', 5))
 
     if len(class_names) < oriented[6].max() + 1:
         logger.error(f"At least {oriented[6].max() + 1} class names must be provided. Current class names defined for the used model are {class_names.values()}.")
@@ -474,6 +511,25 @@ def compute_headings(tracks: pd.DataFrame, smoothing: float, min_speed: float, l
         theta = pd.Series(theta).ffill().bfill().to_numpy()  # hold heading over unreliable frames
         headings.loc[grp.index] = theta
     return headings
+
+
+def _smooth_clip_dims(oriented: pd.DataFrame, smoothing: float) -> pd.DataFrame:
+    """
+    Per-track Gaussian smoothing of the clip-rectangle extents (cols 10/11) for the oriented modes.
+
+    The clip rectangle that trims a partially-visible box to its visible footprint is the per-frame
+    stabilized detection bbox, which is noisy frame-to-frame. Smoothing its width/height along each
+    track (Gaussian, ``mode='reflect'``) removes that jitter so the rendered box changes shape
+    smoothly as the vehicle exits the frame, instead of jumping between shapes; a constant series is
+    returned unchanged. Returns a 2-column DataFrame (cols 10/11) aligned to ``oriented.index``.
+    """
+    sigma = max(float(smoothing), 1e-6)
+    out = oriented[[10, 11]].astype(float).copy()
+    for _, grp in oriented.groupby(1):
+        grp = grp.sort_values(0)
+        out.loc[grp.index, 10] = gaussian_filter1d(grp[10].to_numpy(dtype=float), sigma, mode='reflect')
+        out.loc[grp.index, 11] = gaussian_filter1d(grp[11].to_numpy(dtype=float), sigma, mode='reflect')
+    return out
 
 
 def read_transforms(transforms_filepath: Path, logger: logging.Logger) -> dict:
@@ -598,11 +654,13 @@ def annotate_frame(frame: np.ndarray, frame_num: int, tracks_frame: pd.DataFrame
     Annotate the frame with the tracking results.
 
     For the oriented box modes (3 and 4), ``tracks_frame`` carries the slim oriented layout
-    (cols 2/3 = stabilized center, 4/5 = best-fit length/width, 8 = heading, 9 = is_fallback) and
-    ``Hinv`` projects each box from stabilized space onto the rendered frame: the inverse
-    stabilization homography for mode 3 (original frame), or the identity for mode 4
-    (already-stabilized frame). Rows where col 9 is ``True`` used raw bbox dimensions and are
-    drawn with a dashed outline via :func:`draw_oriented_box`.
+    (cols 2/3 = stabilized center, 4/5 = best-fit length/width, 8 = heading, 9 = is_fallback,
+    10/11 = stabilized detection bbox extents, 12 = on_border) and ``Hinv`` projects each box from
+    stabilized space onto the rendered frame: the inverse stabilization homography for mode 3
+    (original frame), or the identity for mode 4 (already-stabilized frame). Rows where col 9 is
+    ``True`` used raw bbox dimensions and are drawn with a dashed outline; rows where col 12 is
+    ``True`` (detection touches a frame edge) are clipped to cols 10/11 so the box ends at the
+    visible part of the vehicle — both handled by :func:`draw_oriented_box`.
     """
     tail_length = viz_config['tail_length']
     line_width = viz_config['line_width']
@@ -620,12 +678,20 @@ def annotate_frame(frame: np.ndarray, frame_num: int, tracks_frame: pd.DataFrame
         scores = tracks_frame.iloc[:, 7].values
         headings = tracks_frame.iloc[:, 8].values
         fallbacks = tracks_frame.iloc[:, 9].values
+        clip_ws = tracks_frame.iloc[:, 10].values
+        clip_hs = tracks_frame.iloc[:, 11].values
+        on_borders = tracks_frame.iloc[:, 12].values
     else:
         scores = tracks_frame.iloc[:, 7].values if tracks_frame.shape[1] == 8 else [''] * len(ids)
         headings = [None] * len(ids)
         fallbacks = [False] * len(ids)
+        clip_ws = [None] * len(ids)
+        clip_hs = [None] * len(ids)
+        on_borders = [False] * len(ids)
 
-    for track_id, xcn, ycn, wn, hn, c, s, heading, is_fb in zip(ids, Xcn, Ycn, Wn, Hn, classes, scores, headings, fallbacks):
+    for track_id, xcn, ycn, wn, hn, c, s, heading, is_fb, clip_w, clip_h, on_border in zip(
+        ids, Xcn, Ycn, Wn, Hn, classes, scores, headings, fallbacks, clip_ws, clip_hs, on_borders
+    ):
         if args.class_filter and c in args.class_filter:
             continue
 
@@ -651,7 +717,9 @@ def annotate_frame(frame: np.ndarray, frame_num: int, tracks_frame: pd.DataFrame
         color = colors(c, True)
         if is_oriented:
             # wn/hn carry the best-fit length/width; project the oriented box onto the original frame.
-            x1n, y1n = draw_oriented_box(annotated_frame, xcn, ycn, wn, hn, heading, Hinv, color, line_width, is_fb)
+            # For edge-touching detections, clip the box to the visible footprint (clip_w x clip_h).
+            x1n, y1n = draw_oriented_box(annotated_frame, xcn, ycn, wn, hn, heading, Hinv, color, line_width, is_fb,
+                                         clip_w, clip_h, on_border)
             cx_draw, cy_draw = x1n, y1n
         else:
             x1n, y1n = int(xcn - wn / 2), int(ycn - hn / 2)
@@ -718,7 +786,78 @@ def _draw_dashed_poly(frame: np.ndarray, corners: np.ndarray, color: tuple, thic
             t += dash + gap
 
 
-def draw_oriented_box(frame: np.ndarray, cx: float, cy: float, length: float, width: float, heading: float, Hinv: np.ndarray, color: tuple, line_width: int, is_fallback: bool = False) -> tuple:
+def _clip_poly_to_rect(corners: np.ndarray, xmin: float, ymin: float, xmax: float, ymax: float) -> np.ndarray:
+    """
+    Clip a convex polygon to an axis-aligned rectangle (Sutherland-Hodgman) and return the result.
+
+    Used by :func:`draw_oriented_box` to trim a full-size oriented box to the visible detection
+    footprint when a vehicle is only partially in frame. ``corners`` is an ``Nx2`` float array;
+    a convex polygon in yields a convex polygon out (no holes). Returns the clipped vertices as an
+    ``Mx2`` float array, which is empty when the polygon lies entirely outside the rectangle.
+    """
+    # Each edge is a (inside-test, intersection-param) against one rectangle boundary.
+    edges = (
+        ('x', xmin, 1),   # keep x >= xmin
+        ('x', xmax, -1),  # keep x <= xmax
+        ('y', ymin, 1),   # keep y >= ymin
+        ('y', ymax, -1),  # keep y <= ymax
+    )
+    poly = [np.asarray(c, dtype=float) for c in corners]
+    for axis, bound, sign in edges:
+        if not poly:
+            break
+        ai = 0 if axis == 'x' else 1
+        inside = lambda p: sign * (p[ai] - bound) >= 0  # noqa: E731
+        clipped = []
+        n = len(poly)
+        for i in range(n):
+            cur, prv = poly[i], poly[(i - 1) % n]
+            cur_in, prv_in = inside(cur), inside(prv)
+            if cur_in:
+                if not prv_in:
+                    clipped.append(_segment_axis_intersection(prv, cur, ai, bound))
+                clipped.append(cur)
+            elif prv_in:
+                clipped.append(_segment_axis_intersection(prv, cur, ai, bound))
+        poly = clipped
+    return np.array(poly, dtype=np.float32) if poly else np.empty((0, 2), dtype=np.float32)
+
+
+def _segment_axis_intersection(p0: np.ndarray, p1: np.ndarray, axis: int, bound: float) -> np.ndarray:
+    """Intersection of segment ``p0``->``p1`` with the line ``coord[axis] == bound`` (assumed to cross it)."""
+    denom = p1[axis] - p0[axis]
+    t = 0.0 if denom == 0 else (bound - p0[axis]) / denom
+    return p0 + t * (p1 - p0)
+
+
+def _clip_segment_to_rect(p0: np.ndarray, p1: np.ndarray, xmin: float, ymin: float, xmax: float, ymax: float):
+    """
+    Clip the segment ``p0``->``p1`` to an axis-aligned rectangle (Liang-Barsky).
+
+    Returns the clipped ``(q0, q1)`` endpoints as float arrays, or ``None`` if the segment lies
+    entirely outside the rectangle. Used to trim the heading tick so it does not shoot across empty
+    road from a (clipped-away, off-frame) box center.
+    """
+    p0 = np.asarray(p0, dtype=float)
+    d = np.asarray(p1, dtype=float) - p0
+    t0, t1 = 0.0, 1.0
+    clip = ((-d[0], p0[0] - xmin), (d[0], xmax - p0[0]), (-d[1], p0[1] - ymin), (d[1], ymax - p0[1]))
+    for pi, qi in clip:
+        if pi == 0:
+            if qi < 0:
+                return None  # parallel to this edge and outside it
+            continue
+        t = qi / pi
+        if pi < 0:
+            t0 = max(t0, t)
+        else:
+            t1 = min(t1, t)
+        if t0 > t1:
+            return None
+    return p0 + t0 * d, p0 + t1 * d
+
+
+def draw_oriented_box(frame: np.ndarray, cx: float, cy: float, length: float, width: float, heading: float, Hinv: np.ndarray, color: tuple, line_width: int, is_fallback: bool = False, clip_w: float = None, clip_h: float = None, on_border: bool = False) -> tuple:
     """
     Draw a rotated bounding box (visualization modes 3 and 4) and return its projected center.
 
@@ -731,6 +870,13 @@ def draw_oriented_box(frame: np.ndarray, cx: float, cy: float, length: float, wi
     When ``is_fallback`` is ``True`` the box dimensions come from the raw YOLO bounding box rather
     than the best-fit size estimator; in that case the outline is drawn dashed (via
     :func:`_draw_dashed_poly`) so viewers can immediately distinguish estimated from fallback boxes.
+
+    When ``on_border`` is ``True`` the vehicle is only partially in frame, so the full-size box would
+    overhang the edge and cover empty road. The box (and its heading tick) is then clipped — in
+    stabilized space, before projection — to the visible detection footprint ``clip_w`` x ``clip_h``
+    centered on ``cx, cy``. Note this footprint is the axis-aligned (HBB) detection box while the drawn
+    box is rotated to the heading, so the clip boundary only approximates where the rotated vehicle
+    actually leaves the frame; the clipped edge can be slightly off.
     """
     if heading is None or np.isnan(heading):
         ux, uy = 1.0, 0.0  # axis-aligned fallback when the heading is unknown
@@ -739,25 +885,37 @@ def draw_oriented_box(frame: np.ndarray, cx: float, cy: float, length: float, wi
     vx, vy = -uy, ux  # width axis, perpendicular to the heading
     hl, hw = length / 2.0, width / 2.0
 
-    # Corners (front-left, front-right, rear-right, rear-left) + front-edge midpoint + center.
-    pts = np.array([
+    # Corners (front-left, front-right, rear-right, rear-left); front-edge midpoint + center separately.
+    corners = np.array([
         [cx + hl * ux - hw * vx, cy + hl * uy - hw * vy],
         [cx + hl * ux + hw * vx, cy + hl * uy + hw * vy],
         [cx - hl * ux + hw * vx, cy - hl * uy + hw * vy],
         [cx - hl * ux - hw * vx, cy - hl * uy - hw * vy],
-        [cx + hl * ux, cy + hl * uy],
-        [cx, cy],
-    ], dtype=np.float32).reshape(-1, 1, 2)
+    ], dtype=np.float32)
+    front = np.array([cx + hl * ux, cy + hl * uy], dtype=np.float32)
+    center = np.array([cx, cy], dtype=np.float32)
+    tick = (center, front)
 
-    proj = cv2.perspectiveTransform(pts, Hinv).reshape(-1, 2).astype(np.int32)
-    corners, front, center = proj[:4], proj[4], proj[5]
+    if on_border and clip_w is not None and clip_h is not None:
+        # Trim to the visible footprint; the detection only sees part of the vehicle at the edge.
+        xmin, ymin = cx - clip_w / 2.0, cy - clip_h / 2.0
+        xmax, ymax = cx + clip_w / 2.0, cy + clip_h / 2.0
+        clipped = _clip_poly_to_rect(corners, xmin, ymin, xmax, ymax)
+        if len(clipped) >= 3:  # keep the unclipped box if clipping degenerates
+            corners = clipped
+        tick = _clip_segment_to_rect(center, front, xmin, ymin, xmax, ymax)
+
+    corners_proj = cv2.perspectiveTransform(corners.reshape(-1, 1, 2), Hinv).reshape(-1, 2).astype(np.int32)
+    center_proj = cv2.perspectiveTransform(center.reshape(-1, 1, 2), Hinv).reshape(2).astype(np.int32)
 
     if is_fallback:
-        _draw_dashed_poly(frame, corners, color, line_width)
+        _draw_dashed_poly(frame, corners_proj, color, line_width)
     else:
-        cv2.polylines(frame, [corners.reshape(-1, 1, 2)], isClosed=True, color=color, thickness=line_width, lineType=cv2.LINE_AA)
-    cv2.line(frame, tuple(center), tuple(front), color, line_width, lineType=cv2.LINE_AA)
-    return int(center[0]), int(center[1])
+        cv2.polylines(frame, [corners_proj.reshape(-1, 1, 2)], isClosed=True, color=color, thickness=line_width, lineType=cv2.LINE_AA)
+    if tick is not None:
+        tick_proj = cv2.perspectiveTransform(np.array(tick, dtype=np.float32).reshape(-1, 1, 2), Hinv).reshape(-1, 2).astype(np.int32)
+        cv2.line(frame, tuple(tick_proj[0]), tuple(tick_proj[1]), color, line_width, lineType=cv2.LINE_AA)
+    return int(center_proj[0]), int(center_proj[1])
 
 
 def display_frame(annotated_frame: np.ndarray, frame_num: int, logger: logging.Logger) -> None:
@@ -850,6 +1008,10 @@ def add_visualization_args(group, include_frame_range: bool = True) -> None:
                        help='(modes 3, 4) Gaussian smoothing window [frames] for the per-frame heading; larger = steadier, slower to follow turns. Defaults to cfg -> visualization -> heading_smoothing.')
     group.add_argument('--heading-min-speed', '-hms', type=float, default=None,
                        help='(modes 3, 4) Minimum smoothed pixel speed [px/frame] for a reliable heading; below this the heading is held from the last reliable frame. Defaults to cfg -> visualization -> heading_min_speed.')
+    group.add_argument('--edge-clip-margin', '-ecm', type=float, default=None,
+                       help='(modes 3, 4) Distance [px] within which a detection box is treated as touching a frame edge, triggering clipping of the oriented box to the visible part (absorbs HBB inaccuracy). Defaults to cfg -> visualization -> edge_clip_margin.')
+    group.add_argument('--edge-clip-smoothing', '-ecs', type=float, default=None,
+                       help='(modes 3, 4) Gaussian window [frames] for smoothing the clip rectangle of edge-touching boxes; larger = steadier shape as the vehicle exits, 0 disables. Defaults to cfg -> visualization -> edge_clip_smoothing.')
     if include_frame_range:
         group.add_argument('--cut-frame-left', '-cfl', type=int, default=None,
                            help='Skip the first N frames. Defaults to cfg -> processing -> cut_frame_left.')

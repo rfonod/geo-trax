@@ -9,7 +9,15 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from geotrax.visualize import compute_headings, normalize_viz_modes, read_tracks_oriented, read_transforms
+from geotrax.visualize import (
+    _clip_poly_to_rect,
+    _clip_segment_to_rect,
+    _smooth_clip_dims,
+    compute_headings,
+    normalize_viz_modes,
+    read_tracks_oriented,
+    read_transforms,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -159,10 +167,14 @@ def test_read_tracks_oriented_estimated_dims():
     args = _make_oriented_args()
     class_names = {0: 'car', 1: 'bus', 2: 'truck', 3: 'motorcycle'}
     oriented, _ = read_tracks_oriented(tracks, None, class_names, args, logger)
-    assert oriented.shape[1] == 10, "oriented layout should have 10 columns"
+    assert oriented.shape[1] == 13, "oriented layout should have 13 columns"
     assert not oriented[9].any(), "col 9 (is_fallback) should be all False when dims are estimated"
     np.testing.assert_allclose(oriented[4].to_numpy(), 20.0, err_msg="col 4 should use estimated length")
     np.testing.assert_allclose(oriented[5].to_numpy(), 8.0, err_msg="col 5 should use estimated width")
+    np.testing.assert_allclose(oriented[10].to_numpy(), 18.0, err_msg="col 10 should carry stab bbox width")
+    np.testing.assert_allclose(oriented[11].to_numpy(), 10.0, err_msg="col 11 should carry stab bbox height")
+    # Detections sit at x=100 well inside the frame, and args has no source -> on_border all False.
+    assert not oriented[12].any(), "col 12 (on_border) should be all False for interior detections"
 
 
 def test_read_tracks_oriented_fallback_dims():
@@ -174,6 +186,86 @@ def test_read_tracks_oriented_fallback_dims():
     # Constant raw bbox -> Q25 of constant = that constant: max(18, 10) = 18, min = 10.
     np.testing.assert_allclose(oriented[4].to_numpy(), 18.0, err_msg="col 4 should be Q25 of track-level lengths")
     np.testing.assert_allclose(oriented[5].to_numpy(), 10.0, err_msg="col 5 should be Q25 of track-level widths")
+
+
+def test_read_tracks_oriented_flags_border_detections(monkeypatch):
+    # Frame is 100x100; a detection whose raw bbox (center 100,100, 18x10) spills past the right/bottom
+    # edge must be flagged on_border, while an interior one must not.
+    monkeypatch.setattr('geotrax.visualize.get_video_dimensions', lambda _: (100, 100))
+    tracks = _make_oriented_tracks(n=2, nan_dims=False)
+    tracks[2] = [50.0, 100.0]   # raw center x: interior vs. right edge
+    tracks[3] = [50.0, 100.0]   # raw center y: interior vs. bottom edge
+    args = _make_oriented_args()
+    args.source = 'dummy.mp4'   # value irrelevant; get_video_dimensions is patched
+    args.edge_clip_margin = 4
+    class_names = {0: 'car', 1: 'bus', 2: 'truck', 3: 'motorcycle'}
+    oriented, _ = read_tracks_oriented(tracks, None, class_names, args, logger)
+    np.testing.assert_array_equal(oriented[12].to_numpy(), [False, True])
+
+
+# --- clip helpers ------------------------------------------------------------
+
+def test_clip_poly_to_rect_noop_when_inside():
+    # A box fully inside the rectangle is returned unchanged (same vertex set).
+    box = np.array([[2, 2], [8, 2], [8, 8], [2, 8]], dtype=float)
+    clipped = _clip_poly_to_rect(box, 0, 0, 10, 10)
+    assert {tuple(p) for p in np.round(clipped)} == {tuple(p) for p in box}
+
+
+def test_clip_poly_to_rect_trims_overhang():
+    # A box straddling the right edge is trimmed to x <= 10; no vertex exceeds the bound.
+    box = np.array([[5, 2], [15, 2], [15, 8], [5, 8]], dtype=float)
+    clipped = _clip_poly_to_rect(box, 0, 0, 10, 10)
+    assert len(clipped) >= 3
+    assert clipped[:, 0].max() <= 10 + 1e-6
+    assert clipped[:, 0].min() >= 5 - 1e-6
+
+
+def test_clip_poly_to_rect_empty_when_outside():
+    box = np.array([[20, 20], [30, 20], [30, 30], [20, 30]], dtype=float)
+    assert len(_clip_poly_to_rect(box, 0, 0, 10, 10)) == 0
+
+
+def test_clip_segment_to_rect_trims_to_bound():
+    q = _clip_segment_to_rect(np.array([5.0, 5.0]), np.array([15.0, 5.0]), 0, 0, 10, 10)
+    assert q is not None
+    q0, q1 = q
+    np.testing.assert_allclose(q0, [5.0, 5.0])
+    np.testing.assert_allclose(q1, [10.0, 5.0])
+
+
+def test_clip_segment_to_rect_none_when_outside():
+    assert _clip_segment_to_rect(np.array([20.0, 20.0]), np.array([30.0, 20.0]), 0, 0, 10, 10) is None
+
+
+# --- clip-dimension smoothing ------------------------------------------------
+
+def _oriented_with_clip_dims(clip_w, clip_h):
+    n = len(clip_w)
+    df = pd.DataFrame(0, index=range(n), columns=range(13), dtype=float)
+    df[0] = np.arange(n)   # frame ids
+    df[1] = 1               # single vehicle id
+    df[10] = clip_w
+    df[11] = clip_h
+    return df
+
+
+def test_smooth_clip_dims_constant_unchanged():
+    df = _oriented_with_clip_dims(np.full(20, 18.0), np.full(20, 10.0))
+    out = _smooth_clip_dims(df, smoothing=5)
+    np.testing.assert_allclose(out[10].to_numpy(), 18.0)
+    np.testing.assert_allclose(out[11].to_numpy(), 10.0)
+
+
+def test_smooth_clip_dims_reduces_jitter():
+    # A steady shrink with alternating +/- noise: smoothing must cut the frame-to-frame variation.
+    base = np.linspace(40.0, 10.0, 30)
+    noisy = base + np.where(np.arange(30) % 2 == 0, 4.0, -4.0)
+    df = _oriented_with_clip_dims(noisy, np.full(30, 10.0))
+    out = _smooth_clip_dims(df, smoothing=4)[10].to_numpy()
+    assert np.abs(np.diff(out)).mean() < np.abs(np.diff(noisy)).mean()
+    # The underlying downward trend is preserved (still shrinks overall).
+    assert out[0] > out[-1]
 
 
 def test_read_tracks_oriented_fallback_dims_q25():

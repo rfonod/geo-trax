@@ -190,6 +190,8 @@ visualization:
   viz_mode: 0             # Frame source for annotation: 0=original, 1=stabilized, 2=reference frame, 3=rotated boxes on the original frame, 4=rotated boxes on the stabilized frame; use a list (e.g. [0, 1, 4]) to render one video per mode — CLI: --viz-mode
   heading_smoothing: 15   # (modes 3, 4) Gaussian smoothing window [frames] for the per-frame heading; larger = steadier, slower to follow turns; [1, inf) — CLI: --heading-smoothing
   heading_min_speed: 0.5  # (modes 3, 4) Min smoothed pixel speed [px/frame] for a reliable heading; below this the heading is held from the last reliable frame; [0, inf) — CLI: --heading-min-speed
+  edge_clip_margin: 3     # (modes 3, 4) Distance [px] within which a detection box is treated as touching a frame edge, triggering clipping of the oriented box to the visible part (absorbs HBB inaccuracy); [0, inf) — CLI: --edge-clip-margin
+  edge_clip_smoothing: 5  # (modes 3, 4) Gaussian window [frames] for smoothing the clip rectangle of edge-touching boxes so the box shape stays steady as the vehicle exits; 0 disables; [0, inf) — CLI: --edge-clip-smoothing
   plot_trajectories: false # Overlay all trajectory positions on the first frame before the main pass — CLI: --plot-trajectories / --no-plot-trajectories
   plot_delay: 30          # Frames to hold the trajectory overlay before starting the main pass; [1, inf) — CLI: --plot-delay
   show_conf: false        # Include detection confidence score in the bounding-box label — CLI: --show-conf / --no-show-conf
