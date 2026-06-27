@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from geotrax.visualize import compute_headings, normalize_viz_modes, read_transforms
+from geotrax.visualize import compute_headings, normalize_viz_modes, read_tracks_oriented, read_transforms
 
 logger = logging.getLogger(__name__)
 
@@ -124,3 +124,73 @@ def test_read_transforms_non_consecutive_frames_warns(tmp_path, caplog):
         result = read_transforms(filepath, logger)
     assert set(result.keys()) == {0, 2}
     assert any('Missing frame' in r.message for r in caplog.records)
+
+
+# --- read_tracks_oriented ----------------------------------------------------
+
+def _make_oriented_tracks(n=10, length_val=20.0, width_val=8.0, nan_dims=False):
+    """Build a minimal 14-column tracks DataFrame for read_tracks_oriented tests."""
+    df = pd.DataFrame(np.zeros((n, 14)))
+    df[0] = np.arange(n)           # frame ids
+    df[1] = 1                       # vehicle id
+    df[2] = 100.0                   # unstab center x
+    df[3] = 100.0                   # unstab center y
+    df[4] = 18.0                    # unstab bbox width  (raw fallback length = max(w,h))
+    df[5] = 10.0                    # unstab bbox height (raw fallback width  = min(w,h))
+    df[6] = np.arange(n) * 5.0     # stab center x (moving right so headings are reliable)
+    df[7] = 100.0                   # stab center y
+    df[8] = 18.0                    # stab bbox width
+    df[9] = 10.0                    # stab bbox height
+    df[10] = 0                      # class id (car)
+    df[11] = 0.9                    # confidence
+    df[12] = np.nan if nan_dims else length_val  # estimated length
+    df[13] = np.nan if nan_dims else width_val   # estimated width
+    return df
+
+
+def _make_oriented_args():
+    import argparse
+    args = argparse.Namespace(heading_smoothing=3, heading_min_speed=0.5)
+    return args
+
+
+def test_read_tracks_oriented_estimated_dims():
+    tracks = _make_oriented_tracks(nan_dims=False, length_val=20.0, width_val=8.0)
+    args = _make_oriented_args()
+    class_names = {0: 'car', 1: 'bus', 2: 'truck', 3: 'motorcycle'}
+    oriented, _ = read_tracks_oriented(tracks, None, class_names, args, logger)
+    assert oriented.shape[1] == 10, "oriented layout should have 10 columns"
+    assert not oriented[9].any(), "col 9 (is_fallback) should be all False when dims are estimated"
+    np.testing.assert_allclose(oriented[4].to_numpy(), 20.0, err_msg="col 4 should use estimated length")
+    np.testing.assert_allclose(oriented[5].to_numpy(), 8.0, err_msg="col 5 should use estimated width")
+
+
+def test_read_tracks_oriented_fallback_dims():
+    tracks = _make_oriented_tracks(nan_dims=True)
+    args = _make_oriented_args()
+    class_names = {0: 'car', 1: 'bus', 2: 'truck', 3: 'motorcycle'}
+    oriented, _ = read_tracks_oriented(tracks, None, class_names, args, logger)
+    assert oriented[9].all(), "col 9 (is_fallback) should be all True when dims are NaN"
+    # Constant raw bbox -> Q25 of constant = that constant: max(18, 10) = 18, min = 10.
+    np.testing.assert_allclose(oriented[4].to_numpy(), 18.0, err_msg="col 4 should be Q25 of track-level lengths")
+    np.testing.assert_allclose(oriented[5].to_numpy(), 10.0, err_msg="col 5 should be Q25 of track-level widths")
+
+
+def test_read_tracks_oriented_fallback_dims_q25():
+    # 4 frames, varying raw bbox widths (h=5 < all w values, so raw_l=w, raw_w=5).
+    # Verifies that the fallback uses per-vehicle Q25 aggregation, not per-row bbox values.
+    tracks = _make_oriented_tracks(n=4, nan_dims=True)
+    tracks[4] = [10.0, 20.0, 30.0, 40.0]   # unstab w varies (simulates bbox inflation in turns)
+    tracks[5] = 5.0                          # unstab h constant, always < w
+
+    args = _make_oriented_args()
+    class_names = {0: 'car', 1: 'bus', 2: 'truck', 3: 'motorcycle'}
+    oriented, _ = read_tracks_oriented(tracks, None, class_names, args, logger)
+
+    expected_length = np.percentile([10.0, 20.0, 30.0, 40.0], 25)  # 17.5
+    expected_width = np.percentile([5.0, 5.0, 5.0, 5.0], 25)        # 5.0
+    # All rows of the same vehicle should get the same Q25 value (not the per-row bbox value).
+    np.testing.assert_allclose(oriented[4].to_numpy(), expected_length,
+                                err_msg="col 4 should be per-vehicle Q25 length, not per-row bbox")
+    np.testing.assert_allclose(oriented[5].to_numpy(), expected_width,
+                                err_msg="col 5 should be per-vehicle Q25 width, not per-row bbox")
