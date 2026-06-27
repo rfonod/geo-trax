@@ -53,7 +53,7 @@ classifiers = [
     "Topic :: Multimedia :: Video",
 ]
 dependencies = [
-    "ultralytics[extra]>=8.4.64,<9.0",
+    "ultralytics[extra]>=8.4.80,<9.0",
     "huggingface_hub>=0.30",
     "lapx>=0.5.2",
     "stabilo>=1.2.3",
