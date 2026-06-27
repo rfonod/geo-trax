@@ -127,7 +127,7 @@ Run `geotrax -h` or `geotrax batch -h` for all options. The scale-up commands ab
 
 - Comprehensive documentation in a dedicated `docs/` folder. A [`tools/README.md`](tools/README.md) index already covers the auxiliary scripts.
 - Modularized, OOP-based pipeline with custom reference frame support and georeferencing leveraging Stabilo's image-matching backend.
-- Per-class confidence thresholds and oriented bounding box visualization (using azimuth and dimension estimates).
+- Per-class confidence thresholds.
 - Trajectory interpolation and SAHI-based small-object detection.
 - Batch inference, GPU-accelerated image registration, and multi-thread processing.
 - Real-world map visualization (e.g., MovingPandas, contextily) and interactive web app.
@@ -508,7 +508,7 @@ If you use **Geo-trax** in your research or software, please cite:
       title = {Geo-trax: A Comprehensive Framework for Georeferenced Vehicle Trajectory Extraction from Drone Imagery},
       year = {2026},
       month = jun,
-      version = {1.0.0},
+      version = {1.0.1},
       doi = {10.5281/zenodo.12119542},
       url = {https://github.com/rfonod/geo-trax},
       license = {MIT}
