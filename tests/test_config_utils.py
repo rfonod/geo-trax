@@ -66,7 +66,7 @@ def test_unified_configs_load(preset, tmp_path):
         args = argparse.Namespace(cfg=preset, classes=None, conf=None, show=None, model=None, class_names=None)
         config = load_config_all(args, logger)
     assert set(config) == {'main', 'stabilo', 'ultralytics', 'georef'}
-    assert config['main']['visualization']['viz_mode'] in (0, 1, 2, 3)
+    assert config['main']['visualization']['viz_mode'] in (0, 1, 2, 3, 4)
     assert isinstance(config['main']['class_names'], dict)
     # The active tracker block is materialized to a temp YAML file for Ultralytics.
     assert Path(config['ultralytics']['tracker']).is_file()

@@ -204,9 +204,9 @@ visualization:
   show: false             # Open a live preview window during processing — CLI: --show / --no-show
   tail_length: 30         # Track tail length [frames]; number of past positions drawn as a fading trail; [1, inf) — CLI: --tail-length
   line_width: 2           # Bounding-box and track stroke width [px]; [1, inf) — CLI: --line-width
-  viz_mode: 0             # Frame source for annotation: 0=original, 1=stabilized, 2=reference frame, 3=oriented best-fit boxes on the original frame; use a list (e.g. [0, 1, 3]) to render one video per mode — CLI: --viz-mode
-  heading_smoothing: 15   # (mode 3) Gaussian smoothing window [frames] for the per-frame heading; larger = steadier, slower to follow turns; [1, inf) — CLI: --heading-smoothing
-  heading_min_speed: 0.5  # (mode 3) Min smoothed pixel speed [px/frame] for a reliable heading; below this the heading is held from the last reliable frame; [0, inf) — CLI: --heading-min-speed
+  viz_mode: 0             # Frame source for annotation: 0=original, 1=stabilized, 2=reference frame, 3=oriented best-fit boxes on the original frame, 4=oriented best-fit boxes on the stabilized frame; use a list (e.g. [0, 1, 4]) to render one video per mode — CLI: --viz-mode
+  heading_smoothing: 15   # (modes 3, 4) Gaussian smoothing window [frames] for the per-frame heading; larger = steadier, slower to follow turns; [1, inf) — CLI: --heading-smoothing
+  heading_min_speed: 0.5  # (modes 3, 4) Min smoothed pixel speed [px/frame] for a reliable heading; below this the heading is held from the last reliable frame; [0, inf) — CLI: --heading-min-speed
   plot_trajectories: false # Overlay all trajectory positions on the first frame before the main pass — CLI: --plot-trajectories / --no-plot-trajectories
   plot_delay: 30          # Frames to hold the trajectory overlay before starting the main pass; [1, inf) — CLI: --plot-delay
   show_conf: false        # Include detection confidence score in the bounding-box label — CLI: --show-conf / --no-show-conf

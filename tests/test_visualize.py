@@ -17,19 +17,19 @@ logger = logging.getLogger(__name__)
 @pytest.mark.parametrize(
     'given, expected',
     [
-        (0, [0]),                        # scalar from config
-        ([1], [1]),                      # single-element list from CLI
-        ([0, 1, 2, 3], [0, 1, 2, 3]),    # all modes (incl. oriented)
-        ([0, 3], [0, 3]),                # original + oriented
-        ((2, 0), [2, 0]),                # tuple, order preserved
-        ([0, 0, 1], [0, 1]),             # duplicates removed
+        (0, [0]),                              # scalar from config
+        ([1], [1]),                            # single-element list from CLI
+        ([0, 1, 2, 3, 4], [0, 1, 2, 3, 4]),    # all modes (incl. both oriented)
+        ([0, 4], [0, 4]),                      # original + oriented (stabilized frame)
+        ((2, 0), [2, 0]),                      # tuple, order preserved
+        ([0, 0, 1], [0, 1]),                   # duplicates removed
     ],
 )
 def test_normalize_viz_modes(given, expected):
     assert normalize_viz_modes(given, logger) == expected
 
 
-@pytest.mark.parametrize('given', [4, -1, [0, 4], 'all'])
+@pytest.mark.parametrize('given', [5, -1, [0, 5], 'all'])
 def test_normalize_viz_modes_invalid_exits(given):
     with pytest.raises(SystemExit):
         normalize_viz_modes(given, logger)
