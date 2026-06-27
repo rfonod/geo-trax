@@ -268,6 +268,8 @@ geotrax aggregate path/to/PROCESSED/
 geotrax visualize video.mp4 --save --viz-mode 3 4
 ```
 
+<p align="center"><img src="https://raw.githubusercontent.com/rfonod/geo-trax/main/assets/geo-trax_visualization_obb_zoom.jpg" alt="Geo-trax mode 3 rotated bounding boxes, zoomed detail" width="70%"><br><em>Mode 3 rotated bounding boxes, zoomed detail from the same scene as the animation above.</em></p>
+
 <details>
 <summary><b>⚠️ Rotated box modes (3 and 4): known limitations</b></summary>
 
