@@ -89,7 +89,7 @@ batch:
 # Stabilization, short-track removal, and vehicle dimension estimation for 'geotrax extract'.
 extraction:
   model: hf://rfonod/geo-trax/geotrax_hbb_yolov8s_1920_v1.pt  # Detection model: a local file path OR an 'hf://<org>/<repo>/<path/to/file>.pt' reference (auto-downloaded & cached); default = the bundled geo-trax model — CLI: --model
-  class_rename: null    # Rename class-id → labels (inline dict or .yaml/.json path); null = use the model's own names — CLI: --class-names
+  class_rename: null    # class-id → label override, e.g. {0: vehicle, 1: bus, 2: truck, 3: bike}; or a .yaml/.json path; null = model's own names — CLI: --class-names / -cn 0=vehicle 1=bus
   stabilize: true       # Stabilize extracted bounding boxes; appends 4 columns (x_stab, y_stab, w_stab, h_stab) to results/video.txt
   save_stab: true       # Save per-frame stabilization homographies to results/video_vid_transf.txt
   min_track_length: 3   # Discard tracks shorter than this many frames; [1, inf)
@@ -197,7 +197,11 @@ visualization:
   show: false             # Open a live preview window during processing — CLI: --show / --no-show
   tail_length: 30         # Track tail length [frames]; number of past positions drawn as a fading trail; [1, inf) — CLI: --tail-length
   line_width: 2           # Bounding-box and track stroke width [px]; [1, inf) — CLI: --line-width
-  viz_mode: 0             # Frame source for annotation: 0=original, 1=stabilized, 2=reference frame; use a list (e.g. [0, 1, 2]) to render one video per mode — CLI: --viz-mode
+  viz_mode: 0             # Frame source for annotation: 0=original, 1=stabilized, 2=reference frame, 3=rotated boxes on the original frame, 4=rotated boxes on the stabilized frame; use a list (e.g. [0, 1, 4]) to render one video per mode — CLI: --viz-mode
+  heading_smoothing: 15   # (modes 3, 4) Gaussian smoothing window [frames] for the per-frame heading; larger = steadier, slower to follow turns; [1, inf) — CLI: --heading-smoothing
+  heading_min_speed: 0.5  # (modes 3, 4) Min smoothed pixel speed [px/frame] for a reliable heading; below this the heading is held from the last reliable frame; [0, inf) — CLI: --heading-min-speed
+  edge_clip_margin: 3     # (modes 3, 4) Distance [px] within which a detection box is treated as touching a frame edge, triggering clipping of the oriented box to the visible part (absorbs HBB inaccuracy); [0, inf) — CLI: --edge-clip-margin
+  edge_clip_smoothing: 5  # (modes 3, 4) Gaussian window [frames] for smoothing the clip rectangle of edge-touching boxes so the box shape stays steady as the vehicle exits; 0 disables; [0, inf) — CLI: --edge-clip-smoothing
   plot_trajectories: false # Overlay all trajectory positions on the first frame before the main pass — CLI: --plot-trajectories / --no-plot-trajectories
   plot_delay: 30          # Frames to hold the trajectory overlay before starting the main pass; [1, inf) — CLI: --plot-delay
   show_conf: false        # Include detection confidence score in the bounding-box label — CLI: --show-conf / --no-show-conf
@@ -272,7 +276,7 @@ ultralytics:
   format: torchscript  # (str) export target format; e.g. torchscript|onnx|openvino|engine|coreml|...
   keras: false         # (bool) TF SavedModel only; enable Keras layers during export
   optimize: false      # (bool) TorchScript: mobile optimizations
-  int8: false          # (bool) INT8/PTQ where supported; needs calibration data/fraction
+  quantize:            # (int|str, optional) export precision: 8/'int8', 16/'fp16', 32/'fp32', 'w8a8', 'w8a16', 'w16a16'; null = default (fp32)
   dynamic: false       # (bool) dynamic shapes for torchscript, onnx, openvino, engine, coreml
   simplify: false      # (bool) ONNX/engine only; run graph simplifier for cleaner ONNX before conversion
   opset:               # (int, optional) ONNX/engine only; opset version; leave unset for tested default

@@ -4,12 +4,12 @@
 
 **Geo-trax** (GEO-referenced TRAjectory eXtraction) is a comprehensive pipeline that extracts high-accuracy, georeferenced vehicle trajectories from high-altitude drone imagery. Built for quasi-stationary aerial monitoring of urban traffic, it turns raw bird's-eye view (BEV) drone footage into precise, real-world vehicle trajectories. The framework combines YOLO detection, multi-object tracking, and video stabilization with a robust orthophoto-based georeferencing stage, producing GNSS-tagged, lane-resolved trajectories that are spatially and temporally consistent and ready for large-scale traffic analysis and simulation. It is optimized for urban intersections and arterial corridors, where high-fidelity, vehicle-level insights drive intelligent transportation systems and digital twin applications.
 
-![Geo-trax Output Visualization](https://raw.githubusercontent.com/rfonod/geo-trax/v1.0.0/assets/geo-trax_visualization.webp)
+![Geo-trax Output Visualization](https://raw.githubusercontent.com/rfonod/geo-trax/main/assets/geo-trax_visualization.webp)
 
 🎬 An accelerated preview of Geo-trax's capabilities. Watch the full ~4 min 4K demo on [YouTube](https://youtu.be/gOGivL9FFLk).
 
 > [!TIP]
-> **Just want to see it work?** Try the [interactive demo on 🤗 Hugging Face Spaces](https://huggingface.co/spaces/rfonod/geo-trax) — run the vehicle detector on your own aerial image or short clip right in the browser, no install required.
+> **Just want to see it work?** Try the [interactive demo on 🤗 Hugging Face Spaces](https://huggingface.co/spaces/rfonod/geo-trax): run the vehicle detector on your own aerial image or short clip right in the browser, no install required.
 
 ### Why Geo-trax
 
@@ -22,7 +22,7 @@
 
 ## Pipeline
 
-![Geo-trax pipeline diagram: raw drone video → detection → tracking → stabilization → georeferencing → dataset](assets/geo-trax_pipeline.svg)
+![Geo-trax pipeline diagram: raw drone video → detection → tracking → stabilization → georeferencing → dataset](https://raw.githubusercontent.com/rfonod/geo-trax/main/assets/geo-trax_pipeline.svg)
 
 🔍 The core pipeline (solid box) produces stabilized, pixel-coordinate vehicle trajectories. Optional extensions add georeferencing via orthophoto image registration, vision dataset creation through frame (pre-)annotation for custom detector fine-tuning, and visualization, analysis, and probe vehicle validation tools, all applicable to both pixel-coordinate and georeferenced outputs.
 
@@ -97,10 +97,10 @@ python -m pip install -e '.[export]'   # ONNX export dependencies
 
 ```bash
 # Pixel-coordinate trajectories (no orthophoto required)
-geotrax batch data/U_video_cut.mp4 --no-geo --save
+geotrax batch data/U_video_cut.mp4 --no-geo
 
-# Full pipeline: detection, tracking, stabilization, georeferencing, and visualization
-geotrax batch data/U_video_cut.mp4 -orf data/orthophotos -mf data/master_frames --save --show-lanes
+# Full pipeline: extract, georeference, and analyze (orthophotos required; see data/README.md)
+geotrax batch data/U_video_cut.mp4 -orf data/orthophotos -mf data/master_frames --show-lanes
 
 # Scale up: process a whole project tree, then merge multi-drone results into one dataset
 geotrax batch path/to/PROCESSED/
@@ -116,7 +116,7 @@ Run `geotrax -h` or `geotrax batch -h` for all options. The scale-up commands ab
 - **Tracking**: six multi-object trackers (BoT-SORT default); see [Tracking](#tracking) for a comparison.
 - **Stabilization**: homography-based trajectory correction via [Stabilo](https://github.com/rfonod/stabilo) 🌀, tuned with [Stabilo-Optimize](https://github.com/rfonod/stabilo-optimize) 🎯.
 - **Georeferencing**: frame-to-orthophoto registration; outputs lat/lon, local CRS, speed, acceleration, and lane assignment per vehicle.
-- **Visualization**: track overlays on original, stabilized, or static-reference video, in three rendering modes.
+- **Visualization**: track overlays on original, stabilized, or static-reference video, in five rendering modes (incl. oriented bounding boxes).
 - **Analysis**: trajectory maps, kinematic distributions, and class/dimension charts, per-video or aggregated across drones and sessions.
 - **Scaling & tooling**: batch-processes directory trees and aggregates multi-drone data; includes standalone utilities for end-to-end data preparation, training, evaluation, and validation.
 
@@ -127,7 +127,7 @@ Run `geotrax -h` or `geotrax batch -h` for all options. The scale-up commands ab
 
 - Comprehensive documentation in a dedicated `docs/` folder. A [`tools/README.md`](tools/README.md) index already covers the auxiliary scripts.
 - Modularized, OOP-based pipeline with custom reference frame support and georeferencing leveraging Stabilo's image-matching backend.
-- Per-class confidence thresholds and oriented bounding box visualization (using azimuth and dimension estimates).
+- Per-class confidence thresholds.
 - Trajectory interpolation and SAHI-based small-object detection.
 - Batch inference, GPU-accelerated image registration, and multi-thread processing.
 - Real-world map visualization (e.g., MovingPandas, contextily) and interactive web app.
@@ -252,9 +252,6 @@ geotrax batch video.mp4 -c path/to/custom_config.yaml
 # Regenerate visualization without re-running extraction
 geotrax batch video.mp4 --viz-only --save
 
-# Render specific visualization modes (0: original, 1: stabilized, 2: reference frame)
-geotrax visualize video.mp4 --save --viz-mode 0 2
-
 # Show lane IDs, hide the speed overlay (requires georeferencing)
 geotrax batch video.mp4 --viz-only --save --show-lanes --hide-speed
 
@@ -266,7 +263,25 @@ geotrax batch path/to/PROCESSED/ --plot-only --plot-aggregate --plot-class-filte
 
 # Merge multi-drone results for the same locations into a unified dataset
 geotrax aggregate path/to/PROCESSED/
+
+# Rotated box modes (3/4): boxes oriented to vehicle heading, on original (3) or stabilized (4) frame
+geotrax visualize video.mp4 --save --viz-mode 3 4
 ```
+
+<p align="center"><img src="https://raw.githubusercontent.com/rfonod/geo-trax/main/assets/geo-trax_visualization_obb_zoom.jpg" alt="Geo-trax mode 3 rotated bounding boxes, zoomed detail" width="70%"><br><em>Mode 3 rotated bounding boxes, zoomed detail from the same scene as the animation above.</em></p>
+
+<details>
+<summary><b>⚠️ Rotated box modes (3 and 4): known limitations</b></summary>
+
+Modes 3 and 4 replace the standard axis-aligned YOLO detections with **rotated bounding boxes**: each box is sized to the vehicle's estimated physical length and width and rotated to align with its travel direction (heading). The heading is derived from the camera-motion-free stabilized trajectory; mode 3 projects the result back onto the original frame, while mode 4 draws directly on the stabilized frame. They are the most informative rendering modes but also the most sensitive to data quality:
+
+- **Size estimation may fail.** Estimates are computed over frames where the vehicle moves in a nearly straight path with sufficient displacement. Short tracks, near-stationary vehicles, or detections close to the frame edges can yield no usable estimate. In those cases the box dimensions fall back to a per-vehicle Q25 aggregate of the raw YOLO bounding box extents (rotated to the heading), which tends to be inflated during turns since axis-aligned detections expand as the vehicle turns. Fallback boxes are rendered with a **dashed outline** so they are easy to identify.
+- **Heading may be unreliable.** For very slow or stationary vehicles the motion direction cannot be determined; the box is then aligned with the longer axis of the raw bounding box instead.
+- **Back-projection distortion (mode 3 only).** Oriented boxes are computed in stabilized space and projected back onto the original frame via the inverse stabilization homography. Under strong camera motion this can produce visibly skewed boxes.
+- **Edge clipping is approximate.** When a vehicle is entering or exiting the frame, the detection only covers its visible part, so the oriented box is clipped to that footprint instead of being drawn at full size (the clip is triggered once the detection reaches within `edge_clip_margin` pixels of the border, since the YOLO box may stop a few pixels short of the true edge). That footprint, however, is only known as an axis-aligned (HBB) detection box, whereas the rendered box is rotated to the heading — so the clip boundary only approximates where the rotated vehicle actually leaves the frame. The clip rectangle is temporally smoothed (`edge_clip_smoothing`) so the box shrinks steadily as the vehicle exits rather than jumping with per-frame detection noise.
+- Both modes require that the extraction stage was run with stabilization enabled (`stabilize: true` in the config).
+
+</details>
 
 > [!NOTE]
 > **Why use master frames?** When georeferencing, geo-trax can route each video's homography through a shared *master frame* per location ID. A master frame is a high-quality, near-nadir BEV frame chosen once per location (see [`tools/find_master_frames.py`](tools/find_master_frames.py)), used instead of registering every video's reference frame directly to the orthophoto. The mapping is split into two homographies: `reference → master` (recomputed per video) and `master → orthophoto` (computed **once per location ID and cached**, validated by a hash of the master image). This gives two benefits:
@@ -311,10 +326,12 @@ Suppose the input video is `video_file.mp4`. By default, outputs are written to 
 
 - **video_file.yaml**: Video metadata and the configuration settings used for processing `video_file.mp4`. (This file is saved in the same directory as the input video, not in the output folder.)
 
-- **video_file_mode_X.mp4** (`<stem><visualization_postfix>_mode_<X>.mp4`): Annotated video in three rendering modes (X = 0 / 1 / 2):
+- **video_file_mode_X.mp4** (`<stem><visualization_postfix>_mode_<X>.mp4`): Annotated video in five rendering modes (X = 0 / 1 / 2 / 3 / 4):
   - **Mode 0**: overlaid on the original (unstabilized) video
   - **Mode 1**: overlaid on the stabilized video
   - **Mode 2**: plotted on the static reference frame
+  - **Mode 3**: rotated bounding boxes on the original video, where each box is sized to the vehicle's estimated physical dimensions and rotated to its per-frame heading (derived from the camera-motion-free stabilized trajectory and projected back onto the original frame). Requires stabilization to have been run.
+  - **Mode 4**: the same rotated bounding boxes as Mode 3, but drawn directly on the stabilized video (no back-projection). Requires stabilization to have been run.
 
   Each version can display vehicle bounding boxes, IDs, class labels, confidence scores, and short trajectory trails that fade and vary in thickness to indicate the recency of the movement. If an input `video_file.csv` file is available in the same directory as the input video, i.e., the converted flight logs, vehicle speed and lane information can also be displayed.
 
@@ -393,7 +410,7 @@ The layout below mirrors the Songdo experiment and matches the pipeline's auto-d
 │           ├── A1_vid_transf.txt          # stabilization homographies
 │           ├── A1_geo_transf.txt          # georeferencing homography
 │           ├── A1.csv                     # georeferenced trajectories + kinematics
-│           ├── A1_mode_0.mp4              # video with overlaid boxes & trajectories (modes 0/1/2)
+│           ├── A1_mode_0.mp4              # video with overlaid boxes & trajectories (modes 0/1/2/3/4)
 │           └── plots/                     # various trajectory & distribution plots
 ├── ORTHOPHOTOS/                           # auto-detected sibling of PROCESSED / DATASET
 │   ├── A.png                              # orthophoto cut-out, per location
@@ -491,7 +508,7 @@ If you use **Geo-trax** in your research or software, please cite:
       title = {Geo-trax: A Comprehensive Framework for Georeferenced Vehicle Trajectory Extraction from Drone Imagery},
       year = {2026},
       month = jun,
-      version = {1.0.0},
+      version = {1.0.1},
       doi = {10.5281/zenodo.12119542},
       url = {https://github.com/rfonod/geo-trax},
       license = {MIT}
