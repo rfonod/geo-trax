@@ -211,8 +211,8 @@ def visualize_id(
         logger.critical(f"No tracks found for ID {args.id}.")
         sys.exit(1)
 
-    # Choose stabilised or raw coordinate columns
-    if valid_tracks.shape[1] > 8:
+    # Choose stabilised or raw coordinate columns (stab: 14/15-col; no-stab: 10/11-col)
+    if valid_tracks.shape[1] >= 12:
         idx_x, idx_y, idx_c = 6, 7, 10   # stabilised coordinates available
     else:
         idx_x, idx_y, idx_c = 2, 3, 6    # fall back to raw coordinates

@@ -15,6 +15,7 @@ from geotrax.visualize import (
     _smooth_clip_dims,
     compute_headings,
     normalize_viz_modes,
+    read_tracks,
     read_tracks_oriented,
     read_transforms,
 )
@@ -286,3 +287,63 @@ def test_read_tracks_oriented_fallback_dims_q25():
                                 err_msg="col 4 should be per-vehicle Q25 length, not per-row bbox")
     np.testing.assert_allclose(oriented[5].to_numpy(), expected_width,
                                 err_msg="col 5 should be per-vehicle Q25 width, not per-row bbox")
+
+
+def test_read_tracks_oriented_interpolated_rows_are_dashed():
+    # 15-col input: rows 1 and 3 are interpolated (col 14 = 1), rows 0 and 2 are detected.
+    # Dims are non-NaN (is_fallback = False), so col 9 being True proves the OR with is_interpolated.
+    tracks = _make_oriented_tracks(n=4, nan_dims=False)
+    tracks[14] = [0, 1, 0, 1]   # add is_interpolated column
+
+    args = _make_oriented_args()
+    class_names = {0: 'car', 1: 'bus', 2: 'truck', 3: 'motorcycle'}
+    oriented, _ = read_tracks_oriented(tracks, None, class_names, args, logger)
+
+    np.testing.assert_array_equal(
+        oriented[9].to_numpy(), [False, True, False, True],
+        err_msg="col 9 should be True for interpolated rows even when dims are estimated (not NaN)"
+    )
+
+
+def test_read_tracks_standard_carries_interp_flag(tmp_path):
+    import argparse
+    # 15-col space-separated file (stab enabled + interp): vehicle 1, frames 0-2; frame 1 is interpolated.
+    lines = [
+        "0 1 100 100 20 10 100 100 20 10 0 0.9 15.0 8.0 0",
+        "1 1 101 100 20 10 101 100 20 10 0 0.9 15.0 8.0 1",
+        "2 1 102 100 20 10 102 100 20 10 0 0.9 15.0 8.0 0",
+    ]
+    filepath = tmp_path / "tracks.txt"
+    filepath.write_text("\n".join(lines) + "\n")
+
+    args = argparse.Namespace(viz_mode=0, plot_trajectories=False, source=None)
+    class_names = {0: 'car', 1: 'bus', 2: 'truck', 3: 'motorcycle'}
+    tracks, _ = read_tracks(filepath, class_names, args, logger)
+
+    assert tracks.shape[1] == 9, "15-col stab+interp input should produce 9-col output (8 standard + is_interpolated)"
+    np.testing.assert_array_equal(tracks[8].tolist(), [0, 1, 0],
+                                   err_msg="col 8 should carry the is_interpolated flag")
+
+
+def test_read_tracks_no_stab_interp_flag_at_col_10(tmp_path):
+    import argparse
+    # 11-col space-separated file (no-stab + interp): frame, id, x, y, w, h, class, conf, len, wid, is_interp.
+    # Frame 1 is interpolated. is_interpolated must land at col 10, NOT corrupt col 6 (class).
+    lines = [
+        "0 1 100 100 20 10 0 0.9 15.0 8.0 0",
+        "1 1 101 100 20 10 0 0.9 15.0 8.0 1",
+        "2 1 102 100 20 10 0 0.9 15.0 8.0 0",
+    ]
+    filepath = tmp_path / "tracks_nostab.txt"
+    filepath.write_text("\n".join(lines) + "\n")
+
+    args = argparse.Namespace(viz_mode=0, plot_trajectories=False, source=None)
+    class_names = {0: 'car', 1: 'bus', 2: 'truck', 3: 'motorcycle'}
+    tracks, _ = read_tracks(filepath, class_names, args, logger)
+
+    assert tracks.shape[1] == 11, "11-col no-stab+interp input should produce 11-col output (10 no-stab + is_interpolated)"
+    # col 6 must be class_id (0), not is_interpolated
+    np.testing.assert_array_equal(tracks[6].tolist(), [0, 0, 0],
+                                   err_msg="col 6 should still be class_id (0), not is_interpolated")
+    np.testing.assert_array_equal(tracks[10].tolist(), [0, 1, 0],
+                                   err_msg="col 10 should carry the is_interpolated flag")

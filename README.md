@@ -113,7 +113,7 @@ Run `geotrax -h` or `geotrax batch -h` for all options. The scale-up commands ab
 <summary><b>📋 Full Feature Overview</b></summary>
 
 - **Detection**: YOLOv8s on aerial BEV imagery; detects car (incl. vans), bus, truck, and motorcycle.
-- **Tracking**: six multi-object trackers (BoT-SORT default); see [Tracking](#tracking) for a comparison.
+- **Tracking**: six multi-object trackers (BoT-SORT default); see [Tracking](#tracking) for a comparison; optional per-track frame-gap interpolation.
 - **Stabilization**: homography-based trajectory correction via [Stabilo](https://github.com/rfonod/stabilo) 🌀, tuned with [Stabilo-Optimize](https://github.com/rfonod/stabilo-optimize) 🎯.
 - **Georeferencing**: frame-to-orthophoto registration; outputs lat/lon, local CRS, speed, acceleration, and lane assignment per vehicle.
 - **Visualization**: track overlays on original, stabilized, or static-reference video, in five rendering modes (incl. oriented bounding boxes).
@@ -128,7 +128,7 @@ Run `geotrax -h` or `geotrax batch -h` for all options. The scale-up commands ab
 - Comprehensive documentation in a dedicated `docs/` folder. A [`tools/README.md`](tools/README.md) index already covers the auxiliary scripts.
 - Modularized, OOP-based pipeline with custom reference frame support and georeferencing leveraging Stabilo's image-matching backend.
 - Per-class confidence thresholds.
-- Trajectory interpolation and SAHI-based small-object detection.
+- SAHI-based small-object detection.
 - Batch inference, GPU-accelerated image registration, and multi-thread processing.
 - Real-world map visualization (e.g., MovingPandas, contextily) and interactive web app.
 
@@ -249,6 +249,9 @@ geotrax plot video.mp4                     # trajectory and distribution plots
 geotrax batch video.mp4 -c confident
 geotrax batch video.mp4 -c path/to/custom_config.yaml
 
+# Fill per-track detection gaps with linear interpolation (adds is_interpolated column to .txt output)
+geotrax batch video.mp4 --no-geo --interpolate
+
 # Regenerate visualization without re-running extraction
 geotrax batch video.mp4 --viz-only --save
 
@@ -313,6 +316,7 @@ Suppose the input video is `video_file.mp4`. By default, outputs are written to 
   - `class_id`: Vehicle class identifier (0: car (incl. vans), 1: bus, 2: truck, 3: motorcycle)
   - `confidence`: Detection confidence score (0-1).
   - `vehicle_length`, `vehicle_width`: Estimated vehicle dimensions in pixels.
+  - `is_interpolated` *(optional, 15th column)*: Present only when `extraction.interpolate: true` (CLI: `--interpolate`). `0` = real detection, `1` = linearly interpolated to fill a frame gap. Downstream stages propagate this as an `Is_Interpolated` column in the georeferenced CSV.
 
 - **video_file_vid_transf.txt** (`<stem><stab_transform_postfix>.txt`): Contains the transformation matrix for each frame in the format:
 
@@ -338,7 +342,7 @@ Suppose the input video is `video_file.mp4`. By default, outputs are written to 
 - **video_file.csv** (`<stem><georeferenced_postfix>.csv`): Contains the georeferenced vehicle trajectories in a tabular format. This file includes both geographic and local coordinates, estimated real-world dimensions, kinematic data, road section, and lane information. The columns are:
 
   ```text
-  Vehicle_ID, [Timestamp,] Frame_Number, Ortho_X, Ortho_Y, Local_X, Local_Y, Latitude, Longitude, Vehicle_Length, Vehicle_Width, Vehicle_Class, Vehicle_Speed, Vehicle_Acceleration, Road_Section, Lane_Number, Visibility
+  Vehicle_ID, [Timestamp,] Frame_Number, Ortho_X, Ortho_Y, Local_X, Local_Y, Latitude, Longitude, Vehicle_Length, Vehicle_Width, Vehicle_Class, Vehicle_Speed, Vehicle_Acceleration, Road_Section, Lane_Number, Visibility[, Is_Interpolated]
   ```
 
     where:
@@ -355,6 +359,7 @@ Suppose the input video is `video_file.mp4`. By default, outputs are written to 
   - `Road_Section`: Identifier for the road segment the vehicle is on.
   - `Lane_Number`: Identifier for the lane the vehicle is in.
   - `Visibility`: Boolean indicating if the vehicle's bounding box is fully visible within the frame.
+  - `Is_Interpolated` *(optional)*: Present only when extraction was run with `--interpolate` (`extraction.interpolate: true`). `0` = real detection, `1` = row synthesized by linear interpolation at the extraction stage to fill a frame gap; propagated from the `.txt` tracks file.
 
 - **video_file_geo_transf.txt** (`<stem><geo_transform_postfix>.txt`): Contains the 3x3 georeferencing transformation matrix (homography) that maps points from the video's reference frame to the orthomap. The format is a comma-separated list of the 9 matrix elements:
 

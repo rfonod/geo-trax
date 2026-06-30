@@ -69,6 +69,9 @@ Processing Options:
     --cut-frame-left, -cfl <int> : Skip the first N frames. Defaults to cfg -> processing -> cut_frame_left.
     --cut-frame-right, -cfr <int> : Stop at this frame number. Applies to single-file input only;
                           silently ignored in batch-directory mode. Defaults to cfg -> processing -> cut_frame_right.
+    --interpolate / --no-interpolate : Fill per-track frame gaps with linear interpolation; adds
+                          an is_interpolated column to the .txt output (0 = detected, 1 = synthetic).
+                          Defaults to cfg -> extraction -> interpolate (default: false).
     For full detection and tracking control (model, IoU, image size, tracker settings, etc.),
     edit cfg -> ultralytics and cfg -> tracker in the pipeline config (run 'geotrax config copy').
 

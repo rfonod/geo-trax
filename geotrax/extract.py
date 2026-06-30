@@ -41,6 +41,9 @@ Processing Options:
                               Defaults to cfg -> ultralytics -> classes.
     --cut-frame-left, -cfl <int> : Skip the first N frames. Defaults to cfg -> processing -> cut_frame_left.
     --cut-frame-right, -cfr <int> : Stop processing after this frame. Defaults to cfg -> processing -> cut_frame_right.
+    --interpolate / --no-interpolate : Fill per-track frame gaps with linear interpolation; adds a 15th
+                              is_interpolated column to the .txt output (0 = real detection, 1 = synthetic).
+                              Defaults to cfg -> extraction -> interpolate (default: false).
     For full detection, tracking, and stabilization control, edit cfg -> ultralytics, cfg -> tracker,
     and cfg -> stabilo. Run 'geotrax config copy' to get an editable local copy of the pipeline config.
 
@@ -56,6 +59,9 @@ Examples:
 
   4. Rename class labels for visualization (overrides the model's built-in names):
         geotrax extract path/to/video.mp4 -cn 0=vehicle 1=bus 2=truck 3=bike
+
+  5. Fill per-track detection gaps with linear interpolation:
+        geotrax extract path/to/video.mp4 --interpolate
 
 Notes:
   - Detection, tracking, and stabilization parameters all live in a single pipeline config file
@@ -115,6 +121,7 @@ def detect_track_stabilize(args: argparse.Namespace, logger: logging.Logger) -> 
     backfill_args_from_config(args, {
         'cut_frame_left': proc['cut_frame_left'],
         'cut_frame_right': proc['cut_frame_right'],
+        'interpolate': config['main']['extraction']['interpolate'],
         'output_folder': out_cfg_raw.get('folder', 'results'),
     })
     out_cfg = {**out_cfg_raw, 'folder': args.output_folder}
@@ -293,6 +300,47 @@ def postprocess_tracks(tracks: np.ndarray, config: Dict, logger: logging.Logger)
     tracks = remove_short_tracks(tracks, logger, config['main']['extraction']['min_track_length'])
     tracks = calculate_unique_classes(tracks)
     tracks = estimate_vehicle_dimensions(tracks, config['main'])
+    if config['main']['args'].interpolate:
+        tracks = interpolate_tracks(tracks, logger)
+    return tracks
+
+
+def interpolate_tracks(tracks: np.ndarray, logger: logging.Logger) -> np.ndarray:
+    """Fill per-track frame-id gaps via linear interpolation; appends is_interpolated flag column."""
+    if tracks.size == 0:
+        return tracks
+
+    interpolated_rows = []
+
+    for track_id in np.unique(tracks[:, 1]):
+        mask = tracks[:, 1] == track_id
+        t = tracks[mask]
+        t = t[np.argsort(t[:, 0])]
+        frames = t[:, 0].astype(int)
+
+        for i in range(1, len(frames)):
+            gap = frames[i] - frames[i - 1]
+            if gap <= 1:
+                continue
+            for step in range(1, gap):
+                alpha = step / gap
+                row = t[i - 1] * (1.0 - alpha) + t[i] * alpha
+                row[0] = float(frames[i - 1] + step)
+                interpolated_rows.append(row)
+
+    is_interp_col = np.zeros((len(tracks), 1), dtype=tracks.dtype)
+    tracks = np.concatenate([tracks, is_interp_col], axis=1)
+
+    if interpolated_rows:
+        interp_arr = np.array(interpolated_rows, dtype=tracks.dtype)
+        is_interp_flag = np.ones((len(interp_arr), 1), dtype=tracks.dtype)
+        interp_arr = np.concatenate([interp_arr, is_interp_flag], axis=1)
+        tracks = np.concatenate([tracks, interp_arr], axis=0)
+        sort_idx = np.lexsort((tracks[:, 0], tracks[:, 1]))
+        tracks = tracks[sort_idx]
+        n_added = len(interp_arr)
+        logger.info(f"Interpolated {n_added} missing frame(s) across {len(np.unique(tracks[:, 1]))} track(s).")
+
     return tracks
 
 
@@ -518,6 +566,7 @@ def add_processing_args(group) -> None:
     group.add_argument('--classes', '-cls', nargs='+', type=int, default=None, help='Class IDs to extract (e.g., --classes 0 1 2). Defaults to cfg -> ultralytics -> classes.')
     group.add_argument('--cut-frame-left', '-cfl', type=int, default=None, help='Skip the first N frames. Defaults to cfg -> processing -> cut_frame_left.')
     group.add_argument('--cut-frame-right', '-cfr', type=int, default=None, help='Stop processing after this frame. Defaults to cfg -> processing -> cut_frame_right.')
+    group.add_argument('--interpolate', action=argparse.BooleanOptionalAction, default=None, help='Fill per-track frame gaps with linear interpolation; adds is_interpolated column to output. Defaults to cfg -> extraction -> interpolate.')
 
 
 def parse_cli_args() -> argparse.Namespace:

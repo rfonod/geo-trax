@@ -135,7 +135,7 @@ def georeference(args: argparse.Namespace, logger: logging.Logger) -> None:
 
     pbar.set_postfix_str('loading tracking data')
     location_id = determine_location_id(args.source, logger)
-    track_id, frame_num, bbox_unstab, x_stab_frame, y_stab_frame, class_id, veh_dim_px = get_tracking_data(args.source, logger, out_cfg)
+    track_id, frame_num, bbox_unstab, x_stab_frame, y_stab_frame, class_id, veh_dim_px, is_interpolated = get_tracking_data(args.source, logger, out_cfg)
     timestamps = get_timestamps(args.source, frame_num, logger)
     pbar.update()
 
@@ -181,7 +181,8 @@ def georeference(args: argparse.Namespace, logger: logging.Logger) -> None:
 
     pbar.set_postfix_str('computing kinematics')
     veh_speed, veh_acceleration = compute_kinematics(track_id, frame_num, x_local, y_local, visibility, fps,
-                                                     config['filtering']['filter_type'], config['filtering']['kernel_size'])
+                                                     config['filtering']['filter_type'], config['filtering']['kernel_size'],
+                                                     is_interpolated=is_interpolated)
     pbar.update()
 
     pbar.set_postfix_str('assigning road sections')
@@ -191,7 +192,8 @@ def georeference(args: argparse.Namespace, logger: logging.Logger) -> None:
     pbar.set_postfix_str('saving results')
     georeferenced_df = create_and_format_georeferenced_df(track_id, timestamps, frame_num, x_stab_ortho, y_stab_ortho, x_local, y_local,
                                                       latitude, longitude, veh_dim_real, class_id, veh_speed, veh_acceleration,
-                                                      road_section, lane_number, visibility, config['filtering']['min_traj_length'], logger)
+                                                      road_section, lane_number, visibility, config['filtering']['min_traj_length'],
+                                                      is_interpolated, logger=logger)
     save_georeferenced_data(args.source, georeferenced_df, logger, out_cfg)
     save_homography(args.source, homography_reference_to_ortho, logger, out_cfg)
     pbar.update()
@@ -225,13 +227,16 @@ def get_tracking_data(source: Path, logger: logging.Logger, output_cfg: dict = N
                     geo-trax with stabilization enabled.")
         sys.exit(1)
 
+    is_interpolated = tracks[:, 14].astype(int) if tracks.shape[1] >= 15 else None  # < 14 guard above ensures only 14- or 15-col files reach here
+
     return (tracks[:, 1].astype('int'),      # track_id
             tracks[:, 0].astype('int'),      # frame_num
             tracks[:, 2:6],                  # bbox_unstab
             tracks[:, 6],                    # x_stab
             tracks[:, 7],                    # y_stab
             tracks[:, 10].astype('int'),     # class_id
-            tracks[:, 12:14])                # dimensions
+            tracks[:, 12:14],                # dimensions
+            is_interpolated)                 # is_interpolated (None if not present)
 
 
 def get_timestamps(source: Path, frame_num: np.ndarray, logger: logging.Logger) -> np.ndarray:
@@ -690,34 +695,34 @@ def calculate_visibility(track_ids: np.ndarray, bbox_unstab: np.ndarray, frame_s
 
 
 def compute_kinematics(track_ids: np.ndarray, frame_num: np.ndarray, x_local: np.ndarray, y_local: np.ndarray, visibility: np.ndarray,
-                       fps: float, filter_type: str, kernel_size: int, conversion_factor: float = 3.6) -> tuple:
-    """
-    Compute vehicle speed and acceleration.
-    """
+                       fps: float, filter_type: str, kernel_size: int,
+                       is_interpolated: np.ndarray = None, conversion_factor: float = 3.6) -> tuple:
+    """Compute vehicle speed and acceleration from real (non-interpolated) detections only."""
     speed = np.full(len(track_ids), np.nan)
     acceleration = np.full(len(track_ids), np.nan)
 
     unique_track_ids = np.unique(track_ids)
     for track_id in unique_track_ids:
         indices = np.where(track_ids == track_id)[0]
-        visible_indices = visibility[indices]
+        real_mask = (is_interpolated[indices] == 0) if is_interpolated is not None else np.ones(len(indices), dtype=bool)
+        visible_real = visibility[indices] & real_mask
 
-        if sum(visible_indices) >= 3:
-            frames = frame_num[indices][visible_indices]
-            x_coords = x_local[indices][visible_indices]
-            y_coords = y_local[indices][visible_indices]
+        if sum(visible_real) >= 3:
+            frames = frame_num[indices][visible_real]
+            x_coords = x_local[indices][visible_real]
+            y_coords = y_local[indices][visible_real]
 
-            x_interpolated, y_interpolated, present_indices = interpolate_missing_points(frames, x_coords, y_coords)
-            speed_values = compute_speed(x_interpolated, y_interpolated, fps)
+            x_interp, y_interp, present_indices = interpolate_missing_points(frames, x_coords, y_coords)
+            speed_values = compute_speed(x_interp, y_interp, fps)
             speed_values = apply_filter(speed_values, kernel_size, filter_type)
             acceleration_values = compute_acceleration(speed_values, fps)
 
-            speed_values *= conversion_factor # convert from m/s to a chosen unit (e.g. km/h)
+            speed_values *= conversion_factor
             speed_values = np.insert(speed_values, 0, np.nan)
             acceleration_values = np.insert(acceleration_values, 0, [np.nan] * 2)
 
-            speed[indices[visible_indices]] = speed_values[present_indices]
-            acceleration[indices[visible_indices]] = acceleration_values[present_indices]
+            speed[indices[visible_real]] = speed_values[present_indices]
+            acceleration[indices[visible_real]] = acceleration_values[present_indices]
 
     return speed, acceleration
 
@@ -788,10 +793,9 @@ def apply_filter(data: np.ndarray, kernel_size: int, filter_type: str = 'gaussia
 
 def create_and_format_georeferenced_df(track_id, timestamps, frame_num, x_stab_ortho, y_stab_ortho, x_local, y_local,
                                        latitude, longitude, veh_dim_real, class_id, v_speed, v_acceleration,
-                                       road_section, lane_number, visibility, min_traj_length, logger) -> pd.DataFrame:
-    """
-    Create and format the georeferenced data as a DataFrame.
-    """
+                                       road_section, lane_number, visibility, min_traj_length,
+                                       is_interpolated=None, *, logger) -> pd.DataFrame:
+    """Create and format the georeferenced data as a DataFrame."""
     try:
         data = {
             'Vehicle_ID': track_id,
@@ -810,7 +814,8 @@ def create_and_format_georeferenced_df(track_id, timestamps, frame_num, x_stab_o
             'Vehicle_Acceleration': v_acceleration,
             'Road_Section': road_section,
             'Lane_Number': lane_number,
-            'Visibility': visibility
+            'Visibility': visibility,
+            'Is_Interpolated': is_interpolated,
         }
 
         georeferenced_df = pd.DataFrame({k: v for k, v in data.items() if v is not None})
@@ -826,17 +831,24 @@ def create_and_format_georeferenced_df(track_id, timestamps, frame_num, x_stab_o
         georeferenced_df['Vehicle_Speed'] = np.round(georeferenced_df['Vehicle_Speed'], 1)
         georeferenced_df['Vehicle_Acceleration'] = np.round(georeferenced_df['Vehicle_Acceleration'], 2)
         georeferenced_df['Visibility'] = georeferenced_df['Visibility'].astype('int')
+        if 'Is_Interpolated' in georeferenced_df.columns:
+            georeferenced_df['Is_Interpolated'] = georeferenced_df['Is_Interpolated'].astype('int')
 
         if 'Lane_Number' in georeferenced_df.columns:
             georeferenced_df['Lane_Number'] = georeferenced_df['Lane_Number'].apply(lambda x: str(int(x)) if pd.notna(x) else '')
 
         if min_traj_length > 0:
             vehicle_count_before = len(georeferenced_df['Vehicle_ID'].unique())
-            georeferenced_df = georeferenced_df.groupby('Vehicle_ID').filter(lambda x: len(x) >= min_traj_length)
+            if 'Is_Interpolated' in georeferenced_df.columns:
+                georeferenced_df = georeferenced_df.groupby('Vehicle_ID').filter(
+                    lambda x: (x['Is_Interpolated'] == 0).sum() >= min_traj_length
+                )
+            else:
+                georeferenced_df = georeferenced_df.groupby('Vehicle_ID').filter(lambda x: len(x) >= min_traj_length)
             vehicle_count_after = len(georeferenced_df['Vehicle_ID'].unique())
             vehicle_count_removed = vehicle_count_before - vehicle_count_after
             if vehicle_count_removed > 0:
-                logger.info(f"Removed {vehicle_count_removed} vehicles with trajectory length less than {min_traj_length} points.")
+                logger.info(f"Removed {vehicle_count_removed} vehicles with fewer than {min_traj_length} detected points.")
 
         logger.info("Georeferenced DataFrame successfully created and formatted.")
         return georeferenced_df
