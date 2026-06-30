@@ -146,13 +146,13 @@ def georeference(args: argparse.Namespace, logger: logging.Logger) -> None:
     pbar.set_postfix_str('loading orthophoto data')
     ortho_folder = get_ortho_folder(args.source, args.ortho_folder, logger)
     geo_source = get_geo_params_source(args.geo_source, ortho_folder, location_id, logger)
-    ortho = get_orthophoto(ortho_folder, location_id, logger)
-    ortho_params = get_ortho_parameters(ortho_folder, location_id, geo_source, ortho, config['transformation']['cutout_width_px'], logger)
+    ortho_params = get_ortho_parameters(ortho_folder, location_id, geo_source, config['transformation']['cutout_width_px'], logger)
     ortho_segmentation = get_road_section_lane_geometry(ortho_folder, args.segmentation_folder, location_id, logger)
     pbar.update()
 
     if args.no_master:
         pbar.set_postfix_str('computing reference → orthophoto homography')
+        ortho = get_orthophoto(ortho_folder, location_id, logger)
         homography_reference_to_ortho = get_reference_to_ortho_homography(reference_frame, ortho, config['matching'], logger)
         pbar.update()
     else:
@@ -165,7 +165,7 @@ def georeference(args: argparse.Namespace, logger: logging.Logger) -> None:
         pbar.update()
 
         pbar.set_postfix_str('computing master → orthophoto homography')
-        homography_master_to_ortho = get_master_to_ortho_homography(master_frame, ortho, ortho_folder, args.master_folder, location_id, args.recompute, config['matching'], logger)
+        homography_master_to_ortho = get_master_to_ortho_homography(master_frame, ortho_folder, args.master_folder, location_id, args.recompute, config['matching'], logger)
         homography_reference_to_ortho = np.dot(homography_master_to_ortho, homography_reference_to_master)
         pbar.update()
 
@@ -315,7 +315,7 @@ def get_orthophoto(ortho_folder: Path, location_id: str, logger: logging.Logger)
     return orthophoto
 
 
-def get_ortho_parameters(ortho_folder: Path, location_id: str, geo_source: str, ortho: np.ndarray, cutout_width_px: Union[int, None], logger: logging.Logger) -> tuple:
+def get_ortho_parameters(ortho_folder: Path, location_id: str, geo_source: str, cutout_width_px: Union[int, None], logger: logging.Logger) -> tuple:
     """
     Get orthophoto parameters from .tif metadata or .txt files.
     """
@@ -337,7 +337,8 @@ def get_ortho_parameters(ortho_folder: Path, location_id: str, geo_source: str, 
         skew_x, skew_y = ortho_params[4:6] if len(ortho_params) == 6 else (0.0, 0.0)
     elif geo_source == "center-text-file":
         center_offset_x, center_offset_y = read_ortho_config_file(ortho_filepath.with_name(f"{ortho_filepath.stem}_center.txt"))[:2]
-        ortho_width_px = ortho.shape[1]
+        with Image.open(ortho_filepath) as _img:
+            ortho_width_px = _img.size[0]
         if cutout_width_px is None:
             width_half = ortho_width_px // 2
         else:
@@ -508,7 +509,7 @@ def get_reference_to_master_homography(reference_frame: np.ndarray, master_frame
     return homography_reference_to_master
 
 
-def get_master_to_ortho_homography(master_frame: np.ndarray, ortho: np.ndarray, ortho_folder: Path, master_folder: Union[Path, None], location_id: str, recompute: bool, config:dict, logger: logging.Logger) -> np.ndarray:
+def get_master_to_ortho_homography(master_frame: np.ndarray, ortho_folder: Path, master_folder: Union[Path, None], location_id: str, recompute: bool, config:dict, logger: logging.Logger) -> np.ndarray:
     """
     Get the homography matrix between the master frame and the orthophoto.
     """
@@ -535,7 +536,7 @@ def get_master_to_ortho_homography(master_frame: np.ndarray, ortho: np.ndarray, 
             logger.error(f"Failed to load 'master -> orthophoto' homography from '{homography_filepath}' due to: {e}")
             sys.exit(1)
 
-    homography_master_to_ortho, stats_txt = compute_homography(master_frame, ortho, ('master', 'ortho'), logger, **config)
+    homography_master_to_ortho, stats_txt = compute_homography(master_frame, get_orthophoto(ortho_folder, location_id, logger), ('master', 'ortho'), logger, **config)
     try:
         with open(homography_filepath, 'w') as file:
             np.savetxt(file, homography_master_to_ortho.reshape(1, -1), fmt='%.20g', delimiter=',')
