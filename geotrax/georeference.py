@@ -321,24 +321,31 @@ def get_ortho_parameters(ortho_folder: Path, location_id: str, geo_source: str, 
     """
     ortho_filepath = ortho_folder / (location_id + '.png')
     if geo_source == "metadata-tif":
-        img_tif = Image.open(ortho_filepath.with_suffix('.tif'))
-        if isinstance(img_tif, TiffImagePlugin.TiffImageFile):
-            lng0, lat0 =  img_tif.tag_v2[33922][3], img_tif.tag_v2[33922][4]
-            dlng, dlat =  img_tif.tag_v2[33550][0], -img_tif.tag_v2[33550][1]
-            skew_x, skew_y = 0.0, 0.0
-            if 34264 in img_tif.tag_v2:
-                skew_x, skew_y = img_tif.tag_v2[34264][1], img_tif.tag_v2[34264][2]
-        else:
-            logger.error(f"Failed to read georeferencing parameters from .tif metadata for orthophoto: '{ortho_filepath}'.")
-            sys.exit(1)
+        with Image.open(ortho_filepath.with_suffix('.tif')) as img_tif:
+            if isinstance(img_tif, TiffImagePlugin.TiffImageFile):
+                lng0, lat0 =  img_tif.tag_v2[33922][3], img_tif.tag_v2[33922][4]
+                dlng, dlat =  img_tif.tag_v2[33550][0], -img_tif.tag_v2[33550][1]
+                skew_x, skew_y = 0.0, 0.0
+                if 34264 in img_tif.tag_v2:
+                    skew_x, skew_y = img_tif.tag_v2[34264][1], img_tif.tag_v2[34264][2]
+            else:
+                logger.error(f"Failed to read georeferencing parameters from .tif metadata for orthophoto: '{ortho_filepath}'.")
+                sys.exit(1)
     elif geo_source == "text-file":
         ortho_params = read_ortho_config_file(ortho_filepath.with_suffix('.txt'))
         lng0, lat0, dlng, dlat = ortho_params[:4]
         skew_x, skew_y = ortho_params[4:6] if len(ortho_params) == 6 else (0.0, 0.0)
     elif geo_source == "center-text-file":
         center_offset_x, center_offset_y = read_ortho_config_file(ortho_filepath.with_name(f"{ortho_filepath.stem}_center.txt"))[:2]
-        with Image.open(ortho_filepath) as _img:
-            ortho_width_px = _img.size[0]
+        if not ortho_filepath.exists():
+            logger.critical(f"Orthophoto file '{ortho_filepath}' not found.")
+            sys.exit(1)
+        try:
+            with Image.open(ortho_filepath) as img:
+                ortho_width_px = img.size[0]
+        except Exception as e:
+            logger.critical(f"Failed to read orthophoto '{ortho_filepath}' due to: {e}")
+            sys.exit(1)
         if cutout_width_px is None:
             width_half = ortho_width_px // 2
         else:
