@@ -512,8 +512,8 @@ If you use **Geo-trax** in your research or software, please cite:
       author = {Fonod, Robert},
       title = {Geo-trax: A Comprehensive Framework for Georeferenced Vehicle Trajectory Extraction from Drone Imagery},
       year = {2026},
-      month = jun,
-      version = {1.0.1},
+      month = jul,
+      version = {1.1.0},
       doi = {10.5281/zenodo.12119542},
       url = {https://github.com/rfonod/geo-trax},
       license = {MIT}
