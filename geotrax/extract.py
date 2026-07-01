@@ -301,16 +301,24 @@ def postprocess_tracks(tracks: np.ndarray, config: Dict, logger: logging.Logger)
     tracks = calculate_unique_classes(tracks)
     tracks = estimate_vehicle_dimensions(tracks, config['main'])
     if config['main']['args'].interpolate:
-        tracks = interpolate_tracks(tracks, logger)
+        max_gap = config['main']['tracker'][config['main']['tracker']['active']]['track_buffer']
+        tracks = interpolate_tracks(tracks, logger, max_gap)
     return tracks
 
 
-def interpolate_tracks(tracks: np.ndarray, logger: logging.Logger) -> np.ndarray:
-    """Fill per-track frame-id gaps via linear interpolation; appends is_interpolated flag column."""
+def interpolate_tracks(tracks: np.ndarray, logger: logging.Logger, max_gap: int) -> np.ndarray:
+    """Fill per-track frame-id gaps via linear interpolation; appends is_interpolated flag column.
+
+    Gaps larger than max_gap (the active tracker's track_buffer) are left unfilled, since the
+    tracker itself would not persist a lost track's ID across a longer occlusion — a wider gap
+    signals ID reuse for an unrelated detection rather than a genuine, bridgeable occlusion.
+    """
     if tracks.size == 0:
         return tracks
 
     interpolated_rows = []
+    interpolated_track_ids = set()
+    skipped_gaps = 0
 
     for track_id in np.unique(tracks[:, 1]):
         mask = tracks[:, 1] == track_id
@@ -322,14 +330,21 @@ def interpolate_tracks(tracks: np.ndarray, logger: logging.Logger) -> np.ndarray
             gap = frames[i] - frames[i - 1]
             if gap <= 1:
                 continue
+            if gap > max_gap:
+                skipped_gaps += 1
+                continue
             for step in range(1, gap):
                 alpha = step / gap
                 row = t[i - 1] * (1.0 - alpha) + t[i] * alpha
                 row[0] = float(frames[i - 1] + step)
                 interpolated_rows.append(row)
+            interpolated_track_ids.add(track_id)
 
     is_interp_col = np.zeros((len(tracks), 1), dtype=tracks.dtype)
     tracks = np.concatenate([tracks, is_interp_col], axis=1)
+
+    if skipped_gaps > 0:
+        logger.warning(f"Skipped {skipped_gaps} frame gap(s) exceeding the tracker's track_buffer ({max_gap} frames); left unfilled.")
 
     if interpolated_rows:
         interp_arr = np.array(interpolated_rows, dtype=tracks.dtype)
@@ -339,7 +354,7 @@ def interpolate_tracks(tracks: np.ndarray, logger: logging.Logger) -> np.ndarray
         sort_idx = np.lexsort((tracks[:, 0], tracks[:, 1]))
         tracks = tracks[sort_idx]
         n_added = len(interp_arr)
-        logger.info(f"Interpolated {n_added} missing frame(s) across {len(np.unique(tracks[:, 1]))} track(s).")
+        logger.info(f"Interpolated {n_added} missing frame(s) across {len(interpolated_track_ids)} track(s).")
 
     return tracks
 

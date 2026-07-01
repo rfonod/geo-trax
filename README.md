@@ -316,7 +316,7 @@ Suppose the input video is `video_file.mp4`. By default, outputs are written to 
   - `class_id`: Vehicle class identifier (0: car (incl. vans), 1: bus, 2: truck, 3: motorcycle)
   - `confidence`: Detection confidence score (0-1).
   - `vehicle_length`, `vehicle_width`: Estimated vehicle dimensions in pixels.
-  - `is_interpolated` *(optional, 15th column)*: Present only when `extraction.interpolate: true` (CLI: `--interpolate`). `0` = real detection, `1` = linearly interpolated to fill a frame gap. Downstream stages propagate this as an `Is_Interpolated` column in the georeferenced CSV.
+  - `is_interpolated` *(optional, 15th column)*: Present only when `extraction.interpolate: true` (CLI: `--interpolate`). `0` = real detection, `1` = linearly interpolated to fill a frame gap. Gaps larger than the active tracker's `track_buffer` are left unfilled (the tracker would not persist a lost track's ID across a longer occlusion).
 
 - **video_file_vid_transf.txt** (`<stem><stab_transform_postfix>.txt`): Contains the transformation matrix for each frame in the format:
 

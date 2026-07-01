@@ -133,7 +133,7 @@ def test_estimate_vehicle_dimensions_boundary_vehicle_gets_nan():
 
 def test_interpolate_tracks_empty_input():
     empty = np.empty((0, 14), dtype=np.float32)
-    result = interpolate_tracks(empty, logger)
+    result = interpolate_tracks(empty, logger, max_gap=30)
     assert result.size == 0
 
 
@@ -142,7 +142,7 @@ def test_interpolate_tracks_no_gaps_adds_flag_column():
     tracks = np.zeros((3, 14), dtype=np.float32)
     tracks[:, 0] = [0, 1, 2]   # frame_id
     tracks[:, 1] = [1, 1, 1]   # vehicle_id
-    result = interpolate_tracks(tracks, logger)
+    result = interpolate_tracks(tracks, logger, max_gap=30)
     assert result.shape == (3, 15)
     np.testing.assert_array_equal(result[:, 14], [0, 0, 0])   # all detected
 
@@ -152,7 +152,7 @@ def test_interpolate_tracks_fills_gap_with_linear_interpolation():
     tracks = np.zeros((2, 14), dtype=np.float32)
     tracks[0, 0] = 0;  tracks[0, 1] = 1;  tracks[0, 6] = 0.0   # x_stab at frame 0
     tracks[1, 0] = 3;  tracks[1, 1] = 1;  tracks[1, 6] = 3.0   # x_stab at frame 3
-    result = interpolate_tracks(tracks, logger)
+    result = interpolate_tracks(tracks, logger, max_gap=30)
     assert result.shape == (4, 15)
     # Check frame ids are complete
     frames = result[result[:, 1] == 1, 0].astype(int)
@@ -172,7 +172,7 @@ def test_interpolate_tracks_dimensions_unchanged_by_interpolation():
     tracks = np.zeros((2, 14), dtype=np.float32)
     tracks[0, 0] = 0;  tracks[0, 1] = 1;  tracks[0, 12] = 5.0;  tracks[0, 13] = 2.0
     tracks[1, 0] = 2;  tracks[1, 1] = 1;  tracks[1, 12] = 5.0;  tracks[1, 13] = 2.0
-    result = interpolate_tracks(tracks, logger)
+    result = interpolate_tracks(tracks, logger, max_gap=30)
     assert result.shape == (3, 15)
     np.testing.assert_allclose(result[:, 12], 5.0)
     np.testing.assert_allclose(result[:, 13], 2.0)
@@ -185,7 +185,7 @@ def test_interpolate_tracks_multiple_tracks_independent():
     tracks[1, 0] = 2;  tracks[1, 1] = 1   # track 1, frame 2  (gap at frame 1)
     tracks[2, 0] = 0;  tracks[2, 1] = 2   # track 2, frame 0
     tracks[3, 0] = 1;  tracks[3, 1] = 2   # track 2, frame 1  (no gap)
-    result = interpolate_tracks(tracks, logger)
+    result = interpolate_tracks(tracks, logger, max_gap=30)
     # track 1 gets 1 synthetic row; track 2 gets none → 5 rows total, 15 columns
     assert result.shape == (5, 15)
     t1_rows = result[result[:, 1] == 1]
@@ -193,6 +193,16 @@ def test_interpolate_tracks_multiple_tracks_independent():
     assert len(t1_rows) == 3
     assert len(t2_rows) == 2
     assert int(t1_rows[t1_rows[:, 14] == 1, 0][0]) == 1   # synthetic row is frame 1
+
+
+def test_interpolate_tracks_skips_gap_exceeding_max_gap():
+    # Vehicle 1: frames 0 and 5 — gap of 4 frames, exceeds max_gap=2, so left unfilled.
+    tracks = np.zeros((2, 14), dtype=np.float32)
+    tracks[0, 0] = 0;  tracks[0, 1] = 1
+    tracks[1, 0] = 5;  tracks[1, 1] = 1
+    result = interpolate_tracks(tracks, logger, max_gap=2)
+    assert result.shape == (2, 15)   # no synthetic rows added
+    np.testing.assert_array_equal(result[:, 14], [0, 0])
 
 
 # --- postprocess_tracks (smoke test) ----------------------------------------
@@ -206,6 +216,10 @@ def _make_postprocess_config(interpolate=False):
                 'dimension_estimation': {
                     'eps': 5, 'r0': 3.0, 'gsd': 0.02725, 'theta_bar': 15, 'tau_c': {-1: 1.0},
                 },
+            },
+            'tracker': {
+                'active': 'botsort',
+                'botsort': {'track_buffer': 30},
             },
             'args': argparse.Namespace(source=Path('dummy.mp4'), interpolate=interpolate),
         }
