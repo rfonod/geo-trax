@@ -349,9 +349,15 @@ def read_tracks(tracks_txt_filepath: Path, class_names: dict, args: argparse.Nam
     if args.viz_mode in (3, 4):
         return read_tracks_oriented(tracks, tracks_txt_filepath, class_names, args, logger)
 
-    if tracks.shape[1] == 10 or tracks.shape[1] == 14:
-        # drop the last two columns (vehicle length and width)
-        tracks = tracks.drop(tracks.columns[-2:], axis=1)
+    # is_interpolated is always the last column: col 14 (stab, 15-col) or col 10 (no-stab, 11-col)
+    if tracks.shape[1] in (11, 15):
+        is_interpolated = tracks.iloc[:, -1].values
+        tracks = tracks.drop(tracks.columns[-1], axis=1)
+    else:
+        is_interpolated = None
+    if tracks.shape[1] == 10 or tracks.shape[1] >= 14:
+        # drop dimension columns — keep only cols 0–11
+        tracks = tracks.drop(tracks.columns[12:], axis=1)
     if args.plot_trajectories and tracks.shape[1] < 11:
         logger.error(f"No stabilized bounding boxes found in: '{tracks_txt_filepath}'. Disable the trajectory plotting option or re-run the extraction stage ('geotrax extract').")
         sys.exit(1)
@@ -369,6 +375,8 @@ def read_tracks(tracks_txt_filepath: Path, class_names: dict, args: argparse.Nam
         logger.error(f"No valid tracking results found in: '{tracks_txt_filepath}'.")
         sys.exit(1)
     tracks.columns = list(range(tracks.shape[1]))
+    if is_interpolated is not None:
+        tracks[tracks.shape[1]] = is_interpolated
 
     if len(class_names) < tracks[6].max() + 1:
         logger.error(f"At least {tracks[6].max() + 1} class names must be provided. Current class names defined for the used model are {class_names.values()}.")
@@ -430,6 +438,8 @@ def read_tracks_oriented(tracks: pd.DataFrame, tracks_txt_filepath: Path, class_
     headings = compute_headings(tracks, args.heading_smoothing, args.heading_min_speed, logger)
     # Dimension fallback: where the best-fit estimate is NaN, use a per-vehicle Q25 of raw bbox dims.
     is_fallback = tracks[12].isna()
+    is_interpolated_flag = tracks[14].astype(bool) if tracks.shape[1] >= 15 else pd.Series(False, index=tracks.index)
+    is_dashed = is_fallback | is_interpolated_flag
     fb_length, fb_width = _estimate_fallback_dims(tracks)
     length = tracks[12].where(~is_fallback, fb_length)
     width = tracks[13].where(~is_fallback, fb_width)
@@ -458,7 +468,7 @@ def read_tracks_oriented(tracks: pd.DataFrame, tracks_txt_filepath: Path, class_
         6: tracks[10],             # class id
         7: tracks[11],             # confidence
         8: headings,               # per-frame heading [rad, image coords]; NaN -> axis-aligned box
-        9: is_fallback.astype(bool),  # True = raw-bbox fallback (dashed outline); False = estimated
+        9: is_dashed.astype(bool),    # True = dashed outline (fallback dims or interpolated row)
         10: tracks[8],             # stabilized bbox width [px]  (clip rectangle)
         11: tracks[9],             # stabilized bbox height [px] (clip rectangle)
         12: on_border.astype(bool),   # True = detection touches a frame edge -> clip to visible part
@@ -681,16 +691,24 @@ def annotate_frame(frame: np.ndarray, frame_num: int, tracks_frame: pd.DataFrame
         clip_ws = tracks_frame.iloc[:, 10].values
         clip_hs = tracks_frame.iloc[:, 11].values
         on_borders = tracks_frame.iloc[:, 12].values
+        interp_flags = [False] * len(ids)   # already encoded in fallbacks for oriented mode
     else:
-        scores = tracks_frame.iloc[:, 7].values if tracks_frame.shape[1] == 8 else [''] * len(ids)
+        scores = tracks_frame.iloc[:, 7].values if tracks_frame.shape[1] >= 8 else [''] * len(ids)
         headings = [None] * len(ids)
         fallbacks = [False] * len(ids)
         clip_ws = [None] * len(ids)
         clip_hs = [None] * len(ids)
         on_borders = [False] * len(ids)
+        # shape 9 = stab+interp (is_interpolated at col 8); shape 11 = no-stab+interp (col 10)
+        if tracks_frame.shape[1] == 9:
+            interp_flags = tracks_frame.iloc[:, 8].values.astype(bool)
+        elif tracks_frame.shape[1] == 11:
+            interp_flags = tracks_frame.iloc[:, 10].values.astype(bool)
+        else:
+            interp_flags = [False] * len(ids)
 
-    for track_id, xcn, ycn, wn, hn, c, s, heading, is_fb, clip_w, clip_h, on_border in zip(
-        ids, Xcn, Ycn, Wn, Hn, classes, scores, headings, fallbacks, clip_ws, clip_hs, on_borders
+    for track_id, xcn, ycn, wn, hn, c, s, heading, is_fb, clip_w, clip_h, on_border, is_interp in zip(
+        ids, Xcn, Ycn, Wn, Hn, classes, scores, headings, fallbacks, clip_ws, clip_hs, on_borders, interp_flags
     ):
         if args.class_filter and c in args.class_filter:
             continue
@@ -724,7 +742,11 @@ def annotate_frame(frame: np.ndarray, frame_num: int, tracks_frame: pd.DataFrame
         else:
             x1n, y1n = int(xcn - wn / 2), int(ycn - hn / 2)
             x2n, y2n = int(xcn + wn / 2), int(ycn + hn / 2)
-            cv2.rectangle(annotated_frame, (x1n, y1n), (x2n, y2n), color, line_width, lineType=cv2.LINE_AA)
+            if is_interp:
+                corners = np.array([[x1n, y1n], [x2n, y1n], [x2n, y2n], [x1n, y2n]], dtype=np.int32)
+                _draw_dashed_poly(annotated_frame, corners, color, line_width)
+            else:
+                cv2.rectangle(annotated_frame, (x1n, y1n), (x2n, y2n), color, line_width, lineType=cv2.LINE_AA)
             cx_draw, cy_draw = xcn, ycn
 
         if not args.hide_labels:

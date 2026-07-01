@@ -344,10 +344,13 @@ def read_trajectory_data(filepath_img: Path, filepath_geo: Path, config: dict, l
                 'Vehicle_Length',
                 'Vehicle_Width',
             ]
-            if df_img.shape[1] == 14:
+            if df_img.shape[1] >= 14:
+                df_img = df_img.iloc[:, :14]
                 df_img.columns = all_columns
                 coordinates_img['Stabilized image coordinates'] = ['X_stabilized', 'Y_stabilized']
-            elif df_img.shape[1] == 10:
+            elif df_img.shape[1] in (10, 11):
+                # 11 = no-stab + is_interpolated; drop the flag and treat as 10-col
+                df_img = df_img.iloc[:, :10]
                 df_img.columns = all_columns[:6] + all_columns[10:]
             else:
                 logger.error(f"Invalid number of columns in the tracking results file {filepath_img}")

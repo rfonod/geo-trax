@@ -213,6 +213,29 @@ def test_compute_kinematics_insufficient_visible_points_returns_nan():
     assert np.all(np.isnan(acc))
 
 
+def test_compute_kinematics_interpolated_rows_excluded():
+    # Real frames at indices 0, 2, 4, 6, 8 (every other); odd indices are synthetic.
+    # Kinematics must be NaN for interpolated rows and correct for real ones.
+    track_ids = np.ones(9, dtype=int)
+    frame_num = np.arange(9)
+    x_local = np.arange(9, dtype=float)
+    y_local = np.zeros(9)
+    visibility = np.ones(9, dtype=bool)
+    is_interp = np.array([0, 1, 0, 1, 0, 1, 0, 1, 0])
+
+    speed, acc = compute_kinematics(
+        track_ids, frame_num, x_local, y_local, visibility,
+        fps=1.0, filter_type='gaussian', kernel_size=1,
+        is_interpolated=is_interp,
+    )
+    # Interpolated rows must remain NaN
+    assert np.all(np.isnan(speed[[1, 3, 5, 7]]))
+    assert np.all(np.isnan(acc[[1, 3, 5, 7]]))
+    # First real frame always NaN; remaining real frames have computed speed
+    assert np.isnan(speed[0])
+    np.testing.assert_allclose(speed[[2, 4, 6, 8]], 3.6, rtol=1e-4)
+
+
 # --- create_and_format_georeferenced_df --------------------------------------
 
 def _make_georef_inputs(n_veh=3, n_frames=4):

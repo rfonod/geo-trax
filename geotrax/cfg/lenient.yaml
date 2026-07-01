@@ -100,6 +100,7 @@ extraction:
   stabilize: true       # Stabilize extracted bounding boxes; appends 4 columns (x_stab, y_stab, w_stab, h_stab) to results/video.txt
   save_stab: true       # Save per-frame stabilization homographies to results/video_vid_transf.txt
   min_track_length: 3   # Discard tracks shorter than this many frames; [1, inf)
+  interpolate: false    # Fill per-track frame gaps with linear interpolation; adds is_interpolated column to output — CLI: --interpolate / --no-interpolate
   dimension_estimation:
     gsd: 0.02725    # Ground sample distance [m/px]; tuned for DJI Mavic 3 at 140–150 m altitude, 4K resolution
     eps: 4          # Visibility margin [px]; bounding boxes closer than this to any frame edge are excluded; [0, inf)

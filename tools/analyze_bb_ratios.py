@@ -163,7 +163,9 @@ def process_file(file, args, logger):
 
 
 def extract_ratios(tracks):
-    idx_c = 10 if tracks.shape[1] > 10 else 6
+    has_stab = tracks.shape[1] >= 12  # stab: 14/15-col; no-stab: 10/11-col
+    idx_c = 10 if has_stab else 6
+    dim_start = 12 if has_stab else 8
     unique_ids = np.unique(tracks[:, 1]).astype(int)
     unique_cls = np.unique(tracks[:, idx_c]).astype(int)
     class2ratios = {c: [] for c in unique_cls}
@@ -171,8 +173,8 @@ def extract_ratios(tracks):
         for vehicle_id in unique_ids:
             mask = (tracks[:, 1] == vehicle_id) & (tracks[:, idx_c] == class_id)
             if np.sum(mask) > 0:
-                L = tracks[mask, -2][0]
-                W = tracks[mask, -1][0]
+                L = tracks[mask, dim_start][0]
+                W = tracks[mask, dim_start + 1][0]
                 ratio = L / W if W is not None and W > 0 else None
                 if ratio is not None:
                     class2ratios[class_id].append(ratio)
