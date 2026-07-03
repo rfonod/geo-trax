@@ -96,6 +96,7 @@ from ultralytics.utils.files import increment_path
 from geotrax import __version__
 from geotrax.utils.cli_utils import add_common_args
 from geotrax.utils.config_utils import backfill_args_from_config, load_config_all
+from geotrax.utils.constants import DEFAULT_TRACK_BUFFER
 from geotrax.utils.file_utils import (
     check_if_results_exist,
     convert_to_serializable,
@@ -301,7 +302,13 @@ def postprocess_tracks(tracks: np.ndarray, config: Dict, logger: logging.Logger)
     tracks = calculate_unique_classes(tracks)
     tracks = estimate_vehicle_dimensions(tracks, config['main'])
     if config['main']['args'].interpolate:
-        max_gap = config['main']['tracker'][config['main']['tracker']['active']]['track_buffer']
+        max_gap = config['main']['tracker_params'].get('track_buffer')
+        if max_gap is None:
+            max_gap = DEFAULT_TRACK_BUFFER
+            logger.warning(
+                f"Active tracker '{config['main'].get('tracker_active')}' has no 'track_buffer' "
+                f"parameter; falling back to a max interpolation gap of {max_gap} frames."
+            )
         tracks = interpolate_tracks(tracks, logger, max_gap)
     return tracks
 

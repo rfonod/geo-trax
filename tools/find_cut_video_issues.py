@@ -88,6 +88,7 @@ import argparse
 import fnmatch
 import logging
 import os
+import warnings
 from pathlib import Path
 
 import geopandas as gpd
@@ -346,7 +347,13 @@ def geo2local(latitude: np.ndarray, longitude: np.ndarray, source_crs: str = 'ep
     geo_coordinates_gdf = gpd.GeoDataFrame({'Latitude': latitude, 'Longitude': longitude},
         geometry=gpd.points_from_xy(longitude, latitude), crs=source_crs) # type: ignore
 
-    local_coordinates_gdf = geo_coordinates_gdf.to_crs(target_crs)
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            'ignore',
+            message='Conversion of an array with ndim > 0 to a scalar is deprecated',
+            category=DeprecationWarning,
+        )
+        local_coordinates_gdf = geo_coordinates_gdf.to_crs(target_crs)
     x_local = local_coordinates_gdf.geometry.x.to_numpy() # type: ignore
     y_local = local_coordinates_gdf.geometry.y.to_numpy() # type: ignore
     return x_local, y_local
