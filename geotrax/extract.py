@@ -44,8 +44,13 @@ Processing Options:
     --interpolate / --no-interpolate : Fill per-track frame gaps with linear interpolation; adds a 15th
                               is_interpolated column to the .txt output (0 = real detection, 1 = synthetic).
                               Defaults to cfg -> extraction -> interpolate (default: false).
+    --stab-gpu / --no-stab-gpu, -sg : CUDA-accelerate stabilization image matching (requires a CUDA-enabled
+                              OpenCV build; no CPU fallback). Defaults to cfg -> stabilo -> gpu.
+    --stab-gpu-device-id, -sgid <int> : CUDA device index used when stabilization GPU is enabled.
+                              Defaults to cfg -> stabilo -> gpu_device_id.
     For full detection, tracking, and stabilization control, edit cfg -> ultralytics, cfg -> tracker,
     and cfg -> stabilo. Run 'geotrax config copy' to get an editable local copy of the pipeline config.
+    Object-detection GPU use is set via cfg -> ultralytics -> device (default: auto, uses CUDA when available).
 
 Examples:
   1. Process a video with default settings:
@@ -124,8 +129,12 @@ def detect_track_stabilize(args: argparse.Namespace, logger: logging.Logger) -> 
         'cut_frame_right': proc['cut_frame_right'],
         'interpolate': config['main']['extraction']['interpolate'],
         'output_folder': out_cfg_raw.get('folder', 'results'),
+        'stab_gpu': config['stabilo']['gpu'],
+        'stab_gpu_device_id': config['stabilo']['gpu_device_id'],
     })
     out_cfg = {**out_cfg_raw, 'folder': args.output_folder}
+    config['stabilo']['gpu'] = args.stab_gpu
+    config['stabilo']['gpu_device_id'] = args.stab_gpu_device_id
     model = load_detector(config['ultralytics'], logger)
     tracks, transforms = track_with_model(model, config, logger)
     tracks = postprocess_tracks(tracks, config, logger)
@@ -589,6 +598,8 @@ def add_processing_args(group) -> None:
     group.add_argument('--cut-frame-left', '-cfl', type=int, default=None, help='Skip the first N frames. Defaults to cfg -> processing -> cut_frame_left.')
     group.add_argument('--cut-frame-right', '-cfr', type=int, default=None, help='Stop processing after this frame. Defaults to cfg -> processing -> cut_frame_right.')
     group.add_argument('--interpolate', action=argparse.BooleanOptionalAction, default=None, help='Fill per-track frame gaps with linear interpolation; adds is_interpolated column to output. Defaults to cfg -> extraction -> interpolate.')
+    group.add_argument('--stab-gpu', '-sg', action=argparse.BooleanOptionalAction, default=None, help='CUDA-accelerate stabilization (requires a CUDA-enabled OpenCV build; no CPU fallback). Defaults to cfg -> stabilo -> gpu.')
+    group.add_argument('--stab-gpu-device-id', '-sgid', type=int, default=None, help='CUDA device index used when stabilization GPU is enabled. Defaults to cfg -> stabilo -> gpu_device_id.')
 
 
 def parse_cli_args() -> argparse.Namespace:

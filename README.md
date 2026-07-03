@@ -89,6 +89,8 @@ python -m pip install -e '.[export]'   # ONNX export dependencies
 # poetry install --extras export
 ```
 
+**Optional CUDA for image matching.** The stabilization (`--stab-gpu`) and georeferencing (`--geo-gpu`) image-registration steps can each be CUDA-accelerated via [Stabilo](https://github.com/rfonod/stabilo); this needs a CUDA-enabled OpenCV build (source-built `opencv-contrib-python`, Linux/Windows only) per Stabilo's [`docs/cuda.md`](https://github.com/rfonod/stabilo/blob/main/docs/cuda.md), then `pip install geo-trax --no-deps` in that environment. `--geo-gpu` also needs `georef.matching.detector_name: orb`, and there is no CPU fallback. (Object *detection* already uses CUDA automatically when available, via `ultralytics.device`.)
+
 </details>
 
 ## Quick Start
@@ -114,8 +116,8 @@ Run `geotrax -h` or `geotrax batch -h` for all options. The scale-up commands ab
 
 - **Detection**: YOLOv8s on aerial BEV imagery; detects car (incl. vans), bus, truck, and motorcycle.
 - **Tracking**: six multi-object trackers (BoT-SORT default); see [Tracking](#tracking) for a comparison; optional per-track frame-gap interpolation.
-- **Stabilization**: homography-based trajectory correction via [Stabilo](https://github.com/rfonod/stabilo) 🌀, tuned with [Stabilo-Optimize](https://github.com/rfonod/stabilo-optimize) 🎯.
-- **Georeferencing**: frame-to-orthophoto registration; outputs lat/lon, local CRS, speed, acceleration, and lane assignment per vehicle.
+- **Stabilization**: homography-based trajectory correction via [Stabilo](https://github.com/rfonod/stabilo) 🌀, tuned with [Stabilo-Optimize](https://github.com/rfonod/stabilo-optimize) 🎯; optional CUDA acceleration (`--stab-gpu`).
+- **Georeferencing**: frame-to-orthophoto registration; outputs lat/lon, local CRS, speed, acceleration, and lane assignment per vehicle; optional CUDA acceleration (`--geo-gpu`).
 - **Visualization**: track overlays on original, stabilized, or static-reference video, in five rendering modes (incl. oriented bounding boxes).
 - **Analysis**: trajectory maps, kinematic distributions, and class/dimension charts, per-video or aggregated across drones and sessions.
 - **Scaling & tooling**: batch-processes directory trees and aggregates multi-drone data; includes standalone utilities for end-to-end data preparation, training, evaluation, and validation.
@@ -129,7 +131,7 @@ Run `geotrax -h` or `geotrax batch -h` for all options. The scale-up commands ab
 - Modularized, OOP-based pipeline with custom reference frame support and georeferencing leveraging Stabilo's image-matching backend.
 - Per-class confidence thresholds.
 - SAHI-based small-object detection.
-- Batch inference, GPU-accelerated image registration, and multi-thread processing.
+- Batch inference and multi-thread processing.
 - Real-world map visualization (e.g., MovingPandas, contextily) and interactive web app.
 
 </details>
