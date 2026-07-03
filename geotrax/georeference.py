@@ -79,6 +79,7 @@ import hashlib
 import logging
 import shutil
 import sys
+import warnings
 from pathlib import Path
 from typing import Union
 
@@ -622,7 +623,13 @@ def geo2local(latitude: np.ndarray, longitude: np.ndarray, source_crs: str, targ
     geo_coordinates_gdf = gpd.GeoDataFrame({'Latitude': latitude, 'Longitude': longitude},
         geometry=gpd.points_from_xy(longitude, latitude), crs=source_crs)
 
-    local_coordinates_gdf = geo_coordinates_gdf.to_crs(target_crs)
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            'ignore',
+            message='Conversion of an array with ndim > 0 to a scalar is deprecated',
+            category=DeprecationWarning,
+        )
+        local_coordinates_gdf = geo_coordinates_gdf.to_crs(target_crs)
     x_local = local_coordinates_gdf.geometry.x.to_numpy()
     y_local = local_coordinates_gdf.geometry.y.to_numpy()
     return x_local, y_local

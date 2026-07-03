@@ -18,6 +18,7 @@ from geotrax.extract import (
     postprocess_tracks,
     remove_short_tracks,
 )
+from geotrax.utils.constants import DEFAULT_TRACK_BUFFER
 
 logger = logging.getLogger(__name__)
 
@@ -207,7 +208,11 @@ def test_interpolate_tracks_skips_gap_exceeding_max_gap():
 
 # --- postprocess_tracks (smoke test) ----------------------------------------
 
-def _make_postprocess_config(interpolate=False):
+def _make_postprocess_config(interpolate=False, tracker_params=None):
+    # Mirrors the real shape returned by load_config_all() (config_utils.py): 'tracker' is
+    # never a key of 'main' — it's exposed as 'tracker_active' + 'tracker_params' instead.
+    if tracker_params is None:
+        tracker_params = {'track_buffer': 30}
     return {
         'main': {
             'extraction': {
@@ -217,10 +222,8 @@ def _make_postprocess_config(interpolate=False):
                     'eps': 5, 'r0': 3.0, 'gsd': 0.02725, 'theta_bar': 15, 'tau_c': {-1: 1.0},
                 },
             },
-            'tracker': {
-                'active': 'botsort',
-                'botsort': {'track_buffer': 30},
-            },
+            'tracker_active': 'botsort',
+            'tracker_params': tracker_params,
             'args': argparse.Namespace(source=Path('dummy.mp4'), interpolate=interpolate),
         }
     }
@@ -254,3 +257,22 @@ def test_postprocess_tracks_with_interpolation_adds_15th_column():
         result = postprocess_tracks(tracks, _make_postprocess_config(interpolate=True), logger)
     assert result.shape[1] == 15   # is_interpolated column present
     np.testing.assert_array_equal(result[:, 14], [0, 0, 0])   # no gaps → all detected
+
+
+def test_postprocess_tracks_falls_back_to_default_track_buffer_when_missing(caplog):
+    # tracker_params empty (e.g. active tracker config omits 'track_buffer') -> DEFAULT_TRACK_BUFFER
+    # is used instead of raising, and a warning is logged.
+    tracks = np.array(
+        [[0, 1, 960, 540, 100, 30, 960, 540, 100, 30, 0, 0.9],
+         [1, 1, 960, 540, 100, 30, 960, 540, 100, 30, 0, 0.9],
+         [2, 1, 960, 540, 100, 30, 960, 540, 100, 30, 0, 0.9]],
+        dtype=np.float32,
+    )
+    config = _make_postprocess_config(interpolate=True, tracker_params={})
+    with patch('geotrax.extract.get_video_dimensions', return_value=(1920, 1080)), \
+         patch('geotrax.extract.interpolate_tracks', wraps=interpolate_tracks) as mock_interp, \
+         caplog.at_level(logging.WARNING):
+        result = postprocess_tracks(tracks, config, logger)
+    assert mock_interp.call_args.args[2] == DEFAULT_TRACK_BUFFER
+    assert any("no 'track_buffer' parameter" in r.message for r in caplog.records)
+    assert result.shape[1] == 15
