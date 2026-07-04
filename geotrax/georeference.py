@@ -9,6 +9,7 @@ This script is a crucial component of the Geo-trax pipeline that georeferences v
 using orthophotos. It converts vehicle trajectories from video frame coordinates to geospatial coordinates (WGS84 or local CRS).
 Key features include:
 - Optional master frame approach for robust homography estimation
+- Optional CUDA acceleration of the image registration (ORB detector; --geo-gpu)
 - Road section and lane assignment using segmentation data
 - Speed and acceleration estimation
 - Vehicle dimension conversion to real-world units
@@ -46,6 +47,11 @@ Georeferencing Options:
                                      Defaults to cfg -> georef -> processing -> recompute.
     --segmentation-folder, -osf <path> : Custom path to the folder containing orthophoto segmentation files (.csv).
                                          Defaults to cfg -> input -> segmentation_folder, then '<ortho-folder>/segmentations'.
+    --geo-gpu / --no-geo-gpu, -gg  : CUDA-accelerate image registration (requires cfg -> georef -> matching ->
+                                     detector_name: orb AND a CUDA-enabled OpenCV build; no CPU fallback).
+                                     Defaults to cfg -> georef -> matching -> gpu.
+    --geo-gpu-device-id, -ggid <int> : CUDA device index used when georeferencing GPU is enabled.
+                                     Defaults to cfg -> georef -> matching -> gpu_device_id.
 
 Examples:
 
@@ -65,7 +71,8 @@ Notes:
   - Orthophotos must be georeferenced; their coordinate system must match
     cfg -> georef -> transformation -> source_crs (default: EPSG:4326 / WGS84).
   - Additional options (image matching, CRS, kinematic filtering, etc.) live under cfg -> georef
-    in the pipeline config; no CLI overrides exist for those settings.
+    in the pipeline config; apart from the --geo-gpu / --geo-gpu-device-id toggles, no CLI overrides
+    exist for those settings.
   - The master frame approach registers reference->master and master->ortho separately, improving homography
     robustness by leveraging a stable high-quality reference image. Use --no-master only when master frames
     are unavailable.
@@ -125,8 +132,12 @@ def georeference(args: argparse.Namespace, logger: logging.Logger) -> None:
         'master_folder': Path(folders['master_folder']) if folders['master_folder'] else None,
         'segmentation_folder': Path(folders['segmentation_folder']) if folders['segmentation_folder'] else None,
         'output_folder': out_cfg_raw.get('folder', 'results'),
+        'geo_gpu': config['matching']['gpu'],
+        'geo_gpu_device_id': config['matching']['gpu_device_id'],
     })
     out_cfg = {**out_cfg_raw, 'folder': args.output_folder}
+    config['matching']['gpu'] = args.geo_gpu
+    config['matching']['gpu_device_id'] = args.geo_gpu_device_id
 
     n_steps = 8 if args.no_master else 10
     _bar_w = max(10, shutil.get_terminal_size().columns - 88)
@@ -572,9 +583,14 @@ def compute_homography(img_src: np.ndarray, img_dst: np.ndarray, src_dst: tuple,
                        sift_enable_precise_upscale: bool = True, max_features: int = 250000,
                        filter_ratio: float = 0.55, ransac_method: int = cv2.USAC_MAGSAC,
                        ransac_epipolar_threshold: float = 3.0, ransac_max_iter: int = 10000,
-                       ransac_confidence: float = 0.999999, rsift_eps: float = 1e-8) -> tuple:
+                       ransac_confidence: float = 0.999999, rsift_eps: float = 1e-8,
+                       gpu: bool = False, gpu_device_id: int = 0) -> tuple:
     """
     Compute homography between a source image and a destination image.
+
+    Set `gpu=True` (with `gpu_device_id`) to CUDA-accelerate registration. stabilo only
+    GPU-accelerates the ORB detector, so this requires `detector_name='orb'` and a CUDA-enabled
+    OpenCV build; otherwise stabilo raises ValueError (no CPU fallback).
     """
     homography, inliers_count, num_matches, num_keypoints = estimate_homography(
         img_src, img_dst, logger, detector_name=detector_name, matcher_name=matcher_name,
@@ -582,6 +598,7 @@ def compute_homography(img_src: np.ndarray, img_dst: np.ndarray, src_dst: tuple,
         max_features=max_features, filter_ratio=filter_ratio, ransac_method=ransac_method,
         ransac_epipolar_threshold=ransac_epipolar_threshold, ransac_max_iter=ransac_max_iter,
         ransac_confidence=ransac_confidence, rsift_eps=rsift_eps,
+        gpu=gpu, gpu_device_id=gpu_device_id,
     )
 
     if homography is None:
@@ -910,6 +927,8 @@ def add_georeferencing_args(group) -> None:
     group.add_argument("--master-folder", "-mf", type=Path, default=None, help="Custom path to the folder containing master frame files (.png). Defaults to cfg -> input -> master_folder, then '<ortho-folder>/master_frames'.")
     group.add_argument("--recompute", "-r", action="store_const", const=True, default=None, help="Force recompute master->ortho homography even if cached. Defaults to cfg -> georef -> processing -> recompute.")
     group.add_argument("--segmentation-folder", "-osf", type=Path, default=None, help="Path to the folder with lane segmentation CSV files (used for lane assignment during georeferencing); the corresponding overlay PNGs are also used as plot backgrounds when segmentation plotting is enabled. Defaults to cfg -> input -> segmentation_folder, then '<ortho-folder>/segmentations'.")
+    group.add_argument("--geo-gpu", "-gg", action=argparse.BooleanOptionalAction, default=None, help="CUDA-accelerate georeferencing image registration (requires cfg -> georef -> matching -> detector_name: orb AND a CUDA-enabled OpenCV build; no CPU fallback). Defaults to cfg -> georef -> matching -> gpu.")
+    group.add_argument("--geo-gpu-device-id", "-ggid", type=int, default=None, help="CUDA device index used when georeferencing GPU is enabled. Defaults to cfg -> georef -> matching -> gpu_device_id.")
 
 
 def parse_cli_args() -> argparse.Namespace:

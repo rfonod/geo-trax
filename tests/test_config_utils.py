@@ -72,6 +72,16 @@ def test_unified_configs_load(preset, tmp_path):
     assert Path(config['ultralytics']['tracker']).is_file()
 
 
+@pytest.mark.parametrize('preset', ['default', 'confident', 'lenient', 'stable'])
+def test_presets_expose_gpu_keys(preset):
+    """Every preset carries the CUDA toggles for both the stabilization and georef paths."""
+    full = load_config(preset, logger)
+    assert full['stabilo']['gpu'] is False
+    assert full['stabilo']['gpu_device_id'] == 0
+    assert full['georef']['matching']['gpu'] is False
+    assert full['georef']['matching']['gpu_device_id'] == 0
+
+
 @pytest.mark.parametrize(
     'tracker', ['botsort', 'bytetrack', 'ocsort', 'deepocsort', 'fasttrack', 'tracktrack']
 )

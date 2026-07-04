@@ -3,18 +3,22 @@
 
 """Tests for the pure coordinate-transform and kinematics helpers in georeference.py."""
 
+import argparse
 import logging
+from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pandas as pd
 import pytest
 
 from geotrax.georeference import (
+    add_georeferencing_args,
     apply_filter,
     apply_homography,
     calculate_visibility,
     compute_acceleration,
     compute_hash,
+    compute_homography,
     compute_kinematics,
     compute_speed,
     create_and_format_georeferenced_df,
@@ -24,8 +28,58 @@ from geotrax.georeference import (
     ortho2local,
     read_ortho_config_file,
 )
+from geotrax.utils.registration import estimate_homography
 
 logger = logging.getLogger(__name__)
+
+
+def _parse_georef(argv):
+    parser = argparse.ArgumentParser()
+    add_georeferencing_args(parser)
+    return parser.parse_args(argv)
+
+
+def test_geo_gpu_flags_default_to_none():
+    args = _parse_georef([])
+    assert args.geo_gpu is None
+    assert args.geo_gpu_device_id is None
+
+
+def test_geo_gpu_flags_parse():
+    args = _parse_georef(['--geo-gpu', '--geo-gpu-device-id', '3'])
+    assert args.geo_gpu is True
+    assert args.geo_gpu_device_id == 3
+    assert _parse_georef(['--no-geo-gpu']).geo_gpu is False
+
+
+def test_gpu_flags_forwarded_to_stabilizer():
+    """gpu / gpu_device_id must reach the stabilo Stabilizer constructor unchanged."""
+    mock_stab = MagicMock()
+    mock_stab.get_cur_trans_matrix.return_value = np.eye(3)
+    mock_stab.get_cur_num_keypoints.return_value = (12, 10)
+    mock_stab.get_cur_inliers_count.return_value = 8
+    mock_stab.get_cur_num_matches.return_value = 20
+    img = np.zeros((4, 4), dtype=np.uint8)
+    with patch('geotrax.utils.registration.Stabilizer', return_value=mock_stab) as ctor:
+        estimate_homography(img, img, logger, gpu=True, gpu_device_id=3)
+    _, kwargs = ctor.call_args
+    assert kwargs['gpu'] is True
+    assert kwargs['gpu_device_id'] == 3
+
+
+def test_compute_homography_defaults_gpu_off():
+    """The georef default path leaves GPU disabled (device 0)."""
+    mock_stab = MagicMock()
+    mock_stab.get_cur_trans_matrix.return_value = np.eye(3)
+    mock_stab.get_cur_num_keypoints.return_value = (12, 10)
+    mock_stab.get_cur_inliers_count.return_value = 60
+    mock_stab.get_cur_num_matches.return_value = 80
+    img = np.zeros((4, 4), dtype=np.uint8)
+    with patch('geotrax.utils.registration.Stabilizer', return_value=mock_stab) as ctor:
+        compute_homography(img, img, ('reference', 'ortho'), logger)
+    _, kwargs = ctor.call_args
+    assert kwargs['gpu'] is False
+    assert kwargs['gpu_device_id'] == 0
 
 
 def test_apply_homography_identity():

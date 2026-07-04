@@ -28,6 +28,13 @@ geotrax batch data/U_video_cut.mp4 -orf data/orthophotos -osf data/segmentations
 
 > **Note:** The trajectory and distribution plots generated from this 5-second sample are not statistically meaningful due to the limited sample size. Longer video clips are needed for representative results.
 
+<details>
+<summary><b>⚡ Run this on GPU</b></summary>
+
+The stabilization and georeferencing steps can be also CUDA-accelerated with `--stab-gpu` / `--geo-gpu` on a source-built CUDA OpenCV (georeferencing GPU additionally needs `georef.matching.detector_name: orb`). See [GPU acceleration](../README.md#gpu-acceleration) in the main README for the build and benchmark details.
+
+</details>
+
 **Prerequisites:** Download the required files as described in the [Sample Videos and Data](#sample-videos-and-data-for-full-pipeline-testing) section:
 
 - Orthophoto files: `orthophotos/U_center.txt`, `orthophotos/U.png`, `orthophotos/ortho_parameters.txt`

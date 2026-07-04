@@ -16,7 +16,7 @@
 - 🛰️ **Real-world output**: georeferenced, lane-resolved trajectories (WGS84 + local CRS) with per-vehicle speed, acceleration, and estimated dimensions, straight from raw BEV drone video.
 - 🎯 **Accurate detection**: [YOLOv8s vehicle detector](#detection-model) reaching **0.951 mAP@50**, trained on more than 19,000 annotated aerial images.
 - 🚗 **Flexible tracking**: four vehicle classes and [six selectable multi-object trackers](#tracking) (BoT-SORT, ByteTrack, OC-SORT, and more).
-- 🌀 **Drone-motion robust**: homography-based stabilization ([Stabilo](https://github.com/rfonod/stabilo)) plus orthophoto image registration for consistent, cross-flight coordinates.
+- 🌀 **Drone-motion robust**: homography-based stabilization ([Stabilo](https://github.com/rfonod/stabilo)) plus orthophoto image registration for consistent, cross-flight coordinates; both optionally CUDA-accelerated.
 - 📊 **Proven at scale**: powered the [Songdo Traffic](https://doi.org/10.5281/zenodo.13828383) dataset (roughly **700,000 trajectories** across **20 intersections**, fleet of **10 drones**; see [Real-World Deployment](#real-world-deployment-the-songdo-experiment)).
 - ⚙️ **One command, one config**: `geotrax batch` runs the whole pipeline; a single YAML drives every stage, with [four tuned presets](#configuration) included.
 
@@ -89,6 +89,8 @@ python -m pip install -e '.[export]'   # ONNX export dependencies
 # poetry install --extras export
 ```
 
+**Optional CUDA for image matching.** The stabilization (`--stab-gpu`) and georeferencing (`--geo-gpu`) steps can be CUDA-accelerated on top of a source-built OpenCV. Installing into such an environment needs care so the CPU OpenCV wheels do not overwrite your build; see [GPU acceleration](#gpu-acceleration) for the full setup, install-without-clobbering recipes, and a benchmark. (Object *detection* already uses CUDA automatically when available, via `ultralytics.device`.)
+
 </details>
 
 ## Quick Start
@@ -114,8 +116,8 @@ Run `geotrax -h` or `geotrax batch -h` for all options. The scale-up commands ab
 
 - **Detection**: YOLOv8s on aerial BEV imagery; detects car (incl. vans), bus, truck, and motorcycle.
 - **Tracking**: six multi-object trackers (BoT-SORT default); see [Tracking](#tracking) for a comparison; optional per-track frame-gap interpolation.
-- **Stabilization**: homography-based trajectory correction via [Stabilo](https://github.com/rfonod/stabilo) 🌀, tuned with [Stabilo-Optimize](https://github.com/rfonod/stabilo-optimize) 🎯.
-- **Georeferencing**: frame-to-orthophoto registration; outputs lat/lon, local CRS, speed, acceleration, and lane assignment per vehicle.
+- **Stabilization**: homography-based trajectory correction via [Stabilo](https://github.com/rfonod/stabilo) 🌀, tuned with [Stabilo-Optimize](https://github.com/rfonod/stabilo-optimize) 🎯; optional CUDA acceleration (`--stab-gpu`).
+- **Georeferencing**: frame-to-orthophoto registration; outputs lat/lon, local CRS, speed, acceleration, and lane assignment per vehicle; optional CUDA acceleration (`--geo-gpu`).
 - **Visualization**: track overlays on original, stabilized, or static-reference video, in five rendering modes (incl. oriented bounding boxes).
 - **Analysis**: trajectory maps, kinematic distributions, and class/dimension charts, per-video or aggregated across drones and sessions.
 - **Scaling & tooling**: batch-processes directory trees and aggregates multi-drone data; includes standalone utilities for end-to-end data preparation, training, evaluation, and validation.
@@ -129,7 +131,7 @@ Run `geotrax -h` or `geotrax batch -h` for all options. The scale-up commands ab
 - Modularized, OOP-based pipeline with custom reference frame support and georeferencing leveraging Stabilo's image-matching backend.
 - Per-class confidence thresholds.
 - SAHI-based small-object detection.
-- Batch inference, GPU-accelerated image registration, and multi-thread processing.
+- Batch inference and multi-thread processing.
 - Real-world map visualization (e.g., MovingPandas, contextily) and interactive web app.
 
 </details>
@@ -184,6 +186,156 @@ geotrax extract video.mp4 -c default_copy.yaml
 ```
 
 To switch the tracking algorithm, set `tracker.active` in the config (see [Tracking](#tracking)).
+
+</details>
+
+## GPU acceleration
+
+Object **detection** already runs on CUDA automatically whenever a compatible GPU and PyTorch build are present (via the `ultralytics.device` config key, auto by default). The **stabilization** (`--stab-gpu`) and **georeferencing** (`--geo-gpu`) image-matching steps can *optionally* be CUDA-accelerated too, through [Stabilo](https://github.com/rfonod/stabilo) 1.3.0+. This needs a CUDA-enabled OpenCV build and is Linux/Windows only. Stabilo accelerates the **ORB** detector only, so `--geo-gpu` additionally requires `georef.matching.detector_name: orb`; there is no CPU fallback, so requesting GPU without a working CUDA device raises an error.
+
+<details>
+<summary><b>⚡ Full CUDA setup & benchmarking guide</b></summary>
+
+Throughout this guide, dotted names like `ultralytics.device` or `georef.matching.detector_name` are **keys in the pipeline config**, not CLI flags. To change them, copy the bundled config once and pass your copy with `-c`:
+
+```bash
+geotrax config copy                 # writes default_copy.yaml in the current directory
+# edit default_copy.yaml, then pass it to any command:
+geotrax batch <video> ... -c default_copy.yaml
+```
+
+### 1. Build OpenCV with CUDA
+
+The PyPI OpenCV wheels are CPU-only, so you must build `opencv-contrib-python` from source with CUDA. Follow Stabilo's [`docs/cuda.md`](https://github.com/rfonod/stabilo/blob/main/docs/cuda.md), then confirm it works:
+
+```bash
+python -c "import cv2; print(cv2.__version__, cv2.cuda.getCudaEnabledDeviceCount())"   # expect: <version> 1
+```
+
+> **geo-trax needs one OpenCV module beyond the minimal stabilo build: add `video` to the `BUILD_LIST`.** The minimal list in stabilo's guide omits it, but the `sparseOptFlow` global-motion-compensation (GMC) method uses `cv2.calcOpticalFlowPyrLK` from that module. It is the default for the **BoT-SORT** (active default) and **TrackTrack** trackers, and an option for **DeepOCSORT** (`tracker.<name>.gmc_method`). GMC runs during **track association on the original, pre-stabilization frames**, so Stabilo does not make it redundant. Without `video` you get a `cv2 has no attribute 'calcOpticalFlowPyrLK'` warning and GMC silently falls back to identity. If you would rather not rebuild, set `gmc_method: none` for your active tracker (step 3), but that disables camera-motion compensation in tracking; for near-nadir BEV / quasi-stationary drone footage that is often acceptable, but check your tracking quality before relying on it.
+
+### 2. Install geo-trax without clobbering your CUDA OpenCV
+
+`ultralytics[extra]` transitively requires `opencv-python` and `opencv-python-headless`, both CPU wheels. A plain install drops them on top of your compiled `cv2/` and disables CUDA. A transitive dependency cannot be excluded in `pyproject.toml`, so use one of these:
+
+**A. Install, then restore your wheel (recommended).** Let pip install everything, then overwrite the CPU OpenCV by reinstalling the CUDA `opencv_contrib_python-*.whl` you built in step 1:
+
+```bash
+pip install -e .          # installs torch/cuda/ultralytics/..., plus (temporarily) CPU opencv
+# reinstall the wheel produced by your CUDA OpenCV build in step 1 (path is wherever you built it):
+pip install --force-reinstall --no-deps /path/to/opencv_contrib_python-*.whl
+python -c "import cv2; print(cv2.cuda.getCudaEnabledDeviceCount())"   # expect: 1
+```
+
+> If the CUDA check above reports `0` devices (or a `cv2`/CUDA error such as `module 'cv2' has no attribute 'cuda'`) immediately after the reinstall, re-activate the CUDA venv (`source .venv-cuda/bin/activate`, matching stabilo's `docs/cuda.md`) and run it again; if it persists, confirm `cv2.__file__` points into that venv's `site-packages` (see the troubleshooting in stabilo's `docs/cuda.md`). It should then report `1`.
+>
+> ⚠️ Afterwards `opencv-python` / `opencv-python-headless` stay registered but their recorded files now belong to your build. **Never** `pip uninstall opencv-python` / `opencv-python-headless`, or you will delete the shared `cv2/`.
+
+**B. Stub the CPU wheels first (no download, cleaner metadata).** Install two metadata-only packages so pip treats the requirements as already satisfied and never fetches a CPU wheel:
+
+```bash
+CVVER=$(python -c "import cv2; print(cv2.__version__)")
+for pkg in opencv-python opencv-python-headless; do
+  d=$(mktemp -d)
+  cat > "$d/pyproject.toml" <<EOF
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+[project]
+name = "$pkg"
+version = "$CVVER"
+[tool.setuptools]
+py-modules = []
+EOF
+  pip install --no-deps "$d" && rm -rf "$d"
+done
+pip install -e .          # opencv is satisfied by the stubs; your CUDA build is untouched
+```
+
+### 3. Enable GPU per stage
+
+| Stage | How | Notes |
+|-------|-----|-------|
+| Detection | automatic | `ultralytics.device` (auto = CUDA when available) |
+| Stabilization | `--stab-gpu` | works out of the box (default detector is ORB) |
+| Georeferencing | `--geo-gpu` + `detector_name: orb` | set via a copied config (below) |
+
+Only ORB is CUDA-accelerated, and the georeferencing detector is not a CLI flag, so enable georef GPU through a copied config:
+
+```bash
+geotrax config copy                       # writes default_copy.yaml
+# edit default_copy.yaml:
+#   georef.matching.detector_name: orb    # required for --geo-gpu
+#   tracker.botsort.gmc_method: none      # ONLY if you did not add 'video' to BUILD_LIST (step 1); disables tracker GMC, verify tracking quality
+```
+
+These are the GPU-accelerated analogues of the two reproduce commands in [`data/README.md`](data/README.md). Their outputs are *equivalent, not identical* to the committed `data/results-pixel/` and `data/results-full/`: the CUDA path georeferences with ORB (RootSIFT is not GPU-accelerated), GPU feature extraction is not bit-identical to CPU, and with `gmc_method: none` the tracker runs without motion compensation.
+
+```bash
+# Pixel-coordinate results: GPU stabilization, no georeferencing
+geotrax batch data/U_video_cut.mp4 --no-geo --show-class-names --show-conf --stab-gpu -c default_copy.yaml
+
+# Full pipeline: GPU stabilization + georeferencing (needs the orthophoto/segmentation/master-frame data; see data/README.md)
+geotrax batch data/U_video_cut.mp4 -orf data/orthophotos -osf data/segmentations -mf data/master_frames \
+  --show-lanes --plot-segmentations -vm 0 3 --stab-gpu --geo-gpu -c default_copy.yaml
+```
+
+### 4. Benchmark: detection-only CUDA vs fully CUDA
+
+To isolate the GPU effect, disable the CPU-bound visualization and plotting (`--no-save --no-show --no-plot-save --no-plot-show`) and wipe a scratch output folder before each run (a clean, non-skipped run that leaves your real results untouched). Do **not** pass `--recompute`: the master→orthophoto homography is a one-time, expensive registration normally cached in the master-frames folder, so leaving it cached keeps the benchmark on the per-video work (detection, stabilization, reference→master registration).
+
+Three configurations are compared:
+- **geo-trax default (CPU)**: the shipped defaults with RootSIFT georeferencing; what a CPU-only user actually runs.
+- **ORB (CPU)**: the GPU-tuned config on CPU; a controlled, same-config baseline for the GPU run.
+- **fully CUDA**: the same ORB config with `--stab-gpu --geo-gpu`.
+
+The default run needs no config file: with no `-c`, geo-trax uses its shipped defaults (RootSIFT georeferencing, CPU for both stabilization and georeferencing). The ORB runs use your `default_copy.yaml` (`georef.matching.detector_name: orb`, `tracker.botsort.gmc_method: none`).
+
+With [hyperfine](https://github.com/sharkdp/hyperfine):
+
+```bash
+OUT=/tmp/geotrax_bench
+COMMON="geotrax batch data/U_video_cut.mp4 -orf data/orthophotos -osf data/segmentations -mf data/master_frames --no-save --no-show --no-plot-save --no-plot-show -of $OUT"
+hyperfine --warmup 1 --runs 5 --prepare "rm -rf $OUT" \
+  -n "geo-trax default (CPU, RootSIFT)" "$COMMON" \
+  -n "ORB (CPU)"                        "$COMMON -c default_copy.yaml" \
+  -n "fully CUDA (ORB)"                 "$COMMON -c default_copy.yaml --stab-gpu --geo-gpu"
+```
+
+Or without extra tools:
+
+```bash
+bench () { local label="$1"; shift; rm -rf /tmp/geotrax_bench
+  local t0=$(date +%s.%N)
+  geotrax batch data/U_video_cut.mp4 -orf data/orthophotos -osf data/segmentations -mf data/master_frames \
+    --no-save --no-show --no-plot-save --no-plot-show -y -o -of /tmp/geotrax_bench "$@" >/tmp/bench.log 2>&1 \
+    && awk -v a="$t0" -v b="$(date +%s.%N)" -v l="$label" 'BEGIN{printf "%-28s %.1f s\n", l, b-a}' \
+    || echo "$label FAILED (see /tmp/bench.log)"; }
+bench "geo-trax default (CPU)"
+bench "ORB (CPU)"        -c default_copy.yaml
+bench "fully CUDA (ORB)" -c default_copy.yaml --stab-gpu --geo-gpu
+```
+
+Example on an **NVIDIA RTX 4090** (5-second sample clip, 150 frames; hyperfine mean ± σ over 5 runs):
+
+<details>
+<summary>Benchmark system</summary>
+
+- **OS**: Ubuntu 24.04.4 LTS (Linux 6.8, x86_64)
+- **CPU**: 13th Gen Intel Core i9-13900KF (24 cores / 32 threads)
+- **RAM**: 62 GiB
+- **GPU**: NVIDIA GeForce RTX 4090 (24 GB, driver 580.159.03)
+- **Software**: Python 3.11.5, torch 2.12.1 (CUDA 13.0), OpenCV 4.13.0, stabilo 1.3.0
+
+</details>
+
+| Pipeline | Wall time | vs default |
+|----------|-----------|------------|
+| CPU stabilization and georeferencing (geo-trax defaults) | 273.7 ± 0.9 s | 1× |
+| CPU stabilization and georeferencing (GPU-matched config) | 348.4 ± 0.4 s | 0.8× |
+| Fully CUDA (GPU-matched config) | 16.4 ± 2.0 s | **16.7×** |
+
+> Fully CUDA is **16.7× faster than the geo-trax default** and **21.3× faster than the same ORB config on CPU** (row 2). Row 1 is the shipped defaults (RootSIFT georeferencing); rows 2–3 use the GPU-matched config, which switches georeferencing to ORB so the CPU and GPU runs do identical work (only ORB is CUDA-accelerated). Row 2 is slower than row 1 because ORB at a 250k feature ceiling with brute-force matching is costlier on CPU than RootSIFT. Treat these as a **relative** comparison, not absolute throughput: geo-trax's defaults favor maximum accuracy and reliability, with detection at **1920×1920**, stabilization at only a **0.5 downscale** (roughly 2K per frame on this 4K clip) with a high `max_features` ceiling, and RootSIFT georeferencing with a very high `max_features` and conservative MAGSAC++ matcher/projection settings, all against an **8000×8000** orthophoto. Lighter settings would cut absolute times across the board; the point is the CPU→GPU ratio.
 
 </details>
 
@@ -513,7 +665,7 @@ If you use **Geo-trax** in your research or software, please cite:
       title = {Geo-trax: A Comprehensive Framework for Georeferenced Vehicle Trajectory Extraction from Drone Imagery},
       year = {2026},
       month = jul,
-      version = {1.1.1},
+      version = {1.2.0},
       doi = {10.5281/zenodo.12119542},
       url = {https://github.com/rfonod/geo-trax},
       license = {MIT}

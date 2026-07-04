@@ -72,6 +72,10 @@ Processing Options:
     --interpolate / --no-interpolate : Fill per-track frame gaps with linear interpolation; adds
                           an is_interpolated column to the .txt output (0 = detected, 1 = synthetic).
                           Defaults to cfg -> extraction -> interpolate (default: false).
+    --stab-gpu / --no-stab-gpu, -sg : CUDA-accelerate stabilization (requires a CUDA-enabled OpenCV
+                          build; no CPU fallback). Defaults to cfg -> stabilo -> gpu.
+    --stab-gpu-device-id, -sgid <int> : CUDA device index used when stabilization GPU is enabled.
+                          Defaults to cfg -> stabilo -> gpu_device_id.
     For full detection and tracking control (model, IoU, image size, tracker settings, etc.),
     edit cfg -> ultralytics and cfg -> tracker in the pipeline config (run 'geotrax config copy').
 
@@ -96,6 +100,11 @@ Georeferencing Options:
                           --plot-segmentations is enabled, the corresponding overlay PNG files
                           used as plot backgrounds. Defaults to cfg -> input -> segmentation_folder,
                           then '<ortho-folder>/segmentations'.
+    --geo-gpu / --no-geo-gpu, -gg  : CUDA-accelerate georeferencing image registration (requires
+                          cfg -> georef -> matching -> detector_name: orb AND a CUDA-enabled OpenCV
+                          build; no CPU fallback). Defaults to cfg -> georef -> matching -> gpu.
+    --geo-gpu-device-id, -ggid <int> : CUDA device index used when georeferencing GPU is enabled.
+                          Defaults to cfg -> georef -> matching -> gpu_device_id.
 
 Visualization Options:
     --save / --no-save, -s  : Save the annotated output video to file.

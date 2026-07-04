@@ -86,6 +86,8 @@ batch:
 
 # --- Extraction stage ---
 # Stabilization, short-track removal, and vehicle dimension estimation for 'geotrax extract'.
+# The extract stage also consumes the 'ultralytics:' (YOLO detection) and 'tracker:' sections below;
+# object-detection CUDA/GPU is set there via ultralytics -> device (default: auto, uses CUDA/GPU when available).
 extraction:
   model: hf://rfonod/geo-trax/geotrax_hbb_yolov8s_1920_v1.pt  # Detection model: a local file path OR an 'hf://<org>/<repo>/<path/to/file>.pt' reference (auto-downloaded & cached); default = the bundled geo-trax model — CLI: --model
   class_rename: null    # class-id → label override, e.g. {0: vehicle, 1: bus, 2: truck, 3: bike}; or a .yaml/.json path; null = model's own names — CLI: --class-names / -cn 0=vehicle 1=bus
@@ -142,8 +144,9 @@ stabilo:
   kaze_threshold: 0.01  # KAZE response threshold; lower = more keypoints; (0.0, inf]
   akaze_threshold: 0.01 # AKAZE response threshold; lower = more keypoints; (0.0, inf]
 
-  # Computation
-  gpu: false       # Use GPU-accelerated operations where available; [true, false]
+  # Computation (GPU accelerates the ORB detector only; requires a CUDA-enabled OpenCV build — see stabilo docs/cuda.md)
+  gpu: false       # Use GPU-accelerated operations where available; [true, false] — CLI: --stab-gpu / --no-stab-gpu
+  gpu_device_id: 0 # CUDA device index used when gpu is true (multi-GPU machines); [0, inf) — CLI: --stab-gpu-device-id
 
   # Diagnostics
   viz: false       # Retain keypoints and match visualizations in memory (for debugging); [true, false]
@@ -175,6 +178,8 @@ georef:
     ransac_max_iter: 10000         # Maximum RANSAC iterations; (0, inf]
     ransac_confidence: 0.999999    # Required probability that the best model is correct; (0.0, 1.0]
     rsift_eps: 0.00000001          # Epsilon added before RootSIFT L1-normalisation to avoid division by zero; > 0.0, keep very small (e.g. 1e-8)
+    gpu: false                     # GPU-accelerate registration; requires detector_name: orb AND a CUDA-enabled OpenCV build; [true, false] — CLI: --geo-gpu / --no-geo-gpu
+    gpu_device_id: 0               # CUDA device index used when gpu is true (multi-GPU machines); [0, inf) — CLI: --geo-gpu-device-id
 
   # Trajectory kinematics filtering and output quality thresholds
   filtering:
@@ -242,7 +247,7 @@ ultralytics:
   # Model — set in the 'extraction:' section above (extraction -> model); accepts a local path or an hf:// reference — CLI: --model
   data:         # (str, optional) path to data file, e.g. coco8.yaml
   imgsz: 1920   # (int | list) inference image size (square int, or [h,w])
-  device:       # (int | str | list) device: 0/[0,1,2,3] for CUDA, 'cpu'/'mps', or -1/[-1,-1] to auto-select idle GPUs
+  device:       # (int | str | list) detection compute device; blank = auto (CUDA/GPU when available, else CPU); 0/[0,1,2,3] for CUDA, 'cpu'/'mps', or -1/[-1,-1] to auto-select idle GPUs
 
   # Detection / inference
   conf: 0.4           # (float) object confidence threshold for detection; [0.0, 1.0]

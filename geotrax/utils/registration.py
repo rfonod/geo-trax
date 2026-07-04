@@ -34,6 +34,8 @@ def estimate_homography(
     ransac_max_iter: int = 10000,
     ransac_confidence: float = 0.999999,
     rsift_eps: float = 1e-8,
+    gpu: bool = False,
+    gpu_device_id: int = 0,
 ) -> tuple:
     """
     Estimate the homography H mapping source -> destination image coordinates.
@@ -45,6 +47,11 @@ def estimate_homography(
     The detector, matcher, filter and RANSAC parameters are configurable; the geometry of
     the registration (projective transform, current-frame query, no masking/downsampling,
     1.0 reference multiplier) is fixed internally.
+
+    Set `gpu=True` (with `gpu_device_id` selecting the CUDA device) to CUDA-accelerate the
+    registration. stabilo only GPU-accelerates the ORB detector, so `gpu=True` requires
+    `detector_name='orb'` and a CUDA-enabled OpenCV build; otherwise stabilo raises ValueError
+    (there is no CPU fallback).
 
     If detection or matching fails, `max_features` is halved and retried (down to >10000).
 
@@ -74,6 +81,8 @@ def estimate_homography(
             ransac_confidence=ransac_confidence,
             ransac_epipolar_threshold=ransac_epipolar_threshold,
             ransac_max_iter=ransac_max_iter,
+            gpu=gpu,
+            gpu_device_id=gpu_device_id,
         )
         stabilizer.set_ref_frame(img_dst)
         stabilizer.stabilize(img_src)

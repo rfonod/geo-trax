@@ -11,6 +11,7 @@ from unittest.mock import patch
 import numpy as np
 
 from geotrax.extract import (
+    add_processing_args,
     aggregate_results,
     calculate_unique_classes,
     estimate_vehicle_dimensions,
@@ -21,6 +22,25 @@ from geotrax.extract import (
 from geotrax.utils.constants import DEFAULT_TRACK_BUFFER
 
 logger = logging.getLogger(__name__)
+
+
+def _parse_processing(argv):
+    parser = argparse.ArgumentParser()
+    add_processing_args(parser)
+    return parser.parse_args(argv)
+
+
+def test_stab_gpu_flags_default_to_none():
+    args = _parse_processing([])
+    assert args.stab_gpu is None
+    assert args.stab_gpu_device_id is None
+
+
+def test_stab_gpu_flags_parse():
+    args = _parse_processing(['--stab-gpu', '--stab-gpu-device-id', '2'])
+    assert args.stab_gpu is True
+    assert args.stab_gpu_device_id == 2
+    assert _parse_processing(['--no-stab-gpu']).stab_gpu is False
 
 
 def test_remove_short_tracks_drops_below_min_length():
