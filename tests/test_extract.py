@@ -5,20 +5,31 @@
 
 import argparse
 import logging
+import sys
+import types
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import numpy as np
+import pytest
+from ultralytics.trackers.bot_sort import BOTSORT
 
 from geotrax.extract import (
     add_processing_args,
     aggregate_results,
     calculate_unique_classes,
+    create_manual_tracker,
+    detect_frame_sahi,
     estimate_vehicle_dimensions,
     interpolate_tracks,
+    load_sahi_detector,
     postprocess_tracks,
     remove_short_tracks,
+    sahi_predictions_to_boxes,
+    validate_sahi_tracker,
 )
+from geotrax.utils.config_utils import load_config
 from geotrax.utils.constants import DEFAULT_TRACK_BUFFER
 
 logger = logging.getLogger(__name__)
@@ -41,6 +52,131 @@ def test_stab_gpu_flags_parse():
     assert args.stab_gpu is True
     assert args.stab_gpu_device_id == 2
     assert _parse_processing(['--no-stab-gpu']).stab_gpu is False
+
+
+def test_sahi_flag_defaults_to_none():
+    assert _parse_processing([]).sahi is None
+
+
+def test_sahi_flag_parses():
+    assert _parse_processing(['--sahi']).sahi is True
+    assert _parse_processing(['--no-sahi']).sahi is False
+
+
+# --- SAHI helpers -------------------------------------------------------------
+
+def _make_sahi_pred(x1, y1, x2, y2, score, cls):
+    # Duck-typed stand-in for a sahi ObjectPrediction; no sahi install needed.
+    return SimpleNamespace(
+        bbox=SimpleNamespace(to_xyxy=lambda: [x1, y1, x2, y2]),
+        score=SimpleNamespace(value=score),
+        category=SimpleNamespace(id=cls),
+    )
+
+
+def test_sahi_predictions_to_boxes_converts_and_filters_classes():
+    preds = [_make_sahi_pred(10, 20, 30, 60, 0.9, 2), _make_sahi_pred(0, 0, 10, 10, 0.5, 7)]
+    boxes = sahi_predictions_to_boxes(preds, (1080, 1920), classes=[0, 1, 2, 3])
+    assert len(boxes) == 1  # class 7 filtered out
+    np.testing.assert_allclose(boxes.xywh.numpy(force=True), [[20, 40, 20, 40]])  # xyxy -> center xywh
+    assert boxes.cls.item() == 2
+    assert boxes.conf.item() == pytest.approx(0.9)
+    assert boxes.id is None  # detections carry no track IDs yet
+
+
+def test_sahi_predictions_to_boxes_no_class_filter_keeps_all():
+    preds = [_make_sahi_pred(10, 20, 30, 60, 0.9, 2), _make_sahi_pred(0, 0, 10, 10, 0.5, 7)]
+    assert len(sahi_predictions_to_boxes(preds, (1080, 1920), classes=None)) == 2
+
+
+def test_sahi_predictions_to_boxes_empty():
+    boxes = sahi_predictions_to_boxes([], (1080, 1920), classes=[0, 1, 2, 3])
+    assert len(boxes) == 0
+
+
+def _fake_sahi_modules(prediction_result):
+    sahi_mod = types.ModuleType('sahi')
+    sahi_mod.AutoDetectionModel = SimpleNamespace(from_pretrained=lambda **kwargs: None)
+    predict_mod = types.ModuleType('sahi.predict')
+    predict_mod.get_sliced_prediction = lambda *a, **k: prediction_result
+    sahi_mod.predict = predict_mod
+    return {'sahi': sahi_mod, 'sahi.predict': predict_mod}
+
+
+def _default_sahi_cfg(enable=True):
+    return {
+        'enable': enable, 'slice_height': 1080, 'slice_width': 1920,
+        'overlap_height_ratio': 0.2, 'overlap_width_ratio': 0.2,
+        'perform_standard_pred': True, 'postprocess_type': 'GREEDYNMM',
+        'postprocess_match_metric': 'IOS', 'postprocess_match_threshold': 0.5,
+        'class_agnostic': True,
+    }
+
+
+def test_detect_frame_sahi_maps_tracker_output_to_boxes():
+    prediction = SimpleNamespace(
+        object_prediction_list=[_make_sahi_pred(10, 20, 30, 60, 0.9, 2)],
+        durations_in_seconds={'slice': 0.001, 'prediction': 0.002},
+    )
+    tracker = SimpleNamespace(update=lambda det, img: np.array([[10, 20, 30, 60, 5, 0.9, 2, 0]]))
+    frame = np.zeros((108, 192, 3), dtype=np.uint8)
+    with patch.dict(sys.modules, _fake_sahi_modules(prediction)):
+        boxes, speed = detect_frame_sahi(None, tracker, frame, _default_sahi_cfg(), classes=[0, 1, 2, 3])
+    assert boxes.id.item() == 5
+    np.testing.assert_allclose(boxes.xywh.numpy(force=True), [[20, 40, 20, 40]])
+    assert boxes.cls.item() == 2
+    assert boxes.conf.item() == pytest.approx(0.9)
+    assert set(speed) == {'preprocess', 'inference', 'postprocess'}  # keys used by update_progress_bar
+
+
+def test_detect_frame_sahi_keeps_detections_when_tracker_returns_nothing():
+    # Mirrors ultralytics: with no confirmed tracks, the raw detections survive with id None
+    # (written as -1 downstream) instead of dropping the frame.
+    prediction = SimpleNamespace(
+        object_prediction_list=[_make_sahi_pred(10, 20, 30, 60, 0.9, 2)],
+        durations_in_seconds={},
+    )
+    tracker = SimpleNamespace(update=lambda det, img: np.empty((0, 8)))
+    frame = np.zeros((108, 192, 3), dtype=np.uint8)
+    with patch.dict(sys.modules, _fake_sahi_modules(prediction)):
+        boxes, _ = detect_frame_sahi(None, tracker, frame, _default_sahi_cfg(), classes=None)
+    assert len(boxes) == 1
+    assert boxes.id is None
+
+
+def test_create_manual_tracker_botsort_from_default_config():
+    full = load_config('default', logger)
+    tracker = create_manual_tracker({'tracker_active': 'botsort', 'tracker_params': full['tracker']['botsort']})
+    assert isinstance(tracker, BOTSORT)
+
+
+def test_validate_sahi_tracker_rejects_tracktrack():
+    with pytest.raises(ValueError, match='tracktrack'):
+        validate_sahi_tracker({'tracker_active': 'tracktrack', 'tracker_params': {}})
+
+
+def test_validate_sahi_tracker_rejects_auto_reid():
+    with pytest.raises(ValueError, match='ReID'):
+        validate_sahi_tracker({'tracker_active': 'botsort', 'tracker_params': {'with_reid': True, 'model': 'auto'}})
+
+
+def test_validate_sahi_tracker_accepts_botsort_defaults():
+    validate_sahi_tracker({'tracker_active': 'botsort', 'tracker_params': {'with_reid': False, 'model': 'auto'}})
+
+
+def test_load_sahi_detector_missing_dependency_exits(caplog):
+    config = {'model': 'no/such/model.pt', 'conf': 0.25, 'device': None, 'imgsz': 1920}
+    with patch.dict(sys.modules, {'sahi': None}), caplog.at_level(logging.CRITICAL):
+        with pytest.raises(SystemExit):
+            load_sahi_detector(config, logger)
+    assert any("geo-trax[sahi]" in r.message for r in caplog.records)
+
+
+def test_load_sahi_detector_rejects_multi_gpu_device_list():
+    config = {'model': 'no/such/model.pt', 'conf': 0.25, 'device': [0, 1], 'imgsz': 1920}
+    with patch.dict(sys.modules, _fake_sahi_modules(None)):
+        with pytest.raises(ValueError, match='Multi-GPU'):
+            load_sahi_detector(config, logger)
 
 
 def test_remove_short_tracks_drops_below_min_length():
