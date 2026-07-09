@@ -72,6 +72,9 @@ Processing Options:
     --interpolate / --no-interpolate : Fill per-track frame gaps with linear interpolation; adds
                           an is_interpolated column to the .txt output (0 = detected, 1 = synthetic).
                           Defaults to cfg -> extraction -> interpolate (default: false).
+    --sahi / --no-sahi    : Detect via SAHI sliced inference (improves small-object recall; requires
+                          'pip install geo-trax[sahi]'; roughly 5x slower per frame). Slicing parameters
+                          live in cfg -> extraction -> sahi. Defaults to cfg -> extraction -> sahi -> enable.
     --stab-gpu / --no-stab-gpu, -sg : CUDA-accelerate stabilization (requires a CUDA-enabled OpenCV
                           build; no CPU fallback). Defaults to cfg -> stabilo -> gpu.
     --stab-gpu-device-id, -sgid <int> : CUDA device index used when stabilization GPU is enabled.

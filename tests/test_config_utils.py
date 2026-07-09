@@ -82,6 +82,20 @@ def test_presets_expose_gpu_keys(preset):
     assert full['georef']['matching']['gpu_device_id'] == 0
 
 
+@pytest.mark.parametrize('preset', ['default', 'confident', 'lenient', 'stable'])
+def test_presets_expose_sahi_block(preset):
+    """Every preset carries the full SAHI sub-block in extraction, disabled by default."""
+    sahi = load_config(preset, logger)['extraction']['sahi']
+    assert sahi['enable'] is False
+    assert sahi['slice_height'] == 1080
+    assert sahi['slice_width'] == 1920
+    assert set(sahi) == {
+        'enable', 'slice_height', 'slice_width', 'overlap_height_ratio', 'overlap_width_ratio',
+        'perform_standard_pred', 'postprocess_type', 'postprocess_match_metric',
+        'postprocess_match_threshold', 'class_agnostic',
+    }
+
+
 @pytest.mark.parametrize(
     'tracker', ['botsort', 'bytetrack', 'ocsort', 'deepocsort', 'fasttrack', 'tracktrack']
 )

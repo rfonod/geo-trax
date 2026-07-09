@@ -5,7 +5,7 @@
 # Key Sections:
 # - [build-system]: Build requirements and backend (setuptools).
 # - [project]: Metadata, required and optional dependencies.
-# - [project.optional-dependencies]: Optional packages for development (dev) and model export (export).
+# - [project.optional-dependencies]: Optional packages for development (dev), model export (export), and SAHI sliced inference (sahi).
 # - [project.scripts]: The 'geotrax' console command (see geotrax/cli.py for subcommands).
 # - [tool.*]: Tool configurations (setuptools, ruff, pytest).
 #
@@ -14,12 +14,15 @@
 #   pip install -e .                    # core; -e (editable) reflects code changes without reinstalling
 #   pip install -e '.[dev]'             # core + dev (pip)
 #   pip install -e '.[export]'          # core + export (pip)
+#   pip install -e '.[sahi]'            # core + SAHI sliced inference (pip)
 #   poetry install                      # core (Poetry; auto-manages virtualenv)
 #   poetry install --extras dev         # core + dev (Poetry)
 #   poetry install --extras export      # core + export (Poetry)
+#   poetry install --extras sahi        # core + sahi (Poetry)
 #   uv venv --python 3.11 && uv pip install -e .           # core (uv; faster)
 #   uv venv --python 3.11 && uv pip install -e '.[dev]'    # core + dev (uv)
 #   uv venv --python 3.11 && uv pip install -e '.[export]' # core + export (uv)
+#   uv venv --python 3.11 && uv pip install -e '.[sahi]'   # core + sahi (uv)
 
 [build-system]
 requires = ["setuptools>=77.0", "wheel"]
@@ -56,7 +59,7 @@ dependencies = [
     "ultralytics[extra]>=8.4.80,<9.0",
     "huggingface_hub>=0.30",
     "lapx>=0.5.2",
-    "stabilo>=1.3.0",
+    "stabilo>=1.3.1",
     "geopandas>=1.0.0",
     "matplotlib>=3.3.0",
     "seaborn>=0.11.0",
@@ -73,6 +76,9 @@ dev = [
 ]
 export = [
     "ultralytics[export-base]",  # ONNX export/optimization/runtime via the Ultralytics export backend (onnx, onnxslim, onnxruntime, ...)
+]
+sahi = [
+    "sahi>=0.11.21",  # SAHI sliced inference; 0.11.20 added the 'ultralytics' model type, 0.11.21 dropped the numpy<2 pin
 ]
 
 [project.urls]

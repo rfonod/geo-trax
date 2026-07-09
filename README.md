@@ -2,7 +2,7 @@
 
 [![GitHub Release](https://img.shields.io/github/v/release/rfonod/geo-trax?include_prereleases)](https://github.com/rfonod/geo-trax/releases) [![PyPI - Version](https://img.shields.io/pypi/v/geo-trax)](https://pypi.org/project/geo-trax/) [![PyPI - Total Downloads](https://img.shields.io/pepy/dt/geo-trax?label=total%20downloads)](https://pepy.tech/project/geo-trax) [![PyPI - Downloads per Month](https://img.shields.io/pypi/dm/geo-trax?color=%234c1)](https://pypi.org/project/geo-trax/) [![CI](https://github.com/rfonod/geo-trax/actions/workflows/ci.yml/badge.svg)](https://github.com/rfonod/geo-trax/actions/workflows/ci.yml) [![Python](https://img.shields.io/badge/python-3.9--3.13-blue)](https://www.python.org/) [![License](https://img.shields.io/github/license/rfonod/geo-trax)](https://github.com/rfonod/geo-trax/blob/main/LICENSE) [![GitHub Issues](https://img.shields.io/github/issues/rfonod/geo-trax)](https://github.com/rfonod/geo-trax/issues) [![Open Access](https://img.shields.io/badge/Journal-10.1016%2Fj.trc.2025.105205-blue)](https://doi.org/10.1016/j.trc.2025.105205) [![arXiv](https://img.shields.io/badge/arXiv-2411.02136-b31b1b.svg)](https://arxiv.org/abs/2411.02136) [![Archived Code](https://img.shields.io/badge/Zenodo-Software%20Archive-blue)](https://zenodo.org/doi/10.5281/zenodo.12119542) [![Hugging Face](https://img.shields.io/badge/🤗%20Model-rfonod%2Fgeo--trax-yellow)](https://huggingface.co/rfonod/geo-trax) [![Hugging Face Space](https://img.shields.io/badge/🤗%20Space-Live%20Demo-yellow)](https://huggingface.co/spaces/rfonod/geo-trax) [![Project Website](https://img.shields.io/badge/REAL%20Lab-Geo--trax-informational)](https://www.real-lab.ch/geo-trax) [![YouTube](https://img.shields.io/badge/YouTube-Video-red?logo=youtube&logoColor=red)](https://youtu.be/gOGivL9FFLk)
 
-**Geo-trax** (GEO-referenced TRAjectory eXtraction) is a comprehensive pipeline that extracts high-accuracy, georeferenced vehicle trajectories from high-altitude drone imagery. Built for quasi-stationary aerial monitoring of urban traffic, it turns raw bird's-eye view (BEV) drone footage into precise, real-world vehicle trajectories. The framework combines YOLO detection, multi-object tracking, and video stabilization with a robust orthophoto-based georeferencing stage, producing GNSS-tagged, lane-resolved trajectories that are spatially and temporally consistent and ready for large-scale traffic analysis and simulation. It is optimized for urban intersections and arterial corridors, where high-fidelity, vehicle-level insights drive intelligent transportation systems and digital twin applications.
+**Geo-trax** (GEO-referenced TRAjectory eXtraction) is a comprehensive pipeline that extracts high-accuracy, georeferenced vehicle trajectories from high-altitude drone imagery. Built for quasi-stationary aerial monitoring of urban traffic, it turns raw bird's-eye view (BEV) drone footage into precise, real-world vehicle trajectories. The framework combines YOLO detection, multi-object tracking, and video stabilization with a robust orthophoto-based georeferencing stage, producing geo-coordinated, lane-resolved trajectories that are spatially and temporally consistent and ready for large-scale traffic analysis and simulation. It is optimized for urban intersections and arterial corridors, where high-fidelity, vehicle-level insights drive intelligent transportation systems and digital twin applications.
 
 ![Geo-trax Output Visualization](https://raw.githubusercontent.com/rfonod/geo-trax/main/assets/geo-trax_visualization.webp)
 
@@ -79,14 +79,16 @@ python -m pip install -e .         # pip
 # poetry install                   # Poetry (auto-manages its own virtualenv; skip the venv step)
 ```
 
-**Optional dependency groups** (development/testing tools, ONNX export):
+**Optional dependency groups** (development/testing tools, ONNX export, SAHI sliced inference):
 
 ```bash
 python -m pip install -e '.[dev]'      # development + test tooling
 python -m pip install -e '.[export]'   # ONNX export dependencies
+python -m pip install -e '.[sahi]'     # SAHI sliced inference for small-object detection (--sahi)
 # uv pip install -e '.[dev]'           # uv equivalents
 # poetry install --extras dev          # Poetry equivalents
 # poetry install --extras export
+# poetry install --extras sahi
 ```
 
 **Optional CUDA for image matching.** The stabilization (`--stab-gpu`) and georeferencing (`--geo-gpu`) steps can be CUDA-accelerated on top of a source-built OpenCV. Installing into such an environment needs care so the CPU OpenCV wheels do not overwrite your build; see [GPU acceleration](#gpu-acceleration) for the full setup, install-without-clobbering recipes, and a benchmark. (Object *detection* already uses CUDA automatically when available, via `ultralytics.device`.)
@@ -114,7 +116,7 @@ Run `geotrax -h` or `geotrax batch -h` for all options. The scale-up commands ab
 <details>
 <summary><b>📋 Full Feature Overview</b></summary>
 
-- **Detection**: YOLOv8s on aerial BEV imagery; detects car (incl. vans), bus, truck, and motorcycle.
+- **Detection**: YOLOv8s on aerial BEV imagery; detects car (incl. vans), bus, truck, and motorcycle; optional [SAHI](https://github.com/obss/sahi) sliced inference for improved small-object recall (`--sahi`).
 - **Tracking**: six multi-object trackers (BoT-SORT default); see [Tracking](#tracking) for a comparison; optional per-track frame-gap interpolation.
 - **Stabilization**: homography-based trajectory correction via [Stabilo](https://github.com/rfonod/stabilo) 🌀, tuned with [Stabilo-Optimize](https://github.com/rfonod/stabilo-optimize) 🎯; optional CUDA acceleration (`--stab-gpu`).
 - **Georeferencing**: frame-to-orthophoto registration; outputs lat/lon, local CRS, speed, acceleration, and lane assignment per vehicle; optional CUDA acceleration (`--geo-gpu`).
@@ -130,7 +132,6 @@ Run `geotrax -h` or `geotrax batch -h` for all options. The scale-up commands ab
 - Comprehensive documentation in a dedicated `docs/` folder. A [`tools/README.md`](tools/README.md) index already covers the auxiliary scripts.
 - Modularized, OOP-based pipeline with custom reference frame support and georeferencing leveraging Stabilo's image-matching backend.
 - Per-class confidence thresholds.
-- SAHI-based small-object detection.
 - Batch inference and multi-thread processing.
 - Real-world map visualization (e.g., MovingPandas, contextily) and interactive web app.
 
@@ -191,7 +192,7 @@ To switch the tracking algorithm, set `tracker.active` in the config (see [Track
 
 ## GPU acceleration
 
-Object **detection** already runs on CUDA automatically whenever a compatible GPU and PyTorch build are present (via the `ultralytics.device` config key, auto by default). The **stabilization** (`--stab-gpu`) and **georeferencing** (`--geo-gpu`) image-matching steps can *optionally* be CUDA-accelerated too, through [Stabilo](https://github.com/rfonod/stabilo) 1.3.0+. This needs a CUDA-enabled OpenCV build and is Linux/Windows only. Stabilo accelerates the **ORB** detector only, so `--geo-gpu` additionally requires `georef.matching.detector_name: orb`; there is no CPU fallback, so requesting GPU without a working CUDA device raises an error.
+Object **detection** already runs on CUDA automatically whenever a compatible GPU and PyTorch build are present (via the `ultralytics.device` config key, auto by default). The **stabilization** (`--stab-gpu`) and **georeferencing** (`--geo-gpu`) image-matching steps can *optionally* be CUDA-accelerated too, through [Stabilo](https://github.com/rfonod/stabilo) 1.3.1+. This needs a CUDA-enabled OpenCV build and is Linux/Windows only. Stabilo accelerates the **ORB** detector only, so `--geo-gpu` additionally requires `georef.matching.detector_name: orb`; there is no CPU fallback, so requesting GPU without a working CUDA device raises an error.
 
 <details>
 <summary><b>⚡ Full CUDA setup & benchmarking guide</b></summary>
@@ -355,6 +356,17 @@ The default detector is **YOLOv8s** (HBB, 1920 × 1920 px, ~11 M parameters), tr
 
 To use a different model, point `--model` (CLI) or `extraction.model` (config) to a local `.pt` path or `hf://<org>/<repo>/<file>.pt`; any [Ultralytics](https://github.com/ultralytics/ultralytics)-compatible model works.
 
+### Small-Object Detection with SAHI
+
+For footage where vehicles are near the detection floor (higher altitudes, sub-4K sensors), the extraction stage can optionally run [SAHI](https://github.com/obss/sahi) sliced inference: each frame is split into overlapping slices, the detector runs on every slice (plus one full-frame pass), and the results are merged before tracking. This substantially improves tiny-object recall at roughly 5x the per-frame detection cost with the default 1920 x 1080 slices.
+
+```bash
+python -m pip install -e '.[sahi]'   # one-time install of the optional dependency
+geotrax extract video.mp4 --sahi     # also available on 'geotrax batch'
+```
+
+Slice size, overlap, and merge settings live in `cfg -> extraction -> sahi` (run `geotrax config copy` to edit them). SAHI mode honors the `ultralytics` config keys `conf`, `device`, `imgsz` (applied per slice), and `classes`; the NMS-related keys (`iou`, `max_det`, `agnostic_nms`, etc.) are superseded by the SAHI merge settings. It supports YOLO models only and cannot be combined with the `tracktrack` tracker or with ReID model `auto` (both need a live Ultralytics predictor).
+
 ### Custom Model Training
 
 Training and export scripts for custom YOLO detectors live in `train/`, with a SLURM wrapper for HPC clusters. See [train/README.md](train/README.md).
@@ -403,6 +415,9 @@ geotrax batch video.mp4 -c path/to/custom_config.yaml
 
 # Fill per-track detection gaps with linear interpolation (adds is_interpolated column to .txt output)
 geotrax batch video.mp4 --no-geo --interpolate
+
+# SAHI sliced inference for small objects (requires: pip install 'geo-trax[sahi]')
+geotrax batch video.mp4 --no-geo --sahi
 
 # Regenerate visualization without re-running extraction
 geotrax batch video.mp4 --viz-only --save
@@ -665,7 +680,7 @@ If you use **Geo-trax** in your research or software, please cite:
       title = {Geo-trax: A Comprehensive Framework for Georeferenced Vehicle Trajectory Extraction from Drone Imagery},
       year = {2026},
       month = jul,
-      version = {1.2.0},
+      version = {1.3.0},
       doi = {10.5281/zenodo.12119542},
       url = {https://github.com/rfonod/geo-trax},
       license = {MIT}

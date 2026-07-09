@@ -5,6 +5,7 @@
 
 import logging
 import os
+from datetime import datetime
 from pathlib import Path
 from typing import Union
 
@@ -75,8 +76,13 @@ def default_log_dir() -> Path:
 def setup_logger(name: str, verbose: bool = False, log_path: Union[str, Path, None] = None, dry_run: bool = False) -> logging.Logger:
     """Set up a logger with a given name, verbosity level, and optional log path.
 
-    ``log_path`` may be a directory (the default ``<stage>.log`` name is used inside it) or a
-    full file path. When omitted, logs go to a platform-specific directory (see default_log_dir).
+    ``log_path`` may be a directory (an auto-named ``<stage>_<timestamp>_<pid>.log`` file is
+    created inside it) or a full file path (used verbatim). When omitted, logs go to a
+    platform-specific directory (see default_log_dir). The timestamp keeps the auto-derived name
+    from ever landing on a stale file left by an earlier, unrelated run (a plain PID would
+    eventually be reused, e.g. after a reboot, and FileHandler's append mode would silently merge
+    into it); the PID breaks the rare tie of two processes started in the same second. Pass a full
+    file path explicitly to opt out of this and pin a stable, reusable name.
     """
     logger = logging.getLogger(name)
     logger.setLevel(logging.INFO)
@@ -92,7 +98,8 @@ def setup_logger(name: str, verbose: bool = False, log_path: Union[str, Path, No
     logger.addHandler(console_handler)
 
     if not dry_run:
-        stage_filename = f"{name.split('.')[-1]}.log"
+        run_id = f"{datetime.now():%Y%m%d_%H%M%S}_{os.getpid()}"
+        stage_filename = f"{name.split('.')[-1]}_{run_id}.log"
         if log_path is None:
             log_filepath = default_log_dir() / stage_filename
         else:

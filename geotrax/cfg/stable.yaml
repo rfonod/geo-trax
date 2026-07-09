@@ -96,6 +96,17 @@ extraction:
   save_stab: true       # Save per-frame stabilization homographies to results/video_vid_transf.txt
   min_track_length: 3   # Discard tracks shorter than this many frames; [1, inf)
   interpolate: false    # Fill per-track frame gaps with linear interpolation; adds is_interpolated column to output — CLI: --interpolate / --no-interpolate
+  sahi:                 # Slicing Aided Hyper Inference: sliced detection for small objects (requires: pip install 'geo-trax[sahi]'); ~5x slower per frame with the defaults below
+    enable: false                    # Run detection on overlapping frame slices and merge the results — CLI: --sahi / --no-sahi
+    slice_height: 1080               # Slice height [px]; default = half of a 4K frame height; [1, inf)
+    slice_width: 1920                # Slice width [px]; default = half of a 4K frame width; [1, inf)
+    overlap_height_ratio: 0.2        # Vertical overlap between adjacent slices, as a fraction of slice height; [0.0, 1.0)
+    overlap_width_ratio: 0.2         # Horizontal overlap between adjacent slices, as a fraction of slice width; [0.0, 1.0)
+    perform_standard_pred: true      # Also run one full-frame prediction and merge it with the sliced detections (catches large objects)
+    postprocess_type: GREEDYNMM      # Strategy for merging overlapping slice detections; choices: [GREEDYNMM, NMM, NMS]
+    postprocess_match_metric: IOS    # Overlap metric used by the merge step; choices: [IOS, IOU]
+    postprocess_match_threshold: 0.5 # Overlap threshold above which two detections are merged; [0.0, 1.0]
+    class_agnostic: true             # Merge overlapping detections across classes (mirrors ultralytics -> agnostic_nms)
   dimension_estimation:
     gsd: 0.02725    # Ground sample distance [m/px]; tuned for DJI Mavic 3 at 140–150 m altitude, 4K resolution
     eps: 4          # Visibility margin [px]; bounding boxes closer than this to any frame edge are excluded; [0, inf)

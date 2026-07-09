@@ -44,6 +44,9 @@ Processing Options:
     --interpolate / --no-interpolate : Fill per-track frame gaps with linear interpolation; adds a 15th
                               is_interpolated column to the .txt output (0 = real detection, 1 = synthetic).
                               Defaults to cfg -> extraction -> interpolate (default: false).
+    --sahi / --no-sahi        : Detect via SAHI sliced inference (improves small-object recall; requires
+                              'pip install geo-trax[sahi]'; roughly 5x slower per frame). Slicing parameters
+                              live in cfg -> extraction -> sahi. Defaults to cfg -> extraction -> sahi -> enable.
     --stab-gpu / --no-stab-gpu, -sg : CUDA-accelerate stabilization image matching (requires a CUDA-enabled
                               OpenCV build; no CPU fallback). Defaults to cfg -> stabilo -> gpu.
     --stab-gpu-device-id, -sgid <int> : CUDA device index used when stabilization GPU is enabled.
@@ -76,6 +79,10 @@ Notes:
     supported tracker is kept in the config so you can switch by changing that one line.
   - Extraction-stage settings (stabilize/save_stab toggles, min_track_length, and the
     dimension_estimation block) are in cfg -> extraction; min_track_length has no CLI flag.
+  - SAHI mode honors cfg -> ultralytics conf, device, imgsz (applied per slice), and classes; iou, max_det,
+    augment, half, vid_stride, and agnostic_nms are not used (detection merging is controlled by
+    cfg -> extraction -> sahi instead). SAHI mode supports YOLO models only (no RTDETR) and cannot be
+    combined with the tracktrack tracker or with ReID model 'auto' (both need a live Ultralytics predictor).
   - Output filename postfixes (e.g. _vid_transf suffix) are set in cfg -> output; use
     --output-folder / cfg -> output -> folder to redirect where outputs are written.
 """
@@ -87,14 +94,18 @@ import shutil
 import sys
 import time
 from pathlib import Path
-from typing import Dict, Tuple, Union
+from typing import Any, Dict, Tuple, Union
 
 import cv2
 import numpy as np
+import torch
 import yaml
 from stabilo import Stabilizer
 from tqdm import tqdm
 from ultralytics import RTDETR, YOLO
+from ultralytics.engine.results import Boxes
+from ultralytics.trackers.track import TRACKER_MAP
+from ultralytics.utils import IterableSimpleNamespace
 from ultralytics.utils.checks import check_yolo
 from ultralytics.utils.files import increment_path
 
@@ -128,6 +139,7 @@ def detect_track_stabilize(args: argparse.Namespace, logger: logging.Logger) -> 
         'cut_frame_left': proc['cut_frame_left'],
         'cut_frame_right': proc['cut_frame_right'],
         'interpolate': config['main']['extraction']['interpolate'],
+        'sahi': (config['main']['extraction'].get('sahi') or {}).get('enable', False),
         'output_folder': out_cfg_raw.get('folder', 'results'),
         'stab_gpu': config['stabilo']['gpu'],
         'stab_gpu_device_id': config['stabilo']['gpu_device_id'],
@@ -135,18 +147,37 @@ def detect_track_stabilize(args: argparse.Namespace, logger: logging.Logger) -> 
     out_cfg = {**out_cfg_raw, 'folder': args.output_folder}
     config['stabilo']['gpu'] = args.stab_gpu
     config['stabilo']['gpu_device_id'] = args.stab_gpu_device_id
-    model = load_detector(config['ultralytics'], logger)
+    config['main']['extraction'].setdefault('sahi', {})['enable'] = args.sahi
+    if args.sahi:
+        validate_sahi_tracker(config['main'])
+        model = load_sahi_detector(config['ultralytics'], logger)
+    else:
+        model = load_detector(config['ultralytics'], logger)
     tracks, transforms = track_with_model(model, config, logger)
     tracks = postprocess_tracks(tracks, config, logger)
     save_results(tracks, transforms, config, logger, out_cfg)
 
 
-def track_with_model(model: Union[YOLO, RTDETR], config: Dict, logger: logging.Logger) -> Tuple[np.ndarray, np.ndarray]:
+def track_with_model(model: Any, config: Dict, logger: logging.Logger) -> Tuple[np.ndarray, np.ndarray]:
     """
     Track vehicles in the video using the provided model.
+
+    The model is either an Ultralytics YOLO/RTDETR model or, in SAHI mode, a SAHI AutoDetectionModel
+    whose detections are fed to a manually created tracker.
     """
     reader, pbar = initialize_streams(config['main'], config['ultralytics']['imgsz'], logger)
     stabilizer = Stabilizer(**config['stabilo'])
+
+    sahi_cfg = config['main']['extraction'].get('sahi') or {}
+    if sahi_cfg.get('enable', False):
+        tracker = create_manual_tracker(config['main'])
+
+        def detect_frame(frame: np.ndarray) -> Tuple[Boxes, Dict]:
+            return detect_frame_sahi(model, tracker, frame, sahi_cfg, config['ultralytics'].get('classes'))
+    else:
+
+        def detect_frame(frame: np.ndarray) -> Tuple[Boxes, Dict]:
+            return detect_frame_ultralytics(model, frame, config['ultralytics'])
 
     frame_num, yolo_time, stab_time = 0, [], []
     frame_arr, track_id, bbox, bbox_stab, class_id, conf, transforms = [], [], [], [], [], [], []
@@ -160,9 +191,7 @@ def track_with_model(model: Union[YOLO, RTDETR], config: Dict, logger: logging.L
                 continue
 
             if success:
-                results = model.track(frame, **config['ultralytics'], persist=True)
-                boxes = results[0].boxes
-                speed = results[0].speed
+                boxes, speed = detect_frame(frame)
                 yolo_time.append(sum(speed.values()))
 
                 class_freq = {c: 0 for c in config['ultralytics']['classes']}
@@ -212,7 +241,7 @@ def track_with_model(model: Union[YOLO, RTDETR], config: Dict, logger: logging.L
         pbar.total = frame_num
         pbar.refresh()
         if yolo_time:
-            logger.info(f"Average YOLOv8 (preprocess + inference + postprocess) time: {sum(yolo_time) / len(yolo_time):5.1f}ms.")
+            logger.info(f"Average detection (preprocess + inference + postprocess) time: {sum(yolo_time) / len(yolo_time):5.1f}ms.")
             logger.info(f"Average stabilization time: {sum(stab_time) / len(stab_time):5.1f}ms") if stab_time else None
             logger.info(f"Average pipeline time: {1000 * len(yolo_time) / (sum(yolo_time) + sum(stab_time)):4.1f}fps.")
     finally:
@@ -244,6 +273,137 @@ def load_detector(config: Dict, logger: logging.Logger) -> Union[YOLO, RTDETR]:
 
     check_yolo(device=config['device'])
     return model
+
+
+def load_sahi_detector(config: Dict, logger: logging.Logger) -> Any:
+    """
+    Load the detection model wrapped in a SAHI AutoDetectionModel for sliced inference.
+    """
+    try:
+        from sahi import AutoDetectionModel
+    except ImportError:
+        logger.critical(
+            "SAHI mode is enabled but the 'sahi' package is not installed. "
+            "Install it with: pip install 'geo-trax[sahi]'"
+        )
+        sys.exit(1)
+
+    device = config['device']
+    if isinstance(device, (list, tuple)):
+        raise ValueError(
+            "Multi-GPU is not supported in SAHI mode; set cfg -> ultralytics -> device to a single device."
+        )
+    if isinstance(device, int):
+        device = f'cuda:{device}'
+
+    try:
+        model = AutoDetectionModel.from_pretrained(
+            model_type='ultralytics',
+            model_path=config['model'],
+            confidence_threshold=config['conf'],
+            device=device,
+            image_size=config['imgsz'],
+        )
+    except Exception as e:
+        logger.error(f"Error loading the detection model for SAHI: {e}")
+        sys.exit(1)
+    else:
+        logger.info(f"Detection model '{config['model']}' loaded successfully (SAHI sliced inference mode).")
+
+    check_yolo(device=config['device'])
+    return model
+
+
+def validate_sahi_tracker(main_cfg: Dict) -> None:
+    """
+    Check that the active tracker can be fed detections manually (required in SAHI mode).
+    """
+    tracker_params = main_cfg.get('tracker_params', {})
+    if main_cfg['tracker_active'] == 'tracktrack':
+        raise ValueError(
+            "SAHI mode cannot use the 'tracktrack' tracker (it requires a live Ultralytics predictor); "
+            "set cfg -> tracker -> active to botsort, bytetrack, ocsort, deepocsort, or fasttrack."
+        )
+    if tracker_params.get('with_reid') and tracker_params.get('model') == 'auto':
+        raise ValueError(
+            "SAHI mode cannot use ReID model 'auto' (it derives appearance features from the detector's "
+            "forward pass, unavailable with sliced inference); set a concrete ReID model or "
+            "with_reid: false in cfg -> tracker."
+        )
+
+
+def create_manual_tracker(main_cfg: Dict) -> Any:
+    """
+    Instantiate the active tracker directly; SAHI mode feeds it detections manually.
+    """
+    return TRACKER_MAP[main_cfg['tracker_active']](args=IterableSimpleNamespace(**main_cfg['tracker_params']))
+
+
+def sahi_predictions_to_boxes(
+    object_predictions: list, orig_shape: Tuple[int, int], classes: Union[list, None]
+) -> Boxes:
+    """
+    Convert SAHI object predictions to an Ultralytics Boxes object, applying the class-ID filter
+    (cfg -> ultralytics -> classes), which SAHI itself does not support.
+    """
+    rows = []
+    for pred in object_predictions:
+        cls = int(pred.category.id)
+        if classes is not None and cls not in classes:
+            continue
+        x1, y1, x2, y2 = pred.bbox.to_xyxy()
+        rows.append([x1, y1, x2, y2, pred.score.value, cls])
+    data = torch.tensor(rows, dtype=torch.float32) if rows else torch.zeros((0, 6), dtype=torch.float32)
+    return Boxes(data, orig_shape)
+
+
+def detect_frame_ultralytics(model: Union[YOLO, RTDETR], frame: np.ndarray, config: Dict) -> Tuple[Boxes, Dict]:
+    """
+    Detect and track objects in a single frame via the Ultralytics pipeline.
+    """
+    results = model.track(frame, **config, persist=True)
+    return results[0].boxes, results[0].speed
+
+
+def detect_frame_sahi(
+    model: Any, tracker: Any, frame: np.ndarray, sahi_cfg: Dict, classes: Union[list, None]
+) -> Tuple[Boxes, Dict]:
+    """
+    Detect objects in a single frame via SAHI sliced inference and update the tracker manually.
+
+    Mirrors ultralytics.trackers.track.on_predict_postprocess_end: when the tracker returns no tracks,
+    the raw detections are kept (their IDs stay None, written as -1 downstream).
+    """
+    from sahi.predict import get_sliced_prediction
+
+    start_time = time.time()
+    result = get_sliced_prediction(
+        cv2.cvtColor(frame, cv2.COLOR_BGR2RGB),  # SAHI expects RGB input
+        model,
+        slice_height=sahi_cfg['slice_height'],
+        slice_width=sahi_cfg['slice_width'],
+        overlap_height_ratio=sahi_cfg['overlap_height_ratio'],
+        overlap_width_ratio=sahi_cfg['overlap_width_ratio'],
+        perform_standard_pred=sahi_cfg['perform_standard_pred'],
+        postprocess_type=sahi_cfg['postprocess_type'],
+        postprocess_match_metric=sahi_cfg['postprocess_match_metric'],
+        postprocess_match_threshold=sahi_cfg['postprocess_match_threshold'],
+        postprocess_class_agnostic=sahi_cfg['class_agnostic'],
+        verbose=0,
+    )
+    boxes = sahi_predictions_to_boxes(result.object_prediction_list, frame.shape[:2], classes)
+    tracks = tracker.update(boxes.cpu().numpy(), frame)
+    if len(tracks):
+        boxes = Boxes(torch.as_tensor(tracks[:, :-1]), frame.shape[:2])  # drop the detection-index column
+
+    total_time = 1000 * (time.time() - start_time)
+    durations = getattr(result, 'durations_in_seconds', None) or {}
+    speed = {
+        'preprocess': 1000 * durations.get('slice', 0.0),
+        'inference': 1000 * durations.get('prediction', 0.0),
+    }
+    speed['postprocess'] = max(0.0, total_time - speed['preprocess'] - speed['inference'])  # merge + tracking
+    return boxes, speed
 
 
 def initialize_streams(config: Dict, imgsz: int, logger: logging.Logger) -> Tuple[cv2.VideoCapture, tqdm]:
@@ -598,6 +758,7 @@ def add_processing_args(group) -> None:
     group.add_argument('--cut-frame-left', '-cfl', type=int, default=None, help='Skip the first N frames. Defaults to cfg -> processing -> cut_frame_left.')
     group.add_argument('--cut-frame-right', '-cfr', type=int, default=None, help='Stop processing after this frame. Defaults to cfg -> processing -> cut_frame_right.')
     group.add_argument('--interpolate', action=argparse.BooleanOptionalAction, default=None, help='Fill per-track frame gaps with linear interpolation; adds is_interpolated column to output. Defaults to cfg -> extraction -> interpolate.')
+    group.add_argument('--sahi', action=argparse.BooleanOptionalAction, default=None, help="Detect via SAHI sliced inference for improved small-object recall (requires: pip install 'geo-trax[sahi]'). Slicing parameters live in cfg -> extraction -> sahi. Defaults to cfg -> extraction -> sahi -> enable.")
     group.add_argument('--stab-gpu', '-sg', action=argparse.BooleanOptionalAction, default=None, help='CUDA-accelerate stabilization (requires a CUDA-enabled OpenCV build; no CPU fallback). Defaults to cfg -> stabilo -> gpu.')
     group.add_argument('--stab-gpu-device-id', '-sgid', type=int, default=None, help='CUDA device index used when stabilization GPU is enabled. Defaults to cfg -> stabilo -> gpu_device_id.')
 
