@@ -1,14 +1,16 @@
 # -*- coding: utf-8 -*-
 # Author: Robert Fonod (robert.fonod@ieee.org)
 
-"""Tests for the logging utilities: platform log directory and colored formatter."""
+"""Tests for the logging utilities: platform log directory, colored formatter, and setup_logger."""
 
 import logging
+import os
 import sys
+from datetime import datetime
 from pathlib import Path
 
-from geotrax.utils.logging_utils import ColoredFormatter, default_log_dir
-
+from geotrax.utils import logging_utils
+from geotrax.utils.logging_utils import ColoredFormatter, default_log_dir, setup_logger
 
 # --- default_log_dir ---------------------------------------------------------
 
@@ -64,3 +66,114 @@ def test_colored_formatter_critical_includes_bold():
     formatter = ColoredFormatter('%(message)s')
     output = formatter.format(_make_record(logging.CRITICAL))
     assert '\033[1m' in output  # BColors.BOLD
+
+
+# --- setup_logger --------------------------------------------------------------
+
+class _FixedDatetime(datetime):
+    """Stand-in for datetime.now() so filename tests don't depend on wall-clock time."""
+
+    @classmethod
+    def now(cls, tz=None):
+        return cls(2026, 7, 9, 15, 55, 34)
+
+
+def _cleanup(logger):
+    for handler in list(logger.handlers):
+        logger.removeHandler(handler)
+        handler.close()
+
+
+def test_setup_logger_default_log_path_includes_timestamp_and_pid(tmp_path, monkeypatch):
+    # No --log-path given: the auto-named file must carry a timestamp (so it never lands on a
+    # stale file from an earlier run whose PID got reused) and this process's PID (so two
+    # processes started in the very same second still don't collide).
+    monkeypatch.setattr(logging_utils, 'default_log_dir', lambda: tmp_path)
+    monkeypatch.setattr(logging_utils, 'datetime', _FixedDatetime)
+    logger = setup_logger('geotrax.test_stage_default', verbose=False, log_path=None)
+    try:
+        file_handler = next(h for h in logger.handlers if isinstance(h, logging.FileHandler))
+        expected = f'test_stage_default_20260709_155534_{os.getpid()}.log'
+        assert Path(file_handler.baseFilename).name == expected
+    finally:
+        _cleanup(logger)
+
+
+def test_setup_logger_directory_log_path_includes_timestamp_and_pid(tmp_path, monkeypatch):
+    # --log-path pointing at an existing directory: same auto-naming applies inside it.
+    monkeypatch.setattr(logging_utils, 'datetime', _FixedDatetime)
+    logger = setup_logger('geotrax.test_stage_dir', verbose=False, log_path=tmp_path)
+    try:
+        file_handler = next(h for h in logger.handlers if isinstance(h, logging.FileHandler))
+        expected = f'test_stage_dir_20260709_155534_{os.getpid()}.log'
+        assert Path(file_handler.baseFilename).name == expected
+        assert Path(file_handler.baseFilename).parent == tmp_path
+    finally:
+        _cleanup(logger)
+
+
+def test_setup_logger_explicit_file_path_used_verbatim(tmp_path):
+    # --log-path pointing at a specific (non-directory) file: honored exactly, no auto-naming,
+    # since this is the user's deliberate choice of a stable, shared filename.
+    target = tmp_path / 'custom_name.log'
+    logger = setup_logger('geotrax.test_stage_explicit', verbose=False, log_path=target)
+    try:
+        file_handler = next(h for h in logger.handlers if isinstance(h, logging.FileHandler))
+        assert Path(file_handler.baseFilename) == target
+    finally:
+        _cleanup(logger)
+
+
+def test_setup_logger_two_processes_in_the_same_second_do_not_collide(tmp_path, monkeypatch):
+    # Same timestamp (simulating two processes started in the same second) but different PIDs:
+    # the PID tiebreaker must still keep the filenames distinct.
+    monkeypatch.setattr(logging_utils, 'default_log_dir', lambda: tmp_path)
+    monkeypatch.setattr(logging_utils, 'datetime', _FixedDatetime)
+    monkeypatch.setattr(logging_utils.os, 'getpid', lambda: 111)
+    setup_logger('geotrax.test_stage_concurrent', verbose=False, log_path=None)
+    monkeypatch.setattr(logging_utils.os, 'getpid', lambda: 222)
+    logger = setup_logger('geotrax.test_stage_concurrent', verbose=False, log_path=None)
+    try:
+        file_handlers = [h for h in logger.handlers if isinstance(h, logging.FileHandler)]
+        filenames = {Path(h.baseFilename).name for h in file_handlers}
+        assert filenames == {
+            'test_stage_concurrent_20260709_155534_111.log',
+            'test_stage_concurrent_20260709_155534_222.log',
+        }
+    finally:
+        _cleanup(logger)  # both setup_logger calls returned the same underlying Logger object (same name)
+
+
+def test_setup_logger_reused_pid_on_a_later_run_does_not_reuse_the_old_file(tmp_path, monkeypatch):
+    # Same PID (simulating PID reuse after a reboot) but a later timestamp: the two runs must
+    # still land on different files instead of the new run silently appending into the old one.
+    monkeypatch.setattr(logging_utils, 'default_log_dir', lambda: tmp_path)
+    monkeypatch.setattr(logging_utils.os, 'getpid', lambda: 111)
+
+    class _Earlier(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return cls(2026, 1, 1, 0, 0, 0)
+
+    monkeypatch.setattr(logging_utils, 'datetime', _Earlier)
+    setup_logger('geotrax.test_stage_reused_pid', verbose=False, log_path=None)
+    monkeypatch.setattr(logging_utils, 'datetime', _FixedDatetime)
+    logger = setup_logger('geotrax.test_stage_reused_pid', verbose=False, log_path=None)
+    try:
+        file_handlers = [h for h in logger.handlers if isinstance(h, logging.FileHandler)]
+        filenames = {Path(h.baseFilename).name for h in file_handlers}
+        assert filenames == {
+            'test_stage_reused_pid_20260101_000000_111.log',
+            'test_stage_reused_pid_20260709_155534_111.log',
+        }
+    finally:
+        _cleanup(logger)
+
+
+def test_setup_logger_dry_run_skips_file_handler(tmp_path, monkeypatch):
+    monkeypatch.setattr(logging_utils, 'default_log_dir', lambda: tmp_path)
+    logger = setup_logger('geotrax.test_stage_dry_run', verbose=False, dry_run=True)
+    try:
+        assert not any(isinstance(h, logging.FileHandler) for h in logger.handlers)
+    finally:
+        _cleanup(logger)
