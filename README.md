@@ -342,7 +342,7 @@ Example on an **NVIDIA RTX 4090** (5-second sample clip, 150 frames; hyperfine m
 
 ## Detection Model
 
-The default detector is **YOLOv8s** (HBB, 1920 × 1920 px, ~11 M parameters), trained on more than 19,000 annotated aerial images (~679k labeled vehicle instances) and fine-tuned on a curated, high-quality subset. It is hosted on [🤗 Hugging Face](https://huggingface.co/rfonod/geo-trax) and **downloads automatically on first use**. Results on the Songdo Vision test split (1,084 images; full results in [Table 3](https://doi.org/10.1016/j.trc.2025.105205)):
+The default detector is **YOLOv8s** (HBB, 1920 × 1920 px, ~11 M parameters), trained on more than 19,000 annotated aerial images (~679k labeled vehicle instances) and fine-tuned on a curated, high-quality subset. It is hosted on [🤗 Hugging Face](https://huggingface.co/rfonod/geo-trax) and **downloads automatically on first use**. Results on the [Songdo Vision **v1**](https://doi.org/10.5281/zenodo.13828408) test split (1,084 images; full results in [Table 3](https://doi.org/10.1016/j.trc.2025.105205)):
 
 | ID | Label | Precision | Recall | mAP@50 | mAP@50-95 |
 |---|---|---|---|---|---|
@@ -540,7 +540,7 @@ Suppose the input video is `video_file.mp4`. By default, outputs are written to 
 
 ## Real-World Deployment: The Songdo Experiment
 
-Geo-trax was validated in a large-scale urban traffic monitoring campaign in Songdo, South Korea, where it processed footage from a fleet of 10 drones to produce the [**Songdo Traffic**](https://doi.org/10.5281/zenodo.13828383) dataset. The detection model was trained on the companion [**Songdo Vision**](https://doi.org/10.5281/zenodo.13828407) dataset. Both are described in the [publication](#citation).
+Geo-trax was validated in a large-scale urban traffic monitoring campaign in Songdo, South Korea, where it processed footage from a fleet of 10 drones to produce the [**Songdo Traffic**](https://doi.org/10.5281/zenodo.13828383) dataset. The detection model was trained on the companion [**Songdo Vision v1**](https://doi.org/10.5281/zenodo.13828408) dataset (a later [v2](https://doi.org/10.5281/zenodo.21728430) annotation-quality release exists on Zenodo; the released model has not been retrained on it). The dataset is described in the [publication](#citation).
 
 | Songdo campaign | |
 |---|---|

@@ -333,7 +333,7 @@ python tools/compute_bb_center_error.py /path/to/images/
 python tools/compute_bb_center_error.py /path/to/images/ --class-agnostic --save
 ```
 
-Example output showing the bounding-box center error distribution between human annotations from the [Songdo Vision](../README.md#real-world-deployment-the-songdo-experiment) dataset and [geo-trax](https://github.com/rfonod/geo-trax) model predictions.
+Example output showing the bounding-box center error distribution between human annotations from the [Songdo Vision **v1**](../README.md#real-world-deployment-the-songdo-experiment) dataset and [geo-trax](https://github.com/rfonod/geo-trax) model predictions (the released model's training/evaluation version; a later [v2](https://doi.org/10.5281/zenodo.21728430) annotation-quality release exists on Zenodo).
 
 ![Bounding-box center error distribution between human annotations and geo-trax model predictions.](assets/bb_center_error_distribution.jpg)
 
