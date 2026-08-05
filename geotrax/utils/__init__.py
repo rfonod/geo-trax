@@ -1,7 +1,14 @@
 # -*- coding: utf-8 -*-
 # Author: Robert Fonod (robert.fonod@ieee.org)
 
-from geotrax.utils.config_utils import load_class_names_from_model, load_config, load_config_all
+from geotrax.utils.cli_utils import CfgArg, add_cfg_arg, add_common_args
+from geotrax.utils.config_utils import (
+    apply_cli_overrides,
+    load_class_names_from_model,
+    load_config,
+    load_config_all,
+    sync_args_with_config,
+)
 from geotrax.utils.constants import LINUX, MACOS, WINDOWS
 from geotrax.utils.data_utils import PlotColors, VizColors
 from geotrax.utils.file_utils import (
@@ -20,13 +27,17 @@ from geotrax.utils.logging_utils import (
     FileFormatter,
     setup_logger,
 )
+from geotrax.utils.version_check import check_for_updates, check_for_updates_once
 
 __all__ = [
     "LINUX", "MACOS", "WINDOWS",
+    "CfgArg", "add_cfg_arg", "add_common_args",
+    "apply_cli_overrides", "sync_args_with_config",
     "load_class_names_from_model", "load_config", "load_config_all",
     "PlotColors", "VizColors",
     "check_if_results_exist", "convert_to_serializable", "detect_delimiter",
     "determine_location_id", "determine_suffix_and_fourcc", "get_ortho_folder",
     "get_video_dimensions",
     "ColoredFormatter", "FileFormatter", "NOTICE_LEVEL", "BColors", "setup_logger",
+    "check_for_updates", "check_for_updates_once",
 ]

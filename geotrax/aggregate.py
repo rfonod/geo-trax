@@ -29,6 +29,9 @@ Options:
                                a 'DATASET' folder is created next to the PROCESSED folder (default: None).
   -c, --cfg <path>           : Pipeline config used to resolve the output folder name where
                                georeferenced CSVs are located. Defaults to the bundled config.
+  -st, --set <KEY=VALUE>     : Override a pipeline config value for this run; repeat for more
+                               than one, e.g. --set folder=out. KEY is a dotted path or any
+                               unambiguous tail of one; VALUE uses YAML rules.
   -lp, --log-path <str>      : Where to write logs: a directory or a full file path; defaults to a platform-specific log directory.
   -v, --verbose              : Set print verbosity level to INFO (default: WARNING).
 
@@ -68,7 +71,7 @@ from pathlib import Path
 import pandas as pd
 from tqdm import tqdm
 
-from geotrax.utils.cli_utils import add_common_args
+from geotrax.utils.cli_utils import add_common_args, finalize_cli_args
 from geotrax.utils.config_utils import load_config
 from geotrax.utils.file_utils import DEFAULT_OUTPUT, determine_location_id
 from geotrax.utils.logging_utils import setup_logger
@@ -86,7 +89,7 @@ def aggregate_results(args: argparse.Namespace, logger: logging.Logger) -> None:
 
     output_path.mkdir(parents=True, exist_ok=True)
 
-    output_cfg = load_config(args.cfg, logger).get('output', DEFAULT_OUTPUT)
+    output_cfg = load_config(args.cfg, logger, args).get('output', DEFAULT_OUTPUT)
     folder_name = output_cfg.get('folder', DEFAULT_OUTPUT['folder'])
     csv_files = list(input_path.rglob(f'**/{folder_name}/*.csv'))
     if not csv_files:
@@ -188,9 +191,9 @@ def parse_cli_args() -> argparse.Namespace:
 
     optional = parser.add_argument_group('Optional arguments')
     optional.add_argument('--output-folder', '-of', type=Path, default=None, help="Path to the output folder for aggregated results. If not provided, a 'DATASET' folder is created next to the PROCESSED folder.")
-    add_common_args(optional, output_folder=False)
+    cfg_paths = add_common_args(optional, output_folder=False)
 
-    return parser.parse_args()
+    return finalize_cli_args(parser, cfg_paths)
 
 
 def main() -> None:

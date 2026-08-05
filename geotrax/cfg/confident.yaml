@@ -61,6 +61,8 @@ input:
 # overwrite each other). Each *_postfix is inserted between the video stem (the filename
 # without its extension, e.g. 'video_file' for 'video_file.mp4') and the file extension.
 # The plots/ sub-folder is always created inside the configured output folder.
+# Every artifact, the run-metadata YAML included, is written under this folder; nothing is
+# written next to the input video, so the source dataset can stay read-only.
 output:
   folder: results                      # Output root; bare name or absolute path — CLI: --output-folder / -of
   tracks_postfix: ''                   # Pixel-coord tracking results → '<stem><postfix>.txt'
@@ -68,6 +70,7 @@ output:
   stab_transform_postfix: _vid_transf  # Stabilization homographies  → '<stem><postfix>.txt'
   geo_transform_postfix: _geo_transf   # Georeferencing homography   → '<stem><postfix>.txt'
   visualization_postfix: ''            # Annotated video             → '<stem><postfix>_mode_<X>.<ext>'
+  metadata_postfix: ''                 # Run metadata (YAML)         → '<stem><postfix>.yaml'
 
 # --- Frame range; shared by extraction and visualization (CLI override) ---
 # These control how many frames to process. Override with --cut-frame-left / --cut-frame-right.
@@ -128,20 +131,20 @@ stabilo:
   downsample_ratio: 0.5 # Resize input frames by this factor before processing; lower = faster but fewer features; (0.0, 1.0]
 
   # Feature detector and descriptor
-  detector_name: 'orb'  # Feature detector/descriptor; choices: [orb, sift, rsift, brisk, kaze, akaze]
+  detector_name: 'orb'  # Feature detector/descriptor; classical: [orb, sift, rsift, brisk, kaze, akaze], learned: [xfeat, disk, dedode, keynet, loftr] — CLI: --stab-detector
   max_features: 2000    # Maximum keypoints to detect per frame; higher = more robust but slower; [0, inf)
   ref_multiplier: 2.0   # Multiplier applied to max_features for the reference frame only; (0.0, inf)
   sift_enable_precise_upscale: false  # SIFT/RSIFT only: precise sub-pixel upscaling at octave -1; [true, false]
   rsift_eps: 0.00000001 # RSIFT only: epsilon added before RootSIFT L1-normalisation (1e-8); > 0.0, keep very small
 
   # Feature matching and filtering
-  matcher_name: 'bf'    # Matching strategy; choices: [bf (brute-force), flann]
+  matcher_name: 'bf'    # Matching strategy; choices: [bf (brute-force), flann, lightglue (learned; needs disk/dedode/keynet)]
   filter_type: 'ratio'  # Post-match filter; choices: [none, ratio (Lowe), distance]
   filter_ratio: 0.9     # Lowe ratio-test threshold; lower = stricter (fewer but better matches); (0.0, 1.0]
 
   # Transformation estimation
-  transformation_type: 'projective'  # Geometric model to estimate; choices: [projective, affine]
-  ransac_method: 38                  # RANSAC method; [4: LMEDS, 8: RANSAC, 16: RHO, 32: DEGENSAC, 33: DEGENSAC (alt.), 35: LO-RANSAC, 36: GC-RANSAC, 37: PROSAC, 38: MAGSAC++]
+  transformation_type: 'projective'  # Geometric model to estimate; choices: [projective, affine]. 'affine' accepts only ransac_method 4 (LMEDS) or 8 (RANSAC)
+  ransac_method: 38                  # RANSAC method; [4: LMEDS, 8: RANSAC, 16: RHO, 32: USAC-Default (LO-RANSAC), 33: USAC-Parallel (LO-RANSAC), 35: USAC-Fast (LO-RANSAC), 36: USAC-Accurate (GC-RANSAC), 37: PROSAC, 38: MAGSAC++]
   ransac_epipolar_threshold: 2.0     # Reprojection error threshold [px] for RANSAC inlier classification; (0.0, inf)
   ransac_max_iter: 5000              # Maximum RANSAC iterations; (0, inf]
   ransac_confidence: 0.999999        # Required probability that the best model is correct; (0.0, 1.0]
@@ -155,9 +158,19 @@ stabilo:
   kaze_threshold: 0.01  # KAZE response threshold; lower = more keypoints; (0.0, inf]
   akaze_threshold: 0.01 # AKAZE response threshold; lower = more keypoints; (0.0, inf]
 
-  # Computation (GPU accelerates the ORB detector only; requires a CUDA-enabled OpenCV build — see stabilo docs/cuda.md)
+  # Learning-based (kornia) detector weights; only used when detector_name is one of them.
+  # Mind the rotation and memory caveats before switching: see README -> Feature Detectors.
+  loftr_weights: 'outdoor'                # LoFTR pretrained weights; [outdoor, indoor]
+  loftr_confidence: 0.0                   # LoFTR min. correspondence confidence to keep; [0.0, 1.0] (0.0 keeps all)
+  disk_weights: 'depth'                   # DISK pretrained weights; [depth, epipolar]
+  dedode_detector_weights: 'L-C4-v2'      # DeDoDe detector weights; [L-upright, L-C4, L-SO2, L-C4-v2]
+  dedode_descriptor_weights: 'B-upright'  # DeDoDe descriptor weights; [B-upright, G-upright, B-C4, B-SO2, G-C4, G-SO2]
+
+  # Computation. Two mutually exclusive paths: gpu = OpenCV CUDA (classical detectors, orb only;
+  # needs a CUDA-enabled OpenCV build), device = torch device (learning-based detectors only).
   gpu: false       # Use GPU-accelerated operations where available; [true, false] — CLI: --stab-gpu / --no-stab-gpu
   gpu_device_id: 0 # CUDA device index used when gpu is true (multi-GPU machines); [0, inf) — CLI: --stab-gpu-device-id
+  device: 'auto'   # Torch device, learned detectors only; ['auto' (cuda > mps > cpu), 'cpu', 'cuda', 'mps'] — CLI: --stab-device
 
   # Diagnostics
   viz: false       # Retain keypoints and match visualizations in memory (for debugging); [true, false]
@@ -176,12 +189,15 @@ georef:
     target_crs: epsg:5186    # Target projected CRS for local-coordinate output (e.g. epsg:5186 = Korea 2000); string
     cutout_width_px: 15000   # Original orthophoto cutout width [px]; used to derive geographic resolution when geo_source is 'center-text-file'; null falls back to the provided orthophoto width; [0, inf) or null
 
-  # Feature matching (MAGSAC++ based image registration against orthophotos)
+  # Feature matching (MAGSAC++ based image registration against orthophotos).
+  # Learning-based detectors need care here: the orthophoto is north-up and large (64 MP in the
+  # Songdo data), so lower downsample_ratio first. See README -> Feature Detectors.
   matching:
-    detector_name: rsift               # Feature detector & descriptor; ['orb', 'sift', 'rsift', 'brisk', 'kaze', 'akaze'] (rsift = RootSIFT)
-    matcher_name: bf                   # Descriptor matcher; ['bf', 'flann'] (bf = brute force)
+    detector_name: rsift               # Feature detector & descriptor; classical: ['orb', 'sift', 'rsift', 'brisk', 'kaze', 'akaze'], learned: ['xfeat', 'disk', 'dedode', 'keynet', 'loftr'] — CLI: --geo-detector
+    matcher_name: bf                   # Descriptor matcher; ['bf', 'flann', 'lightglue'] (lightglue is learned; needs disk/dedode/keynet)
     filter_type: ratio                 # Match filter; ['none', 'ratio', 'distance'] (ratio = Lowe's ratio test)
     sift_enable_precise_upscale: true  # SIFT/RSIFT precise sub-pixel upscaling at octave -1; [true, false]
+    downsample_ratio: 1.0              # Resize images by this factor before detection, then rescale keypoints; (0.0, 1.0]. Lower it for learned detectors
     max_features: 250000           # Maximum number of features to detect; [0, inf)
     filter_ratio: 0.55             # Lowe ratio-test threshold; lower = stricter (fewer but better matches); (0.0, 1.0]
     ransac_method: 38              # RANSAC method (same options as stabilization above)
@@ -191,6 +207,13 @@ georef:
     rsift_eps: 0.00000001          # Epsilon added before RootSIFT L1-normalisation to avoid division by zero; > 0.0, keep very small (e.g. 1e-8)
     gpu: false                     # GPU-accelerate registration; requires detector_name: orb AND a CUDA-enabled OpenCV build; [true, false] — CLI: --geo-gpu / --no-geo-gpu
     gpu_device_id: 0               # CUDA device index used when gpu is true (multi-GPU machines); [0, inf) — CLI: --geo-gpu-device-id
+    device: auto                   # Torch device, learned detectors only; ['auto' (cuda > mps > cpu), 'cpu', 'cuda', 'mps'] — CLI: --geo-device
+    # Learning-based (kornia) detector weights; only used when detector_name is one of them
+    loftr_weights: outdoor         # LoFTR pretrained weights; [outdoor, indoor]
+    loftr_confidence: 0.0          # LoFTR min. correspondence confidence to keep; [0.0, 1.0] (0.0 keeps all)
+    disk_weights: depth            # DISK pretrained weights; [depth, epipolar]
+    dedode_detector_weights: L-C4-v2      # DeDoDe detector weights; [L-upright, L-C4, L-SO2, L-C4-v2]
+    dedode_descriptor_weights: B-upright  # DeDoDe descriptor weights; [B-upright, G-upright, B-C4, B-SO2, G-C4, G-SO2]
 
   # Trajectory kinematics filtering and output quality thresholds
   filtering:

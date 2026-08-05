@@ -83,6 +83,45 @@ def test_presets_expose_gpu_keys(preset):
 
 
 @pytest.mark.parametrize('preset', ['default', 'confident', 'lenient', 'stable'])
+def test_presets_expose_dl_detector_keys(preset):
+    """Every preset carries the stabilo 1.4.0 learning-based detector settings on both paths."""
+    full = load_config(preset, logger)
+    for block in (full['stabilo'], full['georef']['matching']):
+        assert block['device'] == 'auto'
+        assert block['loftr_weights'] == 'outdoor'
+        assert block['loftr_confidence'] == 0.0
+        assert block['disk_weights'] == 'depth'
+        assert block['dedode_detector_weights'] == 'L-C4-v2'
+        assert block['dedode_descriptor_weights'] == 'B-upright'
+    # Previously hardcoded in registration.py; now tunable so learned detectors can shrink the ortho.
+    assert full['georef']['matching']['downsample_ratio'] == 1.0
+
+
+def _config_key_paths(node, prefix=''):
+    """Recursively collect dotted key paths from a nested config mapping."""
+    paths = set()
+    for key, value in (node or {}).items():
+        path = f'{prefix}{key}'
+        paths.add(path)
+        if isinstance(value, dict):
+            paths |= _config_key_paths(value, f'{path}.')
+    return paths
+
+
+@pytest.mark.parametrize('preset', ['confident', 'lenient', 'stable'])
+def test_presets_share_default_key_structure(preset):
+    """
+    Presets differ from default.yaml only in tuned *values*, never in which keys exist.
+
+    Mechanically enforces the preset-mirroring rule: adding a key to default.yaml without
+    mirroring it into all three presets fails here.
+    """
+    expected = _config_key_paths(load_config('default', logger))
+    actual = _config_key_paths(load_config(preset, logger))
+    assert actual == expected, f'missing={sorted(expected - actual)} extra={sorted(actual - expected)}'
+
+
+@pytest.mark.parametrize('preset', ['default', 'confident', 'lenient', 'stable'])
 def test_presets_expose_sahi_block(preset):
     """Every preset carries the full SAHI sub-block in extraction, disabled by default."""
     sahi = load_config(preset, logger)['extraction']['sahi']

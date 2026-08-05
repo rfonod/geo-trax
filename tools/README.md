@@ -345,7 +345,7 @@ ratio thresholds for the azimuth-based dimension estimator.
 
 ```bash
 python tools/analyze_bb_ratios.py data/ --hist
-python tools/analyze_bb_ratios.py video.yaml --id 42
+python tools/analyze_bb_ratios.py results/video.yaml --id 42
 ```
 
 ### `viz_dimension_estimation.py`

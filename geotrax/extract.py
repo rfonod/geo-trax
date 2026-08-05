@@ -24,6 +24,10 @@ Options:
     --help, -h                : Show this help message and exit.
     --cfg, -c <path>          : Path to a custom pipeline config file. Defaults to the bundled config;
                                 run 'geotrax config show' to view it or 'geotrax config copy' to customize.
+    --set, -st <KEY=VALUE>    : Override a pipeline config value for this run; repeat for more than
+                                one, e.g. --set conf=0.35 --set iou=0.6. KEY is a dotted path or any
+                                unambiguous tail of one; VALUE uses YAML rules. Prefer the dedicated
+                                flag where one exists; passing both for the same key is an error.
     --output-folder, -of <str> : Root folder for outputs (bare name or absolute path).
                                 Defaults to cfg -> output -> folder (historical default: 'results').
     --log-path, -lp <str>     : Where to write logs: a directory or a full file path; defaults to a platform-specific log directory.
@@ -51,6 +55,11 @@ Processing Options:
                               OpenCV build; no CPU fallback). Defaults to cfg -> stabilo -> gpu.
     --stab-gpu-device-id, -sgid <int> : CUDA device index used when stabilization GPU is enabled.
                               Defaults to cfg -> stabilo -> gpu_device_id.
+    --stab-detector, -sdet <str> : Stabilization feature detector: classical (orb, sift, rsift, brisk, kaze,
+                              akaze) or learning-based (xfeat, disk, dedode, keynet, loftr).
+                              Defaults to cfg -> stabilo -> detector_name.
+    --stab-device, -sdev <str> : Torch device for the learning-based detectors/matchers (auto, cpu, cuda, mps);
+                              ignored by the classical detectors. Defaults to cfg -> stabilo -> device.
     For full detection, tracking, and stabilization control, edit cfg -> ultralytics, cfg -> tracker,
     and cfg -> stabilo. Run 'geotrax config copy' to get an editable local copy of the pipeline config.
     Object-detection GPU use is set via cfg -> ultralytics -> device (default: auto, uses CUDA when available).
@@ -74,7 +83,8 @@ Examples:
 Notes:
   - Detection, tracking, and stabilization parameters all live in a single pipeline config file
     (cfg -> ultralytics, cfg -> tracker, cfg -> stabilo). Run 'geotrax config copy' to copy the
-    defaults locally, then edit and pass via -c.
+    defaults locally, then edit and pass via -c. For a one-off change, --set KEY=VALUE reaches
+    any of these without a config file.
   - The active tracker is chosen by cfg -> tracker -> active; the full parameter block for every
     supported tracker is kept in the config so you can switch by changing that one line.
   - Extraction-stage settings (stabilize/save_stab toggles, min_track_length, and the
@@ -85,6 +95,9 @@ Notes:
     combined with the tracktrack tracker or with ReID model 'auto' (both need a live Ultralytics predictor).
   - Output filename postfixes (e.g. _vid_transf suffix) are set in cfg -> output; use
     --output-folder / cfg -> output -> folder to redirect where outputs are written.
+  - A '<stem>.yaml' run-metadata file is written into the output folder next to the results,
+    recording the effective configuration (config file + every CLI flag and --set override).
+    Before v1.4.0 this file was saved next to the input video.
 """
 
 import argparse
@@ -110,16 +123,18 @@ from ultralytics.utils.checks import check_yolo
 from ultralytics.utils.files import increment_path
 
 from geotrax import __version__
-from geotrax.utils.cli_utils import add_common_args
-from geotrax.utils.config_utils import backfill_args_from_config, load_config_all
+from geotrax.utils.cli_utils import add_cfg_arg, add_common_args, finalize_cli_args
+from geotrax.utils.config_utils import load_config_all
 from geotrax.utils.constants import DEFAULT_TRACK_BUFFER
 from geotrax.utils.file_utils import (
+    build_result_path,
     check_if_results_exist,
     convert_to_serializable,
     get_output_dir,
     get_video_dimensions,
 )
 from geotrax.utils.logging_utils import setup_logger
+from geotrax.utils.registration import DETECTOR_CHOICES, DEVICE_CHOICES
 
 _INFERENCE_KEYS = {
     'conf', 'iou', 'imgsz', 'max_det', 'classes',
@@ -132,22 +147,10 @@ def detect_track_stabilize(args: argparse.Namespace, logger: logging.Logger) -> 
     """
     Process video based on provided arguments.
     """
+    # load_config_all() has already reconciled the CLI flags with the config in both directions
+    # (see sync_args_with_config), so args and config agree and either can be read from here on.
     config = load_config_all(args, logger)
-    proc = config['main']['processing']
-    out_cfg_raw = config['main'].get('output', {})
-    backfill_args_from_config(args, {
-        'cut_frame_left': proc['cut_frame_left'],
-        'cut_frame_right': proc['cut_frame_right'],
-        'interpolate': config['main']['extraction']['interpolate'],
-        'sahi': (config['main']['extraction'].get('sahi') or {}).get('enable', False),
-        'output_folder': out_cfg_raw.get('folder', 'results'),
-        'stab_gpu': config['stabilo']['gpu'],
-        'stab_gpu_device_id': config['stabilo']['gpu_device_id'],
-    })
-    out_cfg = {**out_cfg_raw, 'folder': args.output_folder}
-    config['stabilo']['gpu'] = args.stab_gpu
-    config['stabilo']['gpu_device_id'] = args.stab_gpu_device_id
-    config['main']['extraction'].setdefault('sahi', {})['enable'] = args.sahi
+    out_cfg = config['main'].get('output', {})
     if args.sahi:
         validate_sahi_tracker(config['main'])
         model = load_sahi_detector(config['ultralytics'], logger)
@@ -283,8 +286,10 @@ def load_sahi_detector(config: Dict, logger: logging.Logger) -> Any:
         from sahi import AutoDetectionModel
     except ImportError:
         logger.critical(
-            "SAHI mode is enabled but the 'sahi' package is not installed. "
-            "Install it with: pip install 'geo-trax[sahi]'"
+            "SAHI mode is enabled but the 'sahi' package is not installed. Install the optional extra:\n"
+            "  python -m pip install 'geo-trax[sahi]'   # if geo-trax was installed from PyPI\n"
+            "  python -m pip install -e '.[sahi]'       # if working from a source checkout\n"
+            "Alternatively, disable SAHI with --no-sahi or cfg -> extraction -> sahi -> enable: false."
         )
         sys.exit(1)
 
@@ -670,7 +675,7 @@ def save_results(tracks: np.ndarray, transforms: np.ndarray, config: Dict, logge
     stab_postfix = out_cfg.get('stab_transform_postfix', '_vid_transf')
     tracks_txt_file = save_dir / f'{source.stem}{tracks_postfix}.txt'
     transf_txt_file = save_dir / f'{source.stem}{stab_postfix}.txt'
-    info_yaml_file = config['main']['args'].source.with_suffix('.yaml')
+    info_yaml_file = build_result_path(source, 'metadata', out_cfg)
 
     try:
         if tracks.size != 0:
@@ -700,7 +705,12 @@ def save_results(tracks: np.ndarray, transforms: np.ndarray, config: Dict, logge
 
 
 def _build_run_metadata(config: Dict, save_dir: Path) -> Dict:
-    """Build a structured, human-readable metadata dict to save alongside the video."""
+    """Build a structured, human-readable record of the configuration this run actually used.
+
+    Reads the config dict, which ``sync_args_with_config`` has already reconciled with the CLI
+    flags and ``--set`` overrides, so the saved file reflects the run rather than the config file
+    it started from.
+    """
     main = config['main']
     ul = config['ultralytics']
     args = main['args']
@@ -744,23 +754,41 @@ def _build_run_metadata(config: Dict, save_dir: Path) -> Dict:
     }
 
 
-def add_processing_args(group) -> None:
+def add_processing_args(group) -> dict:
     """
     Register the shared detection/frame-range CLI flags on the given argparse group.
 
     Used by both ``geotrax extract`` and ``geotrax batch`` so the two expose an identical set
-    of processing options. Every flag defaults to ``None`` and is backfilled from the config.
+    of processing options. Every flag defaults to ``None``; the returned ``dest -> CfgArg`` map
+    tells ``sync_args_with_config`` which config key each one stands for.
     """
-    group.add_argument('--model', '-m', nargs='+', default=None, metavar='MODEL', help="Detection model to use: a local file path OR an 'hf://<org>/<repo>/<path/to/file>.pt' Hugging Face reference (auto-downloaded & cached). Defaults to cfg -> extraction -> model.")
-    group.add_argument('--class-names', '-cn', nargs='+', default=None, metavar='ID=NAME|FILE', help="Rename class-id -> name labels: a .yaml/.json mapping file or inline ID=NAME pairs (e.g. -cn 0=car 1=bus). Defaults to cfg -> extraction -> class_rename, then the model's own names.")
-    group.add_argument('--conf', '-co', type=float, default=None, help='Detection confidence threshold. Defaults to cfg -> ultralytics -> conf.')
-    group.add_argument('--classes', '-cls', nargs='+', type=int, default=None, help='Class IDs to extract (e.g., --classes 0 1 2). Defaults to cfg -> ultralytics -> classes.')
-    group.add_argument('--cut-frame-left', '-cfl', type=int, default=None, help='Skip the first N frames. Defaults to cfg -> processing -> cut_frame_left.')
-    group.add_argument('--cut-frame-right', '-cfr', type=int, default=None, help='Stop processing after this frame. Defaults to cfg -> processing -> cut_frame_right.')
-    group.add_argument('--interpolate', action=argparse.BooleanOptionalAction, default=None, help='Fill per-track frame gaps with linear interpolation; adds is_interpolated column to output. Defaults to cfg -> extraction -> interpolate.')
-    group.add_argument('--sahi', action=argparse.BooleanOptionalAction, default=None, help="Detect via SAHI sliced inference for improved small-object recall (requires: pip install 'geo-trax[sahi]'). Slicing parameters live in cfg -> extraction -> sahi. Defaults to cfg -> extraction -> sahi -> enable.")
-    group.add_argument('--stab-gpu', '-sg', action=argparse.BooleanOptionalAction, default=None, help='CUDA-accelerate stabilization (requires a CUDA-enabled OpenCV build; no CPU fallback). Defaults to cfg -> stabilo -> gpu.')
-    group.add_argument('--stab-gpu-device-id', '-sgid', type=int, default=None, help='CUDA device index used when stabilization GPU is enabled. Defaults to cfg -> stabilo -> gpu_device_id.')
+    paths = {}
+    add_cfg_arg(group, '--model', '-m', nargs='+', metavar='MODEL', cfg='extraction.model', paths=paths, no_sync=True,
+                help="Detection model to use: a local file path OR an 'hf://<org>/<repo>/<path/to/file>.pt' Hugging Face reference (auto-downloaded & cached).")
+    add_cfg_arg(group, '--class-names', '-cn', nargs='+', metavar='ID=NAME|FILE', cfg='extraction.class_rename', paths=paths, no_sync=True,
+                help="Rename class-id -> name labels: a .yaml/.json mapping file or inline ID=NAME pairs (e.g. -cn 0=car 1=bus).",
+                default_note="then the model's own names")
+    add_cfg_arg(group, '--conf', '-co', type=float, cfg='ultralytics.conf', paths=paths,
+                help='Detection confidence threshold.')
+    add_cfg_arg(group, '--classes', '-cls', nargs='+', type=int, cfg='ultralytics.classes', paths=paths,
+                help='Class IDs to extract (e.g., --classes 0 1 2).')
+    add_cfg_arg(group, '--cut-frame-left', '-cfl', type=int, cfg='processing.cut_frame_left', paths=paths,
+                help='Skip the first N frames.')
+    add_cfg_arg(group, '--cut-frame-right', '-cfr', type=int, cfg='processing.cut_frame_right', paths=paths,
+                help='Stop processing after this frame.')
+    add_cfg_arg(group, '--interpolate', action=argparse.BooleanOptionalAction, cfg='extraction.interpolate', paths=paths,
+                help='Fill per-track frame gaps with linear interpolation; adds is_interpolated column to output.')
+    add_cfg_arg(group, '--sahi', action=argparse.BooleanOptionalAction, cfg='extraction.sahi.enable', paths=paths,
+                help="Detect via SAHI sliced inference for improved small-object recall (requires: pip install 'geo-trax[sahi]'). Slicing parameters live in cfg -> extraction -> sahi.")
+    add_cfg_arg(group, '--stab-gpu', '-sg', action=argparse.BooleanOptionalAction, cfg='stabilo.gpu', paths=paths,
+                help='CUDA-accelerate stabilization (requires a CUDA-enabled OpenCV build; no CPU fallback).')
+    add_cfg_arg(group, '--stab-gpu-device-id', '-sgid', type=int, cfg='stabilo.gpu_device_id', paths=paths,
+                help='CUDA device index used when stabilization GPU is enabled.')
+    add_cfg_arg(group, '--stab-detector', '-sdet', choices=DETECTOR_CHOICES, cfg='stabilo.detector_name', paths=paths,
+                help="Stabilization feature detector. Classical (OpenCV): orb, sift, rsift, brisk, kaze, akaze. Learning-based (kornia, use --stab-device): xfeat, disk, dedode, keynet, loftr. All learned ones except keynet are upright models (matching collapses past ~30 deg rotation) and are memory hungry at high resolution - lower cfg -> stabilo -> downsample_ratio for them.")
+    add_cfg_arg(group, '--stab-device', '-sdev', choices=DEVICE_CHOICES, cfg='stabilo.device', paths=paths,
+                help="Torch device for the learning-based stabilization detectors/matchers ('auto' picks cuda > mps > cpu); ignored by the classical detectors and independent of --stab-gpu (OpenCV CUDA).")
+    return paths
 
 
 def parse_cli_args() -> argparse.Namespace:
@@ -772,14 +800,15 @@ def parse_cli_args() -> argparse.Namespace:
     parser.add_argument('source', type=Path, help='Path to the input video file.')
 
     optional = parser.add_argument_group('Optional arguments')
-    add_common_args(optional)
+    cfg_paths = add_common_args(optional)
 
     processing = parser.add_argument_group('Processing arguments',
         'For full detection and tracking control (model, IoU, image size, tracker settings, etc.), '
-        "edit cfg -> ultralytics and cfg -> tracker in the pipeline config (run 'geotrax config copy').")
-    add_processing_args(processing)
+        "use --set (e.g. --set iou=0.6) or edit cfg -> ultralytics and cfg -> tracker in the "
+        "pipeline config (run 'geotrax config copy').")
+    cfg_paths |= add_processing_args(processing)
 
-    return parser.parse_args()
+    return finalize_cli_args(parser, cfg_paths)
 
 def main() -> None:
     """

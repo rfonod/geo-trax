@@ -21,6 +21,10 @@ Options:
   --help, -h       : Show this help message and exit.
   --cfg, -c        : Path to a custom pipeline config file. Defaults to the bundled config;
                      run 'geotrax config show' to view it or 'geotrax config copy' to customize.
+  --set, -st <KEY=VALUE>    : Override a pipeline config value for this run; repeat for more than
+                     one, e.g. --set stationary_speed_cutoff=1.0. KEY is a dotted path or any
+                     unambiguous tail of one; VALUE uses YAML rules. Prefer the dedicated flag
+                     where one exists; passing both for the same key is an error.
   --output-folder, -of <str> : Root folder where pipeline outputs (incl. plots/) are read from and
                      written to. Defaults to cfg -> output -> folder (historical default: 'results').
   --model, -m <str> : Detection model used to resolve vehicle class names — a local file path
@@ -92,8 +96,8 @@ import pandas as pd
 import seaborn as sns
 from tqdm import tqdm
 
-from geotrax.utils.cli_utils import DEFAULT_CFG, add_common_args
-from geotrax.utils.config_utils import backfill_args_from_config, load_config_all
+from geotrax.utils.cli_utils import DEFAULT_CFG, add_cfg_arg, add_common_args, finalize_cli_args
+from geotrax.utils.config_utils import load_config_all
 from geotrax.utils.constants import (
     ACC_THRESHOLD_ALERT,
     RESULTS_FORMATS,
@@ -116,23 +120,10 @@ def generate_plots(args: argparse.Namespace, logger: logging.Logger) -> None:
     """
     Generate plots for the input file or directory.
     """
+    # load_config_all() has already reconciled the CLI flags with the config in both directions
+    # (see sync_args_with_config), so args and config agree and either can be read from here on.
     config = load_config_all(args, logger)['main']
     plot_cfg = config['plotting']
-    folders = config['input']
-    out_cfg_raw = config.get('output', {})
-    backfill_args_from_config(args, {
-        'save': plot_cfg['save'],
-        'show': plot_cfg['show'],
-        'aggregate': plot_cfg['aggregate'],
-        'points': plot_cfg['plot_points'],
-        'segmentations': plot_cfg['use_segmentations'],
-        'class_filter': plot_cfg['class_filter'],
-        'ortho_folder': Path(folders['ortho_folder']) if folders['ortho_folder'] else None,
-        'segmentation_folder': Path(folders['segmentation_folder']) if folders['segmentation_folder'] else None,
-        'output_folder': out_cfg_raw.get('folder', DEFAULT_OUTPUT['folder']),
-    })
-    out_cfg = {**out_cfg_raw, 'folder': args.output_folder}
-    config['output'] = out_cfg
     colors.set_colors(plot_cfg['colors'])
     files = determine_files_to_process(args.input, config['plotting']['skip_filenames_with'], logger)
     ortho_folder = get_ortho_folder(args.input, args.ortho_folder, logger, critical=False)
@@ -768,6 +759,7 @@ def default_plot_args(**overrides) -> argparse.Namespace:
         'save': None,
         'show': None,
         'cfg': DEFAULT_CFG,
+        'set': None,
         'output_folder': None,
         'log_path': None,
         'verbose': False,
@@ -782,10 +774,18 @@ def default_plot_args(**overrides) -> argparse.Namespace:
         'class_names': None,
     }
     defaults.update(overrides)
-    return argparse.Namespace(**defaults)
+    args = argparse.Namespace(**defaults)
+    # A synthesized namespace still has to behave like a parsed one for the config plumbing:
+    # without the registry, sync_args_with_config has nothing to reconcile and neither
+    # --output-folder nor --set would reach the plotting config. '_cli_provided' is empty because
+    # nothing here was typed at this parser: the caller's own command line was already validated,
+    # and its dedicated flags arrive as plain values, not as conflicts to re-detect.
+    args._cfg_paths = _build_parser()[1]
+    args._cli_provided = frozenset()
+    return args
 
 
-def add_plotting_args(group, dest_prefix: str = '') -> None:
+def add_plotting_args(group, dest_prefix: str = '') -> dict:
     """
     Register the shared plotting CLI flags on the given argparse group.
 
@@ -793,45 +793,72 @@ def add_plotting_args(group, dest_prefix: str = '') -> None:
     ``geotrax plot`` and ``geotrax batch``; the ``--plot-`` prefix distinguishes them from the
     visualization flags (``--save``, ``--show``, ...) in batch's combined parser and maps each
     to the cfg -> plotting section. ``dest_prefix='plot_'`` is used by batch so the resulting
-    attribute names don't collide with the visualization ones. Every flag defaults to ``None``
-    and is backfilled from the config.
+    attribute names don't collide with the visualization ones -- which is also why the returned
+    ``dest -> CfgArg`` map has to be per-parser: bare ``save`` means cfg -> plotting -> save here
+    and cfg -> visualization -> save in ``add_visualization_args``.
     """
-    group.add_argument("--plot-save", "-ps", dest=f"{dest_prefix}save", action=argparse.BooleanOptionalAction, default=None,
-                       help="Save the plots as .pdf files. Defaults to cfg -> plotting -> save.")
-    group.add_argument("--plot-show", "-psh", dest=f"{dest_prefix}show", action=argparse.BooleanOptionalAction, default=None,
-                       help="Show plots in an interactive window. Defaults to cfg -> plotting -> show.")
-    group.add_argument("--plot-aggregate", "-pa", dest=f"{dest_prefix}aggregate", action=argparse.BooleanOptionalAction, default=None,
-                       help="When the input is a folder, merge trajectories from all videos sharing the same location ID into a single plot per location. Defaults to cfg -> plotting -> aggregate.")
-    group.add_argument("--plot-points", "-pp", dest=f"{dest_prefix}points", action=argparse.BooleanOptionalAction, default=None,
-                       help="Plot discrete trajectory points instead of connected lines. Defaults to cfg -> plotting -> plot_points.")
-    group.add_argument("--plot-segmentations", "-pseg", dest=f"{dest_prefix}segmentations", action=argparse.BooleanOptionalAction, default=None,
-                       help="Produce an additional trajectory plot overlaid on the lane segmentation overlay PNG (from --segmentation-folder), alongside the standard plain-orthophoto plot. Requires pre-generated overlays (run: python tools/viz_segmentations.py <ortho_folder>/). Defaults to cfg -> plotting -> use_segmentations.")
-    group.add_argument("--plot-class-filter", "-pcf", dest=f"{dest_prefix}class_filter", type=int, nargs="+", default=None,
-                       help="Vehicle class IDs to exclude from plots (e.g. 1 2). Defaults to cfg -> plotting -> class_filter.")
+    paths = {}
+    add_cfg_arg(group, "--plot-save", "-ps", dest=f"{dest_prefix}save", action=argparse.BooleanOptionalAction,
+                cfg='plotting.save', paths=paths,
+                help="Save the plots as .pdf files.")
+    add_cfg_arg(group, "--plot-show", "-psh", dest=f"{dest_prefix}show", action=argparse.BooleanOptionalAction,
+                cfg='plotting.show', paths=paths,
+                help="Show plots in an interactive window.")
+    add_cfg_arg(group, "--plot-aggregate", "-pa", dest=f"{dest_prefix}aggregate", action=argparse.BooleanOptionalAction,
+                cfg='plotting.aggregate', paths=paths,
+                help="When the input is a folder, merge trajectories from all videos sharing the same location ID into a single plot per location.")
+    add_cfg_arg(group, "--plot-points", "-pp", dest=f"{dest_prefix}points", action=argparse.BooleanOptionalAction,
+                cfg='plotting.plot_points', paths=paths,
+                help="Plot discrete trajectory points instead of connected lines.")
+    add_cfg_arg(group, "--plot-segmentations", "-pseg", dest=f"{dest_prefix}segmentations", action=argparse.BooleanOptionalAction,
+                cfg='plotting.use_segmentations', paths=paths,
+                help="Produce an additional trajectory plot overlaid on the lane segmentation overlay PNG (from --segmentation-folder), alongside the standard plain-orthophoto plot. Requires pre-generated overlays (run: python tools/viz_segmentations.py <ortho_folder>/).")
+    add_cfg_arg(group, "--plot-class-filter", "-pcf", dest=f"{dest_prefix}class_filter", type=int, nargs="+",
+                cfg='plotting.class_filter', paths=paths,
+                help="Vehicle class IDs to exclude from plots (e.g. 1 2).")
+    return paths
 
 
-def parse_cli_args() -> argparse.Namespace:
+def _build_parser() -> tuple:
     """
-    Parse command-line arguments
+    Build the plot parser and its ``dest -> CfgArg`` map.
+
+    Split out of ``parse_cli_args`` so that ``default_plot_args`` can reuse the same registry
+    instead of restating it (see there for why a synthesized namespace needs one).
     """
     parser = argparse.ArgumentParser(description="Trajectory and distribution plotting tool.")
 
     parser.add_argument("input", type=Path, help="Path to a video file, a .txt/.csv results file, or a folder containing any of these.")
 
     optional = parser.add_argument_group('Optional arguments')
-    add_common_args(optional)
-    optional.add_argument('--model', '-m', nargs='+', default=None, metavar='MODEL', help="Detection model used to resolve vehicle class names: a local path OR an 'hf://<org>/<repo>/<path/to/file>.pt' reference. Defaults to cfg -> extraction -> model.")
-    optional.add_argument('--class-names', '-cn', nargs='+', default=None, metavar='ID=NAME|FILE', help="Class-id -> name mapping: a .yaml/.json file or inline ID=NAME pairs (e.g. -cn 0=car 1=bus). Defaults to cfg -> extraction -> class_rename, then model names.")
+    cfg_paths = add_common_args(optional)
+    add_cfg_arg(optional, '--model', '-m', nargs='+', metavar='MODEL', cfg='extraction.model', paths=cfg_paths, no_sync=True,
+                help="Detection model used to resolve vehicle class names: a local path OR an 'hf://<org>/<repo>/<path/to/file>.pt' reference.")
+    add_cfg_arg(optional, '--class-names', '-cn', nargs='+', metavar='ID=NAME|FILE', cfg='extraction.class_rename', paths=cfg_paths, no_sync=True,
+                help="Class-id -> name mapping: a .yaml/.json file or inline ID=NAME pairs (e.g. -cn 0=car 1=bus).",
+                default_note='then model names')
 
     georef = parser.add_argument_group('Plot background arguments')
-    georef.add_argument("--ortho-folder", "-orf", type=Path, default=None, help="Path to the folder with orthophoto images (.png) used as plot backgrounds for georeferenced trajectories. Defaults to cfg -> input -> ortho_folder, then 'ORTHOPHOTOS' at the same level as 'PROCESSED' in 'input'.")
-    georef.add_argument("--segmentation-folder", "-osf", type=Path, default=None, help="Path to the folder containing lane segmentation CSV files (used during georeferencing for lane assignment) and, when --plot-segmentations is enabled, the corresponding overlay PNG files used as plot backgrounds. Defaults to cfg -> input -> segmentation_folder, then '<ortho-folder>/segmentations'.")
+    add_cfg_arg(georef, "--ortho-folder", "-orf", type=Path, cfg='input.ortho_folder', paths=cfg_paths, coerce=Path,
+                help="Path to the folder with orthophoto images (.png) used as plot backgrounds for georeferenced trajectories.",
+                default_note="then 'ORTHOPHOTOS' at the same level as 'PROCESSED' in 'input'")
+    add_cfg_arg(georef, "--segmentation-folder", "-osf", type=Path, cfg='input.segmentation_folder', paths=cfg_paths, coerce=Path,
+                help="Path to the folder containing lane segmentation CSV files (used during georeferencing for lane assignment) and, when --plot-segmentations is enabled, the corresponding overlay PNG files used as plot backgrounds.",
+                default_note="then '<ortho-folder>/segmentations'")
 
     plotting = parser.add_argument_group('Plotting arguments')
-    add_plotting_args(plotting)
+    cfg_paths |= add_plotting_args(plotting)
     plotting.add_argument("--id", "-i", type=int, default=0, help="Vehicle ID to print/plot in detail (only for non-folder input) [default: 0]")
 
-    return parser.parse_args()
+    return parser, cfg_paths
+
+
+def parse_cli_args() -> argparse.Namespace:
+    """
+    Parse command-line arguments
+    """
+    parser, cfg_paths = _build_parser()
+    return finalize_cli_args(parser, cfg_paths)
 
 
 def main() -> None:

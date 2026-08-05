@@ -26,6 +26,10 @@ Options:
     --help, -h                     : Show this help message and exit.
     --cfg, -c <path>               : Path to a custom pipeline config file. Defaults to the bundled config;
                                      run 'geotrax config show' to view it or 'geotrax config copy' to customize.
+    --set, -st <KEY=VALUE>         : Override a pipeline config value for this run; repeat for more than
+                                     one, e.g. --set matching.downsample_ratio=0.25. KEY is a dotted path
+                                     or any unambiguous tail of one; VALUE uses YAML rules. Prefer the
+                                     dedicated flag where one exists; passing both for the same key is an error.
     --output-folder, -of <str>     : Root folder for outputs (bare name or absolute path).
                                      Defaults to cfg -> output -> folder (historical default: 'results').
     --log-path, -lp <str>          : Where to write logs: a directory or a full file path; defaults to a platform-specific log directory.
@@ -52,6 +56,12 @@ Georeferencing Options:
                                      Defaults to cfg -> georef -> matching -> gpu.
     --geo-gpu-device-id, -ggid <int> : CUDA device index used when georeferencing GPU is enabled.
                                      Defaults to cfg -> georef -> matching -> gpu_device_id.
+    --geo-detector, -gdet <str>    : Registration detector: classical (orb, sift, rsift, brisk, kaze, akaze)
+                                     or learning-based (xfeat, disk, dedode, keynet, loftr).
+                                     Defaults to cfg -> georef -> matching -> detector_name.
+    --geo-device, -gdev <str>      : Torch device for the learning-based detectors/matchers (auto, cpu, cuda,
+                                     mps); ignored by the classical detectors.
+                                     Defaults to cfg -> georef -> matching -> device.
 
 Examples:
 
@@ -71,8 +81,8 @@ Notes:
   - Orthophotos must be georeferenced; their coordinate system must match
     cfg -> georef -> transformation -> source_crs (default: EPSG:4326 / WGS84).
   - Additional options (image matching, CRS, kinematic filtering, etc.) live under cfg -> georef
-    in the pipeline config; apart from the --geo-gpu / --geo-gpu-device-id toggles, no CLI overrides
-    exist for those settings.
+    in the pipeline config; apart from the --geo-gpu / --geo-gpu-device-id and
+    --geo-detector / --geo-device overrides, no CLI flags exist for those settings.
   - The master frame approach registers reference->master and master->ortho separately, improving homography
     robustness by leveraging a stable high-quality reference image. Use --no-master only when master frames
     are unavailable.
@@ -100,8 +110,8 @@ from scipy.signal import savgol_filter
 from shapely.geometry import Polygon
 from tqdm import tqdm
 
-from geotrax.utils.cli_utils import add_common_args
-from geotrax.utils.config_utils import backfill_args_from_config, load_config_all
+from geotrax.utils.cli_utils import add_cfg_arg, add_common_args, finalize_cli_args
+from geotrax.utils.config_utils import load_config_all
 from geotrax.utils.file_utils import (
     build_result_path,
     check_if_results_exist,
@@ -111,33 +121,18 @@ from geotrax.utils.file_utils import (
     get_output_dir,
 )
 from geotrax.utils.logging_utils import setup_logger
-from geotrax.utils.registration import estimate_homography
+from geotrax.utils.registration import DETECTOR_CHOICES, DEVICE_CHOICES, estimate_homography
 
 
 def georeference(args: argparse.Namespace, logger: logging.Logger) -> None:
     """
     Georeference the tracking data using orthophotos.
     """
+    # load_config_all() has already reconciled the CLI flags with the config in both directions
+    # (see sync_args_with_config), so args and config agree and either can be read from here on.
     full_config = load_config_all(args, logger, needs_model=False)
     config = full_config['georef']
-    gproc = config['processing']
-    folders = full_config['main']['input']
-    out_cfg_raw = full_config['main'].get('output', {})
-    backfill_args_from_config(args, {
-        'ref_frame': gproc['ref_frame'],
-        'recompute': gproc['recompute'],
-        'geo_source': gproc['geo_source'],
-        'no_master': not gproc['use_master'],
-        'ortho_folder': Path(folders['ortho_folder']) if folders['ortho_folder'] else None,
-        'master_folder': Path(folders['master_folder']) if folders['master_folder'] else None,
-        'segmentation_folder': Path(folders['segmentation_folder']) if folders['segmentation_folder'] else None,
-        'output_folder': out_cfg_raw.get('folder', 'results'),
-        'geo_gpu': config['matching']['gpu'],
-        'geo_gpu_device_id': config['matching']['gpu_device_id'],
-    })
-    out_cfg = {**out_cfg_raw, 'folder': args.output_folder}
-    config['matching']['gpu'] = args.geo_gpu
-    config['matching']['gpu_device_id'] = args.geo_gpu_device_id
+    out_cfg = full_config['main'].get('output', {})
 
     n_steps = 8 if args.no_master else 10
     _bar_w = max(10, shutil.get_terminal_size().columns - 88)
@@ -579,26 +574,21 @@ def compute_hash(image: np.ndarray) -> str:
 
 
 def compute_homography(img_src: np.ndarray, img_dst: np.ndarray, src_dst: tuple, logger: logging.Logger,
-                       detector_name: str = 'rsift', matcher_name: str = 'bf', filter_type: str = 'ratio',
-                       sift_enable_precise_upscale: bool = True, max_features: int = 250000,
-                       filter_ratio: float = 0.55, ransac_method: int = cv2.USAC_MAGSAC,
-                       ransac_epipolar_threshold: float = 3.0, ransac_max_iter: int = 10000,
-                       ransac_confidence: float = 0.999999, rsift_eps: float = 1e-8,
-                       gpu: bool = False, gpu_device_id: int = 0) -> tuple:
+                       **matching_cfg) -> tuple:
     """
     Compute homography between a source image and a destination image.
 
+    `matching_cfg` is the `cfg -> georef -> matching` block, forwarded verbatim to
+    estimate_homography(), which supplies the defaults and pins the registration geometry.
+    New stabilo parameters therefore need adding only to the config.
+
     Set `gpu=True` (with `gpu_device_id`) to CUDA-accelerate registration. stabilo only
     GPU-accelerates the ORB detector, so this requires `detector_name='orb'` and a CUDA-enabled
-    OpenCV build; otherwise stabilo raises ValueError (no CPU fallback).
+    OpenCV build; otherwise stabilo raises ValueError (no CPU fallback). For the learning-based
+    detectors use `device='cuda'` instead; stabilo rejects combining them with `gpu=True`.
     """
     homography, inliers_count, num_matches, num_keypoints = estimate_homography(
-        img_src, img_dst, logger, detector_name=detector_name, matcher_name=matcher_name,
-        filter_type=filter_type, sift_enable_precise_upscale=sift_enable_precise_upscale,
-        max_features=max_features, filter_ratio=filter_ratio, ransac_method=ransac_method,
-        ransac_epipolar_threshold=ransac_epipolar_threshold, ransac_max_iter=ransac_max_iter,
-        ransac_confidence=ransac_confidence, rsift_eps=rsift_eps,
-        gpu=gpu, gpu_device_id=gpu_device_id,
+        img_src, img_dst, logger, **matching_cfg
     )
 
     if homography is None:
@@ -913,22 +903,44 @@ def save_homography(source: Path, homography: np.ndarray, logger: logging.Logger
     logger.info(f"Homography 'reference -> orthophoto' saved to: '{geo_transf_filepath}'.")
 
 
-def add_georeferencing_args(group) -> None:
+def add_georeferencing_args(group) -> dict:
     """
     Register the shared georeferencing CLI flags on the given argparse group.
 
     Used by both ``geotrax georeference`` and ``geotrax batch`` so the two expose an identical
-    set of georeferencing options. Every flag defaults to ``None`` and is backfilled from config.
+    set of georeferencing options. Every flag defaults to ``None``; the returned ``dest -> CfgArg``
+    map tells ``sync_args_with_config`` which config key each one stands for.
     """
-    group.add_argument("--ortho-folder", "-orf", type=Path, default=None, help="Custom path to the folder with orthophotos (.png, .tif, .txt). Defaults to cfg -> input -> ortho_folder, then 'ORTHOPHOTOS' at the same level as 'PROCESSED' in 'input'.")
-    group.add_argument("--geo-source", "-gs", choices=['metadata-tif', 'text-file', 'center-text-file'], default=None, help="Source of georeferencing parameters. If not provided, falls back to cfg -> georef -> processing -> geo_source, then auto-detect.")
-    group.add_argument("--ref-frame", "-rf", type=int, default=None, help="Reference frame number (must match stabilization setting). Defaults to cfg -> georef -> processing -> ref_frame.")
-    group.add_argument("--no-master", "-nm", action="store_const", const=True, default=None, help="Disable the master frame approach regardless of config. When not set, cfg -> georef -> processing -> use_master applies.")
-    group.add_argument("--master-folder", "-mf", type=Path, default=None, help="Custom path to the folder containing master frame files (.png). Defaults to cfg -> input -> master_folder, then '<ortho-folder>/master_frames'.")
-    group.add_argument("--recompute", "-r", action="store_const", const=True, default=None, help="Force recompute master->ortho homography even if cached. Defaults to cfg -> georef -> processing -> recompute.")
-    group.add_argument("--segmentation-folder", "-osf", type=Path, default=None, help="Path to the folder with lane segmentation CSV files (used for lane assignment during georeferencing); the corresponding overlay PNGs are also used as plot backgrounds when segmentation plotting is enabled. Defaults to cfg -> input -> segmentation_folder, then '<ortho-folder>/segmentations'.")
-    group.add_argument("--geo-gpu", "-gg", action=argparse.BooleanOptionalAction, default=None, help="CUDA-accelerate georeferencing image registration (requires cfg -> georef -> matching -> detector_name: orb AND a CUDA-enabled OpenCV build; no CPU fallback). Defaults to cfg -> georef -> matching -> gpu.")
-    group.add_argument("--geo-gpu-device-id", "-ggid", type=int, default=None, help="CUDA device index used when georeferencing GPU is enabled. Defaults to cfg -> georef -> matching -> gpu_device_id.")
+    paths = {}
+    add_cfg_arg(group, "--ortho-folder", "-orf", type=Path, cfg='input.ortho_folder', paths=paths, coerce=Path,
+                help="Custom path to the folder with orthophotos (.png, .tif, .txt).",
+                default_note="then 'ORTHOPHOTOS' at the same level as 'PROCESSED' in 'input'")
+    add_cfg_arg(group, "--geo-source", "-gs", choices=['metadata-tif', 'text-file', 'center-text-file'],
+                cfg='georef.processing.geo_source', paths=paths,
+                help="Source of georeferencing parameters.", default_note="then auto-detect")
+    add_cfg_arg(group, "--ref-frame", "-rf", type=int, cfg='georef.processing.ref_frame', paths=paths,
+                help="Reference frame number (must match stabilization setting).")
+    add_cfg_arg(group, "--no-master", "-nm", action="store_const", const=True,
+                cfg='georef.processing.use_master', paths=paths, invert=True, default_note=None,
+                help="Disable the master frame approach regardless of config. When not set, cfg -> georef -> processing -> use_master applies.")
+    add_cfg_arg(group, "--master-folder", "-mf", type=Path, cfg='input.master_folder', paths=paths, coerce=Path,
+                help="Custom path to the folder containing master frame files (.png).",
+                default_note="then '<ortho-folder>/master_frames'")
+    add_cfg_arg(group, "--recompute", "-r", action="store_const", const=True,
+                cfg='georef.processing.recompute', paths=paths,
+                help="Force recompute master->ortho homography even if cached.")
+    add_cfg_arg(group, "--segmentation-folder", "-osf", type=Path, cfg='input.segmentation_folder', paths=paths, coerce=Path,
+                help="Path to the folder with lane segmentation CSV files (used for lane assignment during georeferencing); the corresponding overlay PNGs are also used as plot backgrounds when segmentation plotting is enabled.",
+                default_note="then '<ortho-folder>/segmentations'")
+    add_cfg_arg(group, "--geo-gpu", "-gg", action=argparse.BooleanOptionalAction, cfg='georef.matching.gpu', paths=paths,
+                help="CUDA-accelerate georeferencing image registration (requires --geo-detector orb / cfg -> georef -> matching -> detector_name: orb AND a CUDA-enabled OpenCV build; no CPU fallback).")
+    add_cfg_arg(group, "--geo-gpu-device-id", "-ggid", type=int, cfg='georef.matching.gpu_device_id', paths=paths,
+                help="CUDA device index used when georeferencing GPU is enabled.")
+    add_cfg_arg(group, "--geo-detector", "-gdet", choices=DETECTOR_CHOICES, cfg='georef.matching.detector_name', paths=paths,
+                help="Georeferencing registration detector. Classical (OpenCV): orb, sift, rsift, brisk, kaze, akaze. Learning-based (kornia, use --geo-device): xfeat, disk, dedode, keynet, loftr. CAUTION: the reference frame is registered against a north-up orthophoto, so the pair can differ by an arbitrary rotation - only keynet and the classical detectors are rotation invariant. Orthophotos are also very large; lower cfg -> georef -> matching -> downsample_ratio before using a learned detector.")
+    add_cfg_arg(group, "--geo-device", "-gdev", choices=DEVICE_CHOICES, cfg='georef.matching.device', paths=paths,
+                help="Torch device for the learning-based georeferencing detectors/matchers ('auto' picks cuda > mps > cpu); ignored by the classical detectors and independent of --geo-gpu (OpenCV CUDA).")
+    return paths
 
 
 def parse_cli_args() -> argparse.Namespace:
@@ -940,12 +952,12 @@ def parse_cli_args() -> argparse.Namespace:
     parser.add_argument("source", type=Path, help="Path to the input video file.")
 
     optional = parser.add_argument_group('Optional arguments')
-    add_common_args(optional)
+    cfg_paths = add_common_args(optional)
 
     georef = parser.add_argument_group('Georeferencing arguments')
-    add_georeferencing_args(georef)
+    cfg_paths |= add_georeferencing_args(georef)
 
-    return parser.parse_args()
+    return finalize_cli_args(parser, cfg_paths)
 
 
 def main() -> None:

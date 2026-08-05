@@ -177,3 +177,31 @@ def test_setup_logger_dry_run_skips_file_handler(tmp_path, monkeypatch):
         assert not any(isinstance(h, logging.FileHandler) for h in logger.handlers)
     finally:
         _cleanup(logger)
+
+
+def test_setup_logger_triggers_update_check(tmp_path, monkeypatch):
+    """setup_logger is the single hook point for the PyPI update check."""
+    monkeypatch.setattr(logging_utils, 'default_log_dir', lambda: tmp_path)
+    calls = []
+    monkeypatch.setattr(logging_utils, 'check_for_updates_once', lambda logger=None: calls.append(logger))
+    logger = setup_logger('geotrax.test_stage_update_check', verbose=False)
+    try:
+        assert calls == [logger]
+    finally:
+        _cleanup(logger)
+
+
+def test_setup_logger_survives_failing_update_check(tmp_path, monkeypatch):
+    """The check is best-effort: a failure in it must never break logger setup."""
+    monkeypatch.setattr(logging_utils, 'default_log_dir', lambda: tmp_path)
+
+    def _boom(logger=None):
+        raise RuntimeError('network exploded')
+
+    monkeypatch.setattr(logging_utils, 'check_for_updates_once', _boom)
+    logger = setup_logger('geotrax.test_stage_update_check_raises', verbose=False)
+    try:
+        assert isinstance(logger, logging.Logger)
+        logger.info('still usable')
+    finally:
+        _cleanup(logger)

@@ -13,6 +13,7 @@ from unittest.mock import patch
 
 import numpy as np
 import pytest
+import yaml
 from ultralytics.trackers.bot_sort import BOTSORT
 
 from geotrax.extract import (
@@ -52,6 +53,26 @@ def test_stab_gpu_flags_parse():
     assert args.stab_gpu is True
     assert args.stab_gpu_device_id == 2
     assert _parse_processing(['--no-stab-gpu']).stab_gpu is False
+
+
+def test_stab_detector_and_device_default_to_none():
+    args = _parse_processing([])
+    assert args.stab_detector is None
+    assert args.stab_device is None
+
+
+def test_stab_detector_and_device_parse():
+    args = _parse_processing(['--stab-detector', 'xfeat', '--stab-device', 'cpu'])
+    assert args.stab_detector == 'xfeat'
+    assert args.stab_device == 'cpu'
+    assert _parse_processing(['-sdet', 'orb', '-sdev', 'auto']).stab_detector == 'orb'
+
+
+def test_stab_detector_rejects_unknown_value():
+    with pytest.raises(SystemExit):
+        _parse_processing(['--stab-detector', 'not-a-detector'])
+    with pytest.raises(SystemExit):
+        _parse_processing(['--stab-device', 'tpu'])
 
 
 def test_sahi_flag_defaults_to_none():
@@ -432,3 +453,60 @@ def test_postprocess_tracks_falls_back_to_default_track_buffer_when_missing(capl
     assert mock_interp.call_args.args[2] == DEFAULT_TRACK_BUFFER
     assert any("no 'track_buffer' parameter" in r.message for r in caplog.records)
     assert result.shape[1] == 15
+
+
+# --- run metadata ------------------------------------------------------------------------------
+
+def _metadata_config(source, output_cfg, **overrides):
+    """A minimal load_config_all()-shaped config, enough to drive save_results()."""
+    main = {
+        'args': SimpleNamespace(source=source, cfg='default'),
+        'output': output_cfg,
+        'processing': {'cut_frame_left': 0, 'cut_frame_right': None},
+        'extraction': {'save_stab': False, 'interpolate': False},
+        'class_names': {0: 'Car'},
+        'class_names_source': 'model',
+        'model_configured': 'hf://rfonod/geo-trax/model.pt',
+        'tracker_active': 'botsort',
+        'tracker_params': {'track_buffer': 30},
+        'visualization': {'show_lanes': False},
+        'plotting': {}, 'batch': {}, 'input': {},
+    }
+    main.update(overrides)
+    return {'main': main, 'ultralytics': {'model': '/tmp/model.pt', 'conf': 0.25},
+            'stabilo': {'gpu': False}, 'georef': {}}
+
+
+def _run_save_results(tmp_path, output_cfg, **overrides):
+    from geotrax.extract import save_results
+    source = tmp_path / 'A1.mp4'
+    source.touch()
+    config = _metadata_config(source, output_cfg, **overrides)
+    save_results(np.zeros((0, 14)), np.zeros((0, 10)), config, logger, output_cfg)
+    return source
+
+
+def test_run_metadata_is_written_inside_the_output_folder(tmp_path):
+    source = _run_save_results(tmp_path, {'folder': 'results'})
+    assert (tmp_path / 'results' / 'A1.yaml').is_file()
+    assert not source.with_suffix('.yaml').exists()  # no longer written next to the video
+
+
+def test_run_metadata_honours_the_configured_postfix(tmp_path):
+    _run_save_results(tmp_path, {'folder': 'out', 'metadata_postfix': '_run'})
+    assert (tmp_path / 'out' / 'A1_run.yaml').is_file()
+
+
+def test_run_metadata_records_the_effective_configuration(tmp_path):
+    """
+    The point of the file: it must show what the run used, not what the config file said.
+    save_results() reads the config dict, which sync_args_with_config has already reconciled
+    with the CLI flags, so a --cut-frame-left 10 run records 10.
+    """
+    _run_save_results(tmp_path, {'folder': 'results'},
+                      processing={'cut_frame_left': 10, 'cut_frame_right': 90},
+                      extraction={'save_stab': False, 'interpolate': True})
+    written = yaml.safe_load((tmp_path / 'results' / 'A1.yaml').read_text())
+    assert written['processing'] == {'cut_frame_left': 10, 'cut_frame_right': 90}
+    assert written['extraction']['interpolate'] is True
+    assert written['output']['folder'] == 'results'

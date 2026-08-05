@@ -129,3 +129,21 @@ def test_build_result_path_video_returns_source():
 
 def test_build_result_path_unknown_type_returns_none():
     assert build_result_path(Path('/data/video.mp4'), 'unknown') is None
+
+
+def test_build_result_path_metadata_lands_in_the_output_folder():
+    source = Path('/data/PROCESSED/A1.mp4')
+    path = build_result_path(source, 'metadata', {'folder': 'results'})
+    assert path == Path('/data/PROCESSED/results/A1.yaml')
+
+
+def test_build_result_path_metadata_honours_the_postfix():
+    source = Path('/data/PROCESSED/A1.mp4')
+    path = build_result_path(source, 'metadata', {'folder': 'out', 'metadata_postfix': '_run'})
+    assert path == Path('/data/PROCESSED/out/A1_run.yaml')
+
+
+def test_build_result_path_metadata_falls_back_when_the_postfix_key_is_absent():
+    """A custom config predating 'metadata_postfix' must still resolve, via DEFAULT_OUTPUT."""
+    path = build_result_path(Path('/data/A1.mp4'), 'metadata', {'folder': 'results'})
+    assert path.name == 'A1.yaml'

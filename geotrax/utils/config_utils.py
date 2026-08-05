@@ -4,12 +4,14 @@
 """YAML configuration loading and path resolution for the geo-trax pipeline."""
 
 import argparse
+import difflib
+import functools
 import json
 import logging
 import sys
 import tempfile
 from pathlib import Path
-from typing import Optional, Union
+from typing import Any, Iterator, Optional, Union
 
 import yaml
 
@@ -136,8 +138,13 @@ def load_config_all(args: argparse.Namespace, logger: logging.Logger, needs_mode
     Set ``needs_model=False`` for stages (e.g. georeferencing) that never use the detection
     model or class names. This skips the tracker YAML, model path resolution, and HF download
     for those stages so a missing or unavailable model does not abort them.
+
+    Both override mechanisms are resolved here, before the config is split into sections, so that
+    every consumer downstream (and the saved run metadata) sees the effective configuration:
+    ``--set`` first, then the dedicated CLI flags via :func:`sync_args_with_config`.
     """
-    full = load_config(args.cfg, logger)
+    full = load_config(args.cfg, logger, args)
+    sync_args_with_config(args, full, logger)
 
     kwargs_tracker     = full.get('tracker', {})
     kwargs_stabilo     = full.get('stabilo', {})
@@ -177,12 +184,6 @@ def load_config_all(args: argparse.Namespace, logger: logging.Logger, needs_mode
         kwargs_main['tracker_params'] = {}
 
     kwargs_main['args'] = args
-
-    keys_to_update = ['classes', 'conf', 'show']
-    for arg, value in vars(args).items():
-        if value is not None and arg in keys_to_update:
-            kwargs_ultralytics[arg] = value
-            logger.info(f"The default ultralytics value for {arg} has been updated to the provided CLI argument: {value}.")
 
     logger.info(f"Pipeline configuration loaded from: '{args.cfg}'.")
 
@@ -226,8 +227,13 @@ def _write_tracker_yaml(tracker_section: dict, cfg_name: Union[str, Path], logge
         sys.exit(1)
 
 
-def load_config(cfg_filepath: Union[str, Path], logger: logging.Logger) -> dict:
-    """Load a configuration file and return the contents as a dictionary."""
+def load_config(cfg_filepath: Union[str, Path], logger: logging.Logger,
+                args: Optional[argparse.Namespace] = None) -> dict:
+    """Load a configuration file and return the contents as a dictionary.
+
+    When *args* is given, its ``--set KEY=VALUE`` overrides are applied to the loaded config
+    (see :func:`apply_cli_overrides`). Callers without a ``--set`` flag can omit it.
+    """
     resolved_filepath = resolve_config_path(cfg_filepath)
     try:
         with open(resolved_filepath, 'r') as f:
@@ -235,15 +241,283 @@ def load_config(cfg_filepath: Union[str, Path], logger: logging.Logger) -> dict:
     except FileNotFoundError:
         logger.critical(f"Configuration file '{cfg_filepath}' not found.")
         sys.exit(1)
+    if args is not None:
+        apply_cli_overrides(kwargs, getattr(args, 'set', None), args, logger)
     return kwargs
 
 
 def backfill_args_from_config(args: argparse.Namespace, mapping: dict) -> None:
     """Set each ``args.arg_name`` from ``mapping[arg_name]`` when the arg is still ``None``
-    (i.e. not overridden on the command line)."""
+    (i.e. not overridden on the command line).
+
+    Retained for the ``tools/`` scripts. The pipeline stages use :func:`sync_args_with_config`,
+    which derives the same mapping from the parser's ``_cfg_paths`` and also writes CLI values
+    back into the config so the saved run metadata records what actually ran.
+    """
     for arg_name, config_value in mapping.items():
         if getattr(args, arg_name) is None:
             setattr(args, arg_name, config_value)
+
+
+# --- CLI <-> config plumbing -------------------------------------------------------------------
+
+_MISSING = object()  # sentinel: distinguishes "key absent from the config" from "key set to null"
+
+
+def _iter_leaf_paths(cfg: dict, prefix: str = '') -> Iterator[str]:
+    """Yield the dotted path of every leaf in *cfg*; a leaf is any non-dict value (``null`` included)."""
+    for key, value in (cfg or {}).items():
+        path = f'{prefix}{key}'
+        if isinstance(value, dict):
+            yield from _iter_leaf_paths(value, f'{path}.')
+        else:
+            yield path
+
+
+def _get_by_path(cfg: dict, path: str, default: Any = _MISSING) -> Any:
+    """Return the value at the dotted *path*, or *default* if any component is absent."""
+    node = cfg
+    for key in path.split('.'):
+        if not isinstance(node, dict) or key not in node:
+            return default
+        node = node[key]
+    return node
+
+
+@functools.lru_cache(maxsize=1)
+def _bundled_defaults() -> dict:
+    """The shipped default.yaml, used as a fallback for a key absent from a loaded custom config."""
+    with open(CFG_DIR / 'default.yaml', encoding='utf-8') as f:
+        return yaml.safe_load(f)
+
+
+def _set_by_path(cfg: dict, path: str, value: Any) -> None:
+    """Set the value at the dotted *path*, creating intermediate dicts as needed."""
+    *parents, leaf = path.split('.')
+    node = cfg
+    for key in parents:
+        child = node.get(key)
+        if not isinstance(child, dict):
+            child = {}
+            node[key] = child
+        node = child
+    node[leaf] = value
+
+
+def sync_args_with_config(args: argparse.Namespace, cfg: dict, logger: logging.Logger) -> None:
+    """Reconcile the parsed CLI arguments with the pipeline config, in both directions.
+
+    Every config-backed flag defaults to ``None`` (see ``cli_utils.add_cfg_arg``), so for each
+    ``dest -> CfgArg`` entry the parser recorded in ``args._cfg_paths``:
+
+      * the argument is ``None`` -> pull the config value into it (the historical backfill), or
+      * the argument was given  -> push it into the config.
+
+    The second direction is what makes the config dict authoritative: everything downstream, the
+    saved run-metadata YAML included, then sees the configuration the run actually used rather
+    than the file's version of it. Flags marked ``no_sync`` are skipped in both directions; their
+    precedence is resolved elsewhere (see :class:`~geotrax.utils.cli_utils.CfgArg`).
+
+    Config keys absent from the file fall back to the bundled default.yaml, so a custom config
+    predating a newly added key still loads with a sane value instead of leaving the argument
+    (and every downstream consumer of it) silently at ``None``.
+    """
+    for dest, spec in getattr(args, '_cfg_paths', {}).items():
+        if spec.no_sync or not hasattr(args, dest):
+            continue
+        value = getattr(args, dest)
+        if value is None:
+            config_value = _get_by_path(cfg, spec.path)
+            if config_value is _MISSING:
+                config_value = _get_by_path(_bundled_defaults(), spec.path)
+                if config_value is _MISSING:
+                    continue
+            if spec.invert:
+                config_value = not config_value
+            elif spec.coerce is not None and config_value is not None:
+                config_value = spec.coerce(config_value)
+            setattr(args, dest, config_value)
+        else:
+            _set_by_path(cfg, spec.path, not value if spec.invert else value)
+            provided = getattr(args, '_cli_provided', None)
+            if provided is None or dest in provided:  # a pulled value pushed back is not news
+                logger.info(f"CLI argument applied to the configuration: {spec.path} = {value}.")
+
+
+def apply_cli_overrides(cfg: dict, overrides: Optional[list], args: Optional[argparse.Namespace],
+                        logger: logging.Logger) -> None:
+    """Apply ``--set KEY=VALUE`` overrides to the loaded config, in place.
+
+    KEY is matched against the config that was actually loaded, so a custom config with extra
+    keys works without any change here. It may be a full dotted path ('ultralytics.conf') or any
+    unambiguous tail of one ('conf', 'matching.gpu'); an unknown or ambiguous key aborts the run
+    rather than being silently dropped, since an override that quietly does nothing is worse than
+    one that stops.
+
+    VALUE is parsed with YAML rules, matching the config file it overrides, and is rejected if
+    its type is incompatible with the value already in place.
+
+    When *args* carries a ``_cfg_paths`` map, a key that is also targeted by a dedicated flag on
+    the same command line is a conflict and aborts. Nothing is written until every override has
+    been validated, so a rejected command line leaves the config untouched.
+    """
+    if not overrides:
+        return
+
+    leaf_paths = list(_iter_leaf_paths(cfg))
+    flag_for_path = _dedicated_flags_in_use(args)
+    resolved = []
+
+    for token in overrides:
+        if '=' not in token:
+            logger.critical(f"Invalid --set entry '{token}'. Expected KEY=VALUE (e.g. --set conf=0.35).")
+            sys.exit(1)
+        key, raw_value = token.split('=', 1)
+        key = key.strip()
+        path = _resolve_override_key(key, leaf_paths, cfg, logger)
+
+        if path in flag_for_path:
+            logger.critical(
+                f"Conflicting overrides for '{path}':\n"
+                f"  --set {key}={raw_value}\n"
+                f"  {flag_for_path[path]}\n"
+                "Pass only one."
+            )
+            sys.exit(1)
+
+        if raw_value == '':
+            value = ''  # '--set tracks_postfix=' clears a string; YAML would read it as null
+        else:
+            try:
+                value = yaml.safe_load(raw_value)
+            except yaml.YAMLError:
+                value = raw_value  # an unquoted string that is not valid YAML is still a string
+        current = _get_by_path(cfg, path)
+        value = _coerce_override_value(path, value, current, raw_value, logger)
+        resolved.append((path, value, current))
+
+    # The config is re-loaded for every stage and, under 'batch', for every video; announce each
+    # override once at NOTICE (visible without --verbose) and drop to INFO on the repeats.
+    first_time = not getattr(args, '_overrides_announced', False)
+    for path, value, current in resolved:
+        _set_by_path(cfg, path, value)
+        message = f"CLI override: {path} = {value!r} (was {current!r})."
+        logger.notice(message) if first_time else logger.info(message)
+    if args is not None:
+        args._overrides_announced = True
+
+
+def _dedicated_flags_in_use(args: Optional[argparse.Namespace]) -> dict:
+    """Map each config path to the dedicated flag that set it on this command line, if any.
+
+    Driven by ``_cli_provided`` (recorded at parse time by ``cli_utils.finalize_cli_args``) rather
+    than by the current argument values: once ``sync_args_with_config`` has pulled the config into
+    the namespace, a value that came from the config file is indistinguishable from a typed one.
+    """
+    provided = getattr(args, '_cli_provided', None)
+    if provided is None:
+        return {}
+    flags = {}
+    for dest, spec in getattr(args, '_cfg_paths', {}).items():
+        if dest not in provided:
+            continue
+        value = getattr(args, dest, None)
+        flags[spec.path] = spec.flag if isinstance(value, bool) else f'{spec.flag} {value}'
+    return flags
+
+
+def _resolve_override_key(key: str, leaf_paths: list, cfg: dict, logger: logging.Logger) -> str:
+    """Resolve a ``--set`` key to exactly one dotted config path, or abort with a usable message."""
+    if key in leaf_paths:
+        return key
+
+    segments = key.split('.')
+    matches = [p for p in leaf_paths if p.split('.')[-len(segments):] == segments]
+
+    if len(matches) == 1:
+        return matches[0]
+
+    if not matches:
+        if _get_by_path(cfg, key) is not _MISSING:
+            logger.critical(
+                f"--set key '{key}' is a config section, not a single value. Set the keys inside it "
+                f"individually, e.g. --set {key}.<name>=<value>."
+            )
+            sys.exit(1)
+        # Compare against the leaf names as well as the full paths: a user typing 'cnf' is close
+        # to 'conf' but not to 'ultralytics.conf', so path-only matching finds nothing useful.
+        by_leaf = {}
+        for path in leaf_paths:
+            by_leaf.setdefault(path.split('.')[-1], []).append(path)
+        suggestions = [p for name in difflib.get_close_matches(segments[-1], by_leaf, n=3, cutoff=0.6)
+                       for p in by_leaf[name]]
+        suggestions += [p for p in difflib.get_close_matches(key, leaf_paths, n=3, cutoff=0.6)
+                        if p not in suggestions]
+        suggestions += [p for p in leaf_paths if p.split('.')[-1].startswith(segments[-1]) and p not in suggestions]
+        hint = ('\n  Did you mean:\n    ' + '\n    '.join(suggestions[:5])) if suggestions else ''
+        logger.critical(f"Unknown --set key '{key}'.{hint}")
+        sys.exit(1)
+
+    active_tracker = (cfg.get('tracker') or {}).get('active')
+    listed = '\n    '.join(
+        f'{p}{"   <- the active tracker" if active_tracker and p == f"tracker.{active_tracker}.{segments[-1]}" else ""}'
+        for p in matches
+    )
+    logger.critical(
+        f"--set key '{key}' is ambiguous; it matches {len(matches)} config keys:\n    {listed}\n"
+        "  Qualify it with enough of the path to be unique."
+    )
+    sys.exit(1)
+
+
+def _coerce_override_value(path: str, value: Any, current: Any, raw_value: str, logger: logging.Logger) -> Any:
+    """Check an overridden value against the type already in the config, coercing where unambiguous."""
+    if current is None:
+        return value  # a null in the config carries no type information
+
+    if value is None:
+        if _get_by_path(_bundled_defaults(), path, default=None) is None:
+            return value  # the key is documented as nullable in the bundled config
+        expected = type(current).__name__
+        logger.critical(
+            f"--set {path}={raw_value} has the wrong type: expected {expected} (current value: {current!r}), "
+            "got NoneType."
+        )
+        sys.exit(1)
+
+    is_bool, is_number = isinstance(value, bool), isinstance(value, (int, float)) and not isinstance(value, bool)
+
+    if isinstance(current, bool):
+        if is_bool:
+            return value
+        if is_number and value in (0, 1):
+            return bool(value)  # 0/1 is a common spelling of a flag
+    elif isinstance(current, float):
+        if is_number:
+            return float(value)
+    elif isinstance(current, int):
+        # Numbers stay interchangeable: whether a key reads as int or float in the config is often
+        # incidental (stationary_speed_cutoff ships as '1', yet 1.5 is a perfectly good value), so
+        # rejecting a fractional value here would block valid input. Whole values keep their
+        # int-ness; fractional ones are passed through as the user wrote them, exactly as editing
+        # the config file by hand would. The check below still catches str/bool/list confusion.
+        if is_number:
+            return int(value) if float(value).is_integer() else value
+    elif isinstance(current, str):
+        if isinstance(value, str):
+            return value
+    elif isinstance(current, list):
+        if isinstance(value, list):
+            return value
+    elif isinstance(value, type(current)):
+        return value
+
+    expected = type(current).__name__
+    logger.critical(
+        f"--set {path}={raw_value} has the wrong type: expected {expected} (current value: {current!r}), "
+        f"got {type(value).__name__}."
+    )
+    sys.exit(1)
 
 
 def load_class_names_from_model(model_path: Path, logger: logging.Logger) -> Optional[dict]:

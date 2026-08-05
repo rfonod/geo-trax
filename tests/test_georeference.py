@@ -28,6 +28,7 @@ from geotrax.georeference import (
     ortho2local,
     read_ortho_config_file,
 )
+from geotrax.utils import registration
 from geotrax.utils.registration import estimate_homography
 
 logger = logging.getLogger(__name__)
@@ -80,6 +81,100 @@ def test_compute_homography_defaults_gpu_off():
     _, kwargs = ctor.call_args
     assert kwargs['gpu'] is False
     assert kwargs['gpu_device_id'] == 0
+
+
+def test_geo_detector_and_device_default_to_none():
+    args = _parse_georef([])
+    assert args.geo_detector is None
+    assert args.geo_device is None
+
+
+def test_geo_detector_and_device_parse():
+    args = _parse_georef(['--geo-detector', 'keynet', '--geo-device', 'cuda'])
+    assert args.geo_detector == 'keynet'
+    assert args.geo_device == 'cuda'
+    assert _parse_georef(['-gdet', 'orb', '-gdev', 'mps']).geo_detector == 'orb'
+
+
+def test_geo_detector_rejects_unknown_value():
+    with pytest.raises(SystemExit):
+        _parse_georef(['--geo-detector', 'not-a-detector'])
+    with pytest.raises(SystemExit):
+        _parse_georef(['--geo-device', 'tpu'])
+
+
+def _mock_stabilizer(homography=None):
+    mock_stab = MagicMock()
+    mock_stab.get_cur_trans_matrix.return_value = np.eye(3) if homography is None else homography
+    mock_stab.get_cur_num_keypoints.return_value = (12, 10)
+    mock_stab.get_cur_inliers_count.return_value = 60
+    mock_stab.get_cur_num_matches.return_value = 80
+    return mock_stab
+
+
+def test_compute_homography_forwards_arbitrary_matching_keys():
+    """New stabilo keys must reach the Stabilizer without a signature change here."""
+    img = np.zeros((4, 4), dtype=np.uint8)
+    with patch('geotrax.utils.registration.Stabilizer', return_value=_mock_stabilizer()) as ctor:
+        compute_homography(
+            img, img, ('reference', 'ortho'), logger,
+            detector_name='keynet', device='cuda', downsample_ratio=0.25, loftr_weights='indoor',
+        )
+    _, kwargs = ctor.call_args
+    assert kwargs['detector_name'] == 'keynet'
+    assert kwargs['device'] == 'cuda'
+    assert kwargs['downsample_ratio'] == 0.25
+    assert kwargs['loftr_weights'] == 'indoor'
+
+
+def test_estimate_homography_pins_registration_geometry():
+    """Geometry keys are fixed by geo-trax and override whatever the config supplies."""
+    img = np.zeros((4, 4), dtype=np.uint8)
+    with patch('geotrax.utils.registration.Stabilizer', return_value=_mock_stabilizer()) as ctor:
+        estimate_homography(img, img, logger, transformation_type='affine', mask_use=True)
+    _, kwargs = ctor.call_args
+    assert kwargs['transformation_type'] == 'projective'
+    assert kwargs['mask_use'] is False
+    assert kwargs['ref_multiplier'] == 1.0
+    assert kwargs['match_query_frame'] == 'current'
+
+
+def test_estimate_homography_caps_dl_max_features():
+    """The RootSIFT-sized default would exhaust memory as a learned detector's top_k."""
+    img = np.zeros((4, 4), dtype=np.uint8)
+    with patch('geotrax.utils.registration.Stabilizer', return_value=_mock_stabilizer()) as ctor:
+        estimate_homography(img, img, logger, detector_name='xfeat', max_features=250000)
+    _, kwargs = ctor.call_args
+    assert kwargs['max_features'] == registration.DL_MAX_FEATURES_CAP
+
+
+def test_estimate_homography_attempts_once_below_retry_floor():
+    """Regression: a max_features at/below the retry floor used to make ZERO attempts and fail."""
+    img = np.zeros((4, 4), dtype=np.uint8)
+    with patch('geotrax.utils.registration.Stabilizer', return_value=_mock_stabilizer()) as ctor:
+        homography, _, _, _ = estimate_homography(img, img, logger, max_features=5000)
+    assert ctor.call_count == 1
+    assert homography is not None
+
+
+def test_estimate_homography_retry_ladder_unchanged():
+    """The shipped 250000 default must halve down exactly as it did before the refactor."""
+    img = np.zeros((4, 4), dtype=np.uint8)
+    failing = _mock_stabilizer()
+    failing.get_cur_trans_matrix.return_value = None
+    with patch('geotrax.utils.registration.Stabilizer', return_value=failing) as ctor:
+        estimate_homography(img, img, logger)
+    assert [c.kwargs['max_features'] for c in ctor.call_args_list] == [250000, 125000, 62500, 31250, 15625]
+
+
+def test_estimate_homography_does_not_retry_loftr():
+    """loftr is detector-free, so halving max_features cannot change the outcome."""
+    img = np.zeros((4, 4), dtype=np.uint8)
+    failing = _mock_stabilizer()
+    failing.get_cur_trans_matrix.return_value = None
+    with patch('geotrax.utils.registration.Stabilizer', return_value=failing) as ctor:
+        estimate_homography(img, img, logger, detector_name='loftr')
+    assert ctor.call_count == 1
 
 
 def test_apply_homography_identity():

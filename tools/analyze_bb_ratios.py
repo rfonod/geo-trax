@@ -31,16 +31,16 @@ Options:
 
 Examples:
 1. Analyze a single video file:
-   python tools/analyze_bb_ratios.py video.yaml
+   python tools/analyze_bb_ratios.py video.mp4
 
 2. Perform a batch analysis on a directory and show histograms:
    python tools/analyze_bb_ratios.py data/ --hist
 
-3. Analyze a specific vehicle ID from a video:
-   python tools/analyze_bb_ratios.py video.yaml --id 42
+3. Analyze a specific vehicle ID via the run-metadata YAML:
+   python tools/analyze_bb_ratios.py results/video.yaml --id 42
 
 Input:
-- A path to a video file (e.g., .mp4, .mov), a YAML configuration file, or a directory.
+- A path to a video file (e.g., .mp4, .mov), a run-metadata YAML file, or a directory.
 - Corresponding tracking data must be available in a '.txt' file located in a 'results/' subdirectory
   (e.g., for 'data/video.mp4', the script expects 'data/results/video.txt').
 - The tracking file should contain columns for frame number, object ID, class ID, and vehicle dimensions (length and width).
@@ -123,10 +123,15 @@ def process_file(file, args, logger):
     # Check if the input is a valid video file or a YAML file
     if file.suffix.lower() not in {'.yaml'} | VIDEO_FORMATS:
         return None
-    # Skip files that live inside the output folder itself
     output_cfg = load_config(args.cfg, logger).get('output', DEFAULT_OUTPUT)
     folder_name = output_cfg.get('folder', DEFAULT_OUTPUT['folder'])
-    if file.parent.name == folder_name:
+    # The run-metadata YAML is written inside the output folder, so a '<results>/<stem>.yaml'
+    # argument names a video one level up. Rebase it before the output folder is derived from
+    # the path; a YAML still sitting next to its video (pre-v1.4.0 layout) needs no rebasing.
+    if file.suffix.lower() == '.yaml' and file.parent.name == folder_name:
+        file = file.parent.parent / file.name
+    # Skip files that live inside the output folder itself
+    elif file.parent.name == folder_name:
         return None
 
     # Load tracks
