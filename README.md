@@ -1,6 +1,6 @@
 # Geo-trax
 
-[![GitHub Release](https://img.shields.io/github/v/release/rfonod/geo-trax?include_prereleases)](https://github.com/rfonod/geo-trax/releases) [![PyPI - Version](https://img.shields.io/pypi/v/geo-trax)](https://pypi.org/project/geo-trax/) [![PyPI - Total Downloads](https://img.shields.io/pepy/dt/geo-trax?label=total%20downloads)](https://pepy.tech/project/geo-trax) [![PyPI - Downloads per Month](https://img.shields.io/pypi/dm/geo-trax?color=%234c1)](https://pypi.org/project/geo-trax/) [![CI](https://github.com/rfonod/geo-trax/actions/workflows/ci.yml/badge.svg)](https://github.com/rfonod/geo-trax/actions/workflows/ci.yml) [![Python](https://img.shields.io/badge/python-3.9--3.13-blue)](https://www.python.org/) [![License](https://img.shields.io/github/license/rfonod/geo-trax)](https://github.com/rfonod/geo-trax/blob/main/LICENSE) [![GitHub Issues](https://img.shields.io/github/issues/rfonod/geo-trax)](https://github.com/rfonod/geo-trax/issues) [![Open Access](https://img.shields.io/badge/Journal-10.1016%2Fj.trc.2025.105205-blue)](https://doi.org/10.1016/j.trc.2025.105205) [![arXiv](https://img.shields.io/badge/arXiv-2411.02136-b31b1b.svg)](https://arxiv.org/abs/2411.02136) [![Archived Code](https://img.shields.io/badge/Zenodo-Software%20Archive-blue)](https://zenodo.org/doi/10.5281/zenodo.12119542) [![Hugging Face](https://img.shields.io/badge/🤗%20Model-rfonod%2Fgeo--trax-yellow)](https://huggingface.co/rfonod/geo-trax) [![Hugging Face Space](https://img.shields.io/badge/🤗%20Space-Live%20Demo-yellow)](https://huggingface.co/spaces/rfonod/geo-trax) [![Project Website](https://img.shields.io/badge/REAL%20Lab-Geo--trax-informational)](https://www.real-lab.ch/geo-trax) [![YouTube](https://img.shields.io/badge/YouTube-Video-red?logo=youtube&logoColor=red)](https://youtu.be/gOGivL9FFLk)
+[![GitHub Release](https://img.shields.io/github/v/release/rfonod/geo-trax?include_prereleases)](https://github.com/rfonod/geo-trax/releases) [![PyPI - Version](https://img.shields.io/pypi/v/geo-trax)](https://pypi.org/project/geo-trax/) [![PyPI - Total Downloads](https://img.shields.io/pepy/dt/geo-trax?label=total%20downloads)](https://pepy.tech/project/geo-trax) [![PyPI - Downloads per Month](https://img.shields.io/pypi/dm/geo-trax?color=%234c1)](https://pypi.org/project/geo-trax/) [![CI](https://github.com/rfonod/geo-trax/actions/workflows/ci.yml/badge.svg)](https://github.com/rfonod/geo-trax/actions/workflows/ci.yml) [![Python](https://img.shields.io/badge/python-3.11--3.13-blue)](https://www.python.org/) [![License](https://img.shields.io/github/license/rfonod/geo-trax)](https://github.com/rfonod/geo-trax/blob/main/LICENSE) [![GitHub Issues](https://img.shields.io/github/issues/rfonod/geo-trax)](https://github.com/rfonod/geo-trax/issues) [![Open Access](https://img.shields.io/badge/Journal-10.1016%2Fj.trc.2025.105205-blue)](https://doi.org/10.1016/j.trc.2025.105205) [![arXiv](https://img.shields.io/badge/arXiv-2411.02136-b31b1b.svg)](https://arxiv.org/abs/2411.02136) [![Archived Code](https://img.shields.io/badge/Zenodo-Software%20Archive-blue)](https://zenodo.org/doi/10.5281/zenodo.12119542) [![Hugging Face](https://img.shields.io/badge/🤗%20Model-rfonod%2Fgeo--trax-yellow)](https://huggingface.co/rfonod/geo-trax) [![Hugging Face Space](https://img.shields.io/badge/🤗%20Space-Live%20Demo-yellow)](https://huggingface.co/spaces/rfonod/geo-trax) [![Project Website](https://img.shields.io/badge/REAL%20Lab-Geo--trax-informational)](https://www.real-lab.ch/geo-trax) [![YouTube](https://img.shields.io/badge/YouTube-Video-red?logo=youtube&logoColor=red)](https://youtu.be/gOGivL9FFLk)
 
 **Geo-trax** (GEO-referenced TRAjectory eXtraction) is a comprehensive pipeline that extracts high-accuracy, georeferenced vehicle trajectories from high-altitude drone imagery. Built for quasi-stationary aerial monitoring of urban traffic, it turns raw bird's-eye view (BEV) drone footage into precise, real-world vehicle trajectories. The framework combines YOLO detection, multi-object tracking, and video stabilization with a robust orthophoto-based georeferencing stage, producing geo-coordinated, lane-resolved trajectories that are spatially and temporally consistent and ready for large-scale traffic analysis and simulation. It is optimized for urban intersections and arterial corridors, where high-fidelity, vehicle-level insights drive intelligent transportation systems and digital twin applications.
 
@@ -16,7 +16,7 @@
 - 🛰️ **Real-world output**: georeferenced, lane-resolved trajectories (WGS84 + local CRS) with per-vehicle speed, acceleration, and estimated dimensions, straight from raw BEV drone video.
 - 🎯 **Accurate detection**: [YOLOv8s vehicle detector](#detection-model) reaching **0.951 mAP@50**, trained on more than 19,000 annotated aerial images.
 - 🚗 **Flexible tracking**: four vehicle classes and [six selectable multi-object trackers](#tracking) (BoT-SORT, ByteTrack, OC-SORT, and more).
-- 🌀 **Drone-motion robust**: homography-based stabilization ([Stabilo](https://github.com/rfonod/stabilo)) plus orthophoto image registration for consistent, cross-flight coordinates; both optionally CUDA-accelerated.
+- ⚖️ **Drone-motion robust**: homography-based [stabilization](#stabilization) ([Stabilo](https://github.com/rfonod/stabilo)) plus orthophoto image [registration](#georeferencing) for consistent, cross-flight coordinates; both optionally CUDA-accelerated.
 - 📊 **Proven at scale**: powered the [Songdo Traffic](https://doi.org/10.5281/zenodo.13828383) dataset (roughly **700,000 trajectories** across **20 intersections**, fleet of **10 drones**; see [Real-World Deployment](#real-world-deployment-the-songdo-experiment)).
 - ⚙️ **One command, one config**: `geotrax batch` runs the whole pipeline; a single YAML drives every stage, with [four tuned presets](#configuration) included.
 
@@ -33,7 +33,7 @@ python3.11 -m venv .venv && source .venv/bin/activate  # Windows: .venv\Scripts\
 python -m pip install geo-trax
 ```
 
-Python 3.9 to 3.13. Also works with [uv](https://docs.astral.sh/uv/) (`uv pip install geo-trax`) and [conda](https://www.anaconda.com/docs/getting-started/miniconda/install). For development:
+Python 3.11 to 3.13. Also works with [uv](https://docs.astral.sh/uv/) (`uv pip install geo-trax`) and [conda](https://www.anaconda.com/docs/getting-started/miniconda/install). For development:
 
 ```bash
 git clone --depth 1 https://github.com/rfonod/geo-trax.git
@@ -91,7 +91,9 @@ python -m pip install -e '.[sahi]'     # SAHI sliced inference for small-object 
 # poetry install --extras sahi
 ```
 
-**Optional CUDA for image matching.** The stabilization (`--stab-gpu`) and georeferencing (`--geo-gpu`) steps can be CUDA-accelerated on top of a source-built OpenCV. Installing into such an environment needs care so the CPU OpenCV wheels do not overwrite your build; see [GPU acceleration](#gpu-acceleration) for the full setup, install-without-clobbering recipes, and a benchmark. (Object *detection* already uses CUDA automatically when available, via `ultralytics.device`.)
+Installed geo-trax from PyPI rather than a checkout? Use the non-editable form instead: `python -m pip install 'geo-trax[dev]'` (likewise `'geo-trax[export]'`, `'geo-trax[sahi]'`).
+
+**Optional CUDA for image matching.** The stabilization (`--stab-gpu`) and georeferencing (`--geo-gpu`) steps can be CUDA-accelerated on top of a source-built OpenCV. Installing into such an environment needs care so the CPU OpenCV wheels do not overwrite your build; see [GPU acceleration](#gpu-acceleration). (Object *detection* already uses CUDA automatically when available.)
 
 </details>
 
@@ -118,7 +120,7 @@ Run `geotrax -h` or `geotrax batch -h` for all options. The scale-up commands ab
 
 - **Detection**: YOLOv8s on aerial BEV imagery; detects car (incl. vans), bus, truck, and motorcycle; optional [SAHI](https://github.com/obss/sahi) sliced inference for improved small-object recall (`--sahi`).
 - **Tracking**: six multi-object trackers (BoT-SORT default); see [Tracking](#tracking) for a comparison; optional per-track frame-gap interpolation.
-- **Stabilization**: homography-based trajectory correction via [Stabilo](https://github.com/rfonod/stabilo) 🌀, tuned with [Stabilo-Optimize](https://github.com/rfonod/stabilo-optimize) 🎯; optional CUDA acceleration (`--stab-gpu`).
+- **Stabilization**: homography-based trajectory correction via [Stabilo](https://github.com/rfonod/stabilo) ⚖️, tuned with [Stabilo-Optimize](https://github.com/rfonod/stabilo-optimize) 🎯; optional CUDA acceleration (`--stab-gpu`).
 - **Georeferencing**: frame-to-orthophoto registration; outputs lat/lon, local CRS, speed, acceleration, and lane assignment per vehicle; optional CUDA acceleration (`--geo-gpu`).
 - **Visualization**: track overlays on original, stabilized, or static-reference video, in five rendering modes (incl. oriented bounding boxes).
 - **Analysis**: trajectory maps, kinematic distributions, and class/dimension charts, per-video or aggregated across drones and sessions.
@@ -142,7 +144,7 @@ Run `geotrax -h` or `geotrax batch -h` for all options. The scale-up commands ab
 
 Geo-trax integrates with and complements several specialized tools:
 
-- **[Stabilo](https://github.com/rfonod/stabilo) 🌀**: Python library for video and trajectory stabilization using robust homography transformations. Supports various feature detectors, RANSAC algorithms, and user-defined masks. Used as Geo-trax's core stabilization engine.
+- **[Stabilo](https://github.com/rfonod/stabilo) ⚖️**: Python library for video and trajectory stabilization using robust homography transformations. Supports various feature detectors, RANSAC algorithms, and user-defined masks. Used as Geo-trax's core stabilization engine.
 
 - **[Stabilo-Optimize](https://github.com/rfonod/stabilo-optimize) 🎯**: benchmarking and hyperparameter optimization framework for Stabilo. Evaluates stabilization performance through ground truth-free assessment using random perturbations. Used to fine-tune Geo-trax stabilization parameters.
 
@@ -190,9 +192,126 @@ To switch the tracking algorithm, set `tracker.active` in the config (see [Track
 
 </details>
 
+## Detection Model
+
+The default detector is **YOLOv8s** (HBB, 1920 × 1920 px, ~11 M parameters), trained on more than 19,000 annotated aerial images (~679k labeled vehicle instances) and fine-tuned on a curated, high-quality subset. It is hosted on [🤗 Hugging Face](https://huggingface.co/rfonod/geo-trax) and **downloads automatically on first use**. Results on the [Songdo Vision **v1**](https://doi.org/10.5281/zenodo.13828408) test split (1,084 images; full results in [Table 3](https://doi.org/10.1016/j.trc.2025.105205)):
+
+| ID | Label | Precision | Recall | mAP@50 | mAP@50-95 |
+|---|---|---|---|---|---|
+| 0 | Car (incl. vans) | 0.979 | 0.981 | 0.992 | 0.835 |
+| 1 | Bus | 0.952 | 0.977 | 0.988 | 0.826 |
+| 2 | Truck | 0.887 | 0.916 | 0.935 | 0.722 |
+| 3 | Motorcycle | 0.827 | 0.866 | 0.888 | 0.463 |
+| **All** | | **0.911** | **0.935** | **0.951** | **0.711** |
+
+> Pedestrian and bicycle classes exist in the weights but are underrepresented, unevaluated, and filtered by default. See the [model card](https://huggingface.co/rfonod/geo-trax) for full details.
+
+To use a different model, point `--model` (CLI) or `extraction.model` (config) to a local `.pt` path or `hf://<org>/<repo>/<file>.pt`; any [Ultralytics](https://github.com/ultralytics/ultralytics)-compatible model works.
+
+### Small-Object Detection with SAHI
+
+For footage where vehicles are near the detection floor (higher altitudes, sub-4K sensors), the extraction stage can optionally run [SAHI](https://github.com/obss/sahi) sliced inference: each frame is split into overlapping slices, the detector runs on every slice (plus one full-frame pass), and the results are merged before tracking. This substantially improves tiny-object recall at roughly 5x the per-frame detection cost with the default 1920 x 1080 slices.
+
+```bash
+geotrax extract video.mp4 --sahi     # also available on 'geotrax batch'
+```
+
+SAHI is an optional extra. If it is not installed, the run stops immediately with the exact install command for your setup.
+
+Slice size, overlap, and merge settings live in `cfg -> extraction -> sahi` (run `geotrax config copy` to edit them). SAHI mode honors the `ultralytics` config keys `conf`, `device`, `imgsz` (applied per slice), and `classes`; the NMS-related keys (`iou`, `max_det`, `agnostic_nms`, etc.) are superseded by the SAHI merge settings. It supports YOLO models only and cannot be combined with the `tracktrack` tracker or with ReID model `auto` (both need a live Ultralytics predictor).
+
+### Custom Model Training
+
+Training and export scripts for custom YOLO detectors live in `train/`, with a SLURM wrapper for HPC clusters. See [train/README.md](train/README.md).
+
+## Tracking
+
+Six multi-object trackers ship with [Ultralytics](https://github.com/ultralytics/ultralytics) `>=8.4.63`. Selection is config-driven: set `tracker.active`, no code changes needed. Default: **BoT-SORT**.
+
+| Tracker | `tracker.active` | ReID | GMC¹ | Pros | Cons |
+|---------|------------------|:----:|:----:|------|------|
+| **BoT-SORT** (default) | `botsort` | opt | ✅ | Strong accuracy; motion + optional appearance | Slower; ReID adds compute |
+| **ByteTrack** | `bytetrack` | ❌ | ❌ | Fastest; two-stage association | More ID switches under occlusion |
+| **OC-SORT** | `ocsort` | ❌ | ❌ | Robust to non-linear motion; lightweight | Weaker on long occlusions |
+| **Deep OC-SORT** | `deepocsort` | opt | opt | OC-SORT + appearance; dense scenes | Heaviest variant with ReID |
+| **FastTracker** | `fasttrack` | ❌ | ❌ | Occlusion-aware ByteTrack variant | Newer; several knobs to tune |
+| **TrackTrack** | `tracktrack` | opt | ✅ | Multi-cue cost; best ID retention | Most parameters; highest compute |
+
+¹ GMC (in-tracker camera-motion compensation) runs during tracking and is independent of Stabilo's post-hoc trajectory stabilization stage.
+
+> 💡 Run `geotrax config show default` to print the full `tracker:` block, with every parameter for all six trackers documented inline. Run `geotrax config copy` to get an editable local copy. For a head-to-head comparison on your own data, see [`tools/compare_tracking.py`](tools/compare_tracking.py).
+
+## Stabilization
+
+Quasi-stationary drone footage is never perfectly static: wind, GPS drift, and gimbal corrections shift the frame throughout a flight. Geo-trax compensates by registering every frame back to a fixed reference frame with a homography, via [Stabilo](https://github.com/rfonod/stabilo) ⚖️. Tracks are written in both raw and stabilized image coordinates, and the per-frame 3 × 3 transform is saved alongside them.
+
+Registration quality depends on the feature detector. The default is `orb`, tuned for high-altitude BEV footage with [Stabilo-Optimize](https://github.com/rfonod/stabilo-optimize) 🎯 and used for every published result:
+
+| Detector | Description |
+|---|---|
+| `orb` (default) | fast binary descriptor; the only CUDA-accelerated option |
+| `sift` | classic scale-invariant descriptor |
+| `rsift` | RootSIFT, a normalized SIFT variant with better matching accuracy |
+| `brisk` | binary, scale- and rotation-invariant |
+| `kaze` | nonlinear scale space, slower but accurate |
+| `akaze` | accelerated KAZE, a good speed/accuracy compromise |
+
+All six are classical OpenCV detectors, rotation invariant, and need no extra downloads:
+
+```bash
+geotrax extract video.mp4 --stab-detector akaze
+```
+
+Masking, RANSAC, and downsampling parameters live under `cfg -> stabilo`. To skip stabilization entirely, set `extraction.stabilize: false`.
+
+<details>
+<summary><b>Learning-based detectors</b></summary>
+
+Stabilo 1.4.0 also exposes five [kornia](https://kornia.readthedocs.io/) models: `xfeat`, `disk`, `dedode`, `keynet`, and the detector-free `loftr`, plus the learned `lightglue` matcher (which pairs only with `disk`/`dedode`/`keynet`). They are available for experimentation on both the stabilization and georeferencing stages, but they are **not** used by any geo-trax default and were not used to produce any published result. On this workload the classical detectors are faster, more predictable, and easier to reproduce.
+
+Two properties make them awkward here:
+
+- **Rotation.** `xfeat`, `disk`, `dedode`, and `loftr` are *upright* models: matching collapses once the two images differ by more than roughly 30°. That is tolerable for stabilization, where consecutive frames are nearly aligned, but a poor fit for georeferencing, where a drone frame is registered against a north-up orthophoto and arbitrary rotation is the norm. Only `keynet` estimates keypoint orientation.
+- **Memory.** They are far hungrier than classical detectors, and cost grows with the *processed* frame size. **This can exhaust system memory and hang the machine.** Pick `downsample_ratio` so that `input_pixels × downsample_ratio²` stays under the model's guideline:
+
+  | Detector | Guideline | Max ratio at 4K (8.3 MP) | Max ratio at 8000 × 8000 ortho (64 MP) |
+  |---|---|---|---|
+  | `xfeat` | 2.0 MP | `0.49` | `0.17` |
+  | `disk`, `dedode`, `keynet` | 0.5 MP | `0.24` | `0.08` |
+  | `loftr` | 0.3 MP (cost is **quadratic** in pixels) | `0.19` | `0.06` |
+
+  Stabilo warns when the processed frame exceeds its guideline but does not cap it, so heed the warning. geo-trax does cap `max_features` on the georeferencing path, since these models consume it as `top_k` and the RootSIFT-sized default of 250000 would be fatal.
+
+**Acceleration.** These models run on PyTorch, so they are GPU-accelerated straight from the CLI with `--stab-device` / `--geo-device` (`auto` picks cuda > mps > cpu, and is the default). Nothing extra is needed: unlike the OpenCV CUDA path in [GPU acceleration](#gpu-acceleration), which requires a source-built OpenCV and covers only ORB, this works on stock wheels, accelerates every learned detector and the `lightglue` matcher, and supports `mps` on Apple silicon. A GPU with dedicated VRAM is also the safer choice memory-wise, since it does not compete with system RAM. The two paths are mutually exclusive; Stabilo rejects `--stab-gpu`/`--geo-gpu` combined with a learned detector.
+
+Weights download on first use and are cached by torch (`~/.cache/torch/hub/checkpoints`; set `TORCH_HOME` to relocate), then reused offline. Set the ratio well below the maximum before the first run:
+
+```bash
+geotrax extract video.mp4 --stab-detector xfeat --stab-device cuda -c my_config.yaml
+#   my_config.yaml: stabilo.downsample_ratio: 0.25
+```
+
+</details>
+
+## Georeferencing
+
+The georeferencing stage turns stabilized pixel trajectories into real-world ones by registering the video's reference frame against a north-up **orthophoto** of the same location. Output is a per-vehicle CSV with WGS84 coordinates, a local projected CRS, speed, acceleration, and lane / road-section assignment.
+
+This reuses the image-matching machinery from stabilization, but defaults to **`rsift`** (RootSIFT) instead of `orb`. Registering a drone frame against an orthophoto is a cross-domain match, often across years, seasons, and lighting conditions, and is considerably harder than matching consecutive video frames:
+
+```bash
+geotrax georeference video.mp4 -orf data/orthophotos --geo-detector sift
+```
+
+Orthophotos are required; lane/road-section segmentations and per-location master frames are optional and improve lane assignment and robustness (see [Usage](#usage) and [data/README.md](data/README.md) for how to obtain them). Matching parameters live under `cfg -> georef -> matching`, kinematic filtering under `cfg -> georef -> filtering`.
+
+> The [learning-based detectors](#stabilization) are a poor fit for this stage in particular: the orthophoto is north-up while the drone frame can be at any heading, and every learned model except `keynet` is upright-only.
+
 ## GPU acceleration
 
-Object **detection** already runs on CUDA automatically whenever a compatible GPU and PyTorch build are present (via the `ultralytics.device` config key, auto by default). The **stabilization** (`--stab-gpu`) and **georeferencing** (`--geo-gpu`) image-matching steps can *optionally* be CUDA-accelerated too, through [Stabilo](https://github.com/rfonod/stabilo) 1.3.1+. This needs a CUDA-enabled OpenCV build and is Linux/Windows only. Stabilo accelerates the **ORB** detector only, so `--geo-gpu` additionally requires `georef.matching.detector_name: orb`; there is no CPU fallback, so requesting GPU without a working CUDA device raises an error.
+Object **detection** already runs on CUDA automatically whenever a compatible GPU and PyTorch build are present (via the `ultralytics.device` config key, auto by default). The **stabilization** (`--stab-gpu`) and **georeferencing** (`--geo-gpu`) image-matching steps can *optionally* be CUDA-accelerated too, through [Stabilo](https://github.com/rfonod/stabilo). This needs a CUDA-enabled OpenCV build and is Linux/Windows only. Stabilo accelerates the **ORB** detector only, so `--geo-gpu` additionally requires `--geo-detector orb`; there is no CPU fallback, so requesting GPU without a working CUDA device raises an error.
+
+> This section covers the **OpenCV CUDA** path, which applies to the classical detectors. The learning-based detectors use a separate torch device (`--stab-device` / `--geo-device`) and are covered under [Stabilization](#stabilization); the two cannot be combined.
 
 <details>
 <summary><b>⚡ Full CUDA setup & benchmarking guide</b></summary>
@@ -259,14 +378,13 @@ pip install -e .          # opencv is satisfied by the stubs; your CUDA build is
 |-------|-----|-------|
 | Detection | automatic | `ultralytics.device` (auto = CUDA when available) |
 | Stabilization | `--stab-gpu` | works out of the box (default detector is ORB) |
-| Georeferencing | `--geo-gpu` + `detector_name: orb` | set via a copied config (below) |
+| Georeferencing | `--geo-gpu --geo-detector orb` | ORB is required; RootSIFT is not CUDA-accelerated |
 
-Only ORB is CUDA-accelerated, and the georeferencing detector is not a CLI flag, so enable georef GPU through a copied config:
+Only ORB is CUDA-accelerated, so georeferencing must be switched to it. Since v1.4.0 `--geo-detector` does this on the command line, with no config copy needed. A copied config is still required if you did **not** add `video` to your OpenCV `BUILD_LIST` (step 1):
 
 ```bash
 geotrax config copy                       # writes default_copy.yaml
 # edit default_copy.yaml:
-#   georef.matching.detector_name: orb    # required for --geo-gpu
 #   tracker.botsort.gmc_method: none      # ONLY if you did not add 'video' to BUILD_LIST (step 1); disables tracker GMC, verify tracking quality
 ```
 
@@ -274,12 +392,14 @@ These are the GPU-accelerated analogues of the two reproduce commands in [`data/
 
 ```bash
 # Pixel-coordinate results: GPU stabilization, no georeferencing
-geotrax batch data/U_video_cut.mp4 --no-geo --show-class-names --show-conf --stab-gpu -c default_copy.yaml
+geotrax batch data/U_video_cut.mp4 --no-geo --show-class-names --show-conf --stab-gpu
 
 # Full pipeline: GPU stabilization + georeferencing (needs the orthophoto/segmentation/master-frame data; see data/README.md)
 geotrax batch data/U_video_cut.mp4 -orf data/orthophotos -osf data/segmentations -mf data/master_frames \
-  --show-lanes --plot-segmentations -vm 0 3 --stab-gpu --geo-gpu -c default_copy.yaml
+  --show-lanes --plot-segmentations -vm 0 3 --stab-gpu --geo-gpu --geo-detector orb
 ```
+
+(Append `-c default_copy.yaml` to both if you needed the `gmc_method: none` workaround above.)
 
 ### 4. Benchmark: detection-only CUDA vs fully CUDA
 
@@ -290,7 +410,7 @@ Three configurations are compared:
 - **ORB (CPU)**: the GPU-tuned config on CPU; a controlled, same-config baseline for the GPU run.
 - **fully CUDA**: the same ORB config with `--stab-gpu --geo-gpu`.
 
-The default run needs no config file: with no `-c`, geo-trax uses its shipped defaults (RootSIFT georeferencing, CPU for both stabilization and georeferencing). The ORB runs use your `default_copy.yaml` (`georef.matching.detector_name: orb`, `tracker.botsort.gmc_method: none`).
+The default run needs no config file: with no `-c`, geo-trax uses its shipped defaults (RootSIFT georeferencing, CPU for both stabilization and georeferencing). The ORB runs switch the georeferencing detector with `--geo-detector orb`; add `-c default_copy.yaml` to them as well if you needed `tracker.botsort.gmc_method: none`.
 
 With [hyperfine](https://github.com/sharkdp/hyperfine):
 
@@ -299,8 +419,8 @@ OUT=/tmp/geotrax_bench
 COMMON="geotrax batch data/U_video_cut.mp4 -orf data/orthophotos -osf data/segmentations -mf data/master_frames --no-save --no-show --no-plot-save --no-plot-show -of $OUT"
 hyperfine --warmup 1 --runs 5 --prepare "rm -rf $OUT" \
   -n "geo-trax default (CPU, RootSIFT)" "$COMMON" \
-  -n "ORB (CPU)"                        "$COMMON -c default_copy.yaml" \
-  -n "fully CUDA (ORB)"                 "$COMMON -c default_copy.yaml --stab-gpu --geo-gpu"
+  -n "ORB (CPU)"                        "$COMMON --geo-detector orb" \
+  -n "fully CUDA (ORB)"                 "$COMMON --geo-detector orb --stab-gpu --geo-gpu"
 ```
 
 Or without extra tools:
@@ -339,54 +459,6 @@ Example on an **NVIDIA RTX 4090** (5-second sample clip, 150 frames; hyperfine m
 > Fully CUDA is **16.7× faster than the geo-trax default** and **21.3× faster than the same ORB config on CPU** (row 2). Row 1 is the shipped defaults (RootSIFT georeferencing); rows 2–3 use the GPU-matched config, which switches georeferencing to ORB so the CPU and GPU runs do identical work (only ORB is CUDA-accelerated). Row 2 is slower than row 1 because ORB at a 250k feature ceiling with brute-force matching is costlier on CPU than RootSIFT. Treat these as a **relative** comparison, not absolute throughput: geo-trax's defaults favor maximum accuracy and reliability, with detection at **1920×1920**, stabilization at only a **0.5 downscale** (roughly 2K per frame on this 4K clip) with a high `max_features` ceiling, and RootSIFT georeferencing with a very high `max_features` and conservative MAGSAC++ matcher/projection settings, all against an **8000×8000** orthophoto. Lighter settings would cut absolute times across the board; the point is the CPU→GPU ratio.
 
 </details>
-
-## Detection Model
-
-The default detector is **YOLOv8s** (HBB, 1920 × 1920 px, ~11 M parameters), trained on more than 19,000 annotated aerial images (~679k labeled vehicle instances) and fine-tuned on a curated, high-quality subset. It is hosted on [🤗 Hugging Face](https://huggingface.co/rfonod/geo-trax) and **downloads automatically on first use**. Results on the [Songdo Vision **v1**](https://doi.org/10.5281/zenodo.13828408) test split (1,084 images; full results in [Table 3](https://doi.org/10.1016/j.trc.2025.105205)):
-
-| ID | Label | Precision | Recall | mAP@50 | mAP@50-95 |
-|---|---|---|---|---|---|
-| 0 | Car (incl. vans) | 0.979 | 0.981 | 0.992 | 0.835 |
-| 1 | Bus | 0.952 | 0.977 | 0.988 | 0.826 |
-| 2 | Truck | 0.887 | 0.916 | 0.935 | 0.722 |
-| 3 | Motorcycle | 0.827 | 0.866 | 0.888 | 0.463 |
-| **All** | | **0.911** | **0.935** | **0.951** | **0.711** |
-
-> Pedestrian and bicycle classes exist in the weights but are underrepresented, unevaluated, and filtered by default. See the [model card](https://huggingface.co/rfonod/geo-trax) for full details.
-
-To use a different model, point `--model` (CLI) or `extraction.model` (config) to a local `.pt` path or `hf://<org>/<repo>/<file>.pt`; any [Ultralytics](https://github.com/ultralytics/ultralytics)-compatible model works.
-
-### Small-Object Detection with SAHI
-
-For footage where vehicles are near the detection floor (higher altitudes, sub-4K sensors), the extraction stage can optionally run [SAHI](https://github.com/obss/sahi) sliced inference: each frame is split into overlapping slices, the detector runs on every slice (plus one full-frame pass), and the results are merged before tracking. This substantially improves tiny-object recall at roughly 5x the per-frame detection cost with the default 1920 x 1080 slices.
-
-```bash
-python -m pip install -e '.[sahi]'   # one-time install of the optional dependency
-geotrax extract video.mp4 --sahi     # also available on 'geotrax batch'
-```
-
-Slice size, overlap, and merge settings live in `cfg -> extraction -> sahi` (run `geotrax config copy` to edit them). SAHI mode honors the `ultralytics` config keys `conf`, `device`, `imgsz` (applied per slice), and `classes`; the NMS-related keys (`iou`, `max_det`, `agnostic_nms`, etc.) are superseded by the SAHI merge settings. It supports YOLO models only and cannot be combined with the `tracktrack` tracker or with ReID model `auto` (both need a live Ultralytics predictor).
-
-### Custom Model Training
-
-Training and export scripts for custom YOLO detectors live in `train/`, with a SLURM wrapper for HPC clusters. See [train/README.md](train/README.md).
-
-## Tracking
-
-Six multi-object trackers ship with [Ultralytics](https://github.com/ultralytics/ultralytics) `>=8.4.63`. Selection is config-driven: set `tracker.active`, no code changes needed. Default: **BoT-SORT**.
-
-| Tracker | `tracker.active` | ReID | GMC¹ | Pros | Cons |
-|---------|------------------|:----:|:----:|------|------|
-| **BoT-SORT** (default) | `botsort` | opt | ✅ | Strong accuracy; motion + optional appearance | Slower; ReID adds compute |
-| **ByteTrack** | `bytetrack` | ❌ | ❌ | Fastest; two-stage association | More ID switches under occlusion |
-| **OC-SORT** | `ocsort` | ❌ | ❌ | Robust to non-linear motion; lightweight | Weaker on long occlusions |
-| **Deep OC-SORT** | `deepocsort` | opt | opt | OC-SORT + appearance; dense scenes | Heaviest variant with ReID |
-| **FastTracker** | `fasttrack` | ❌ | ❌ | Occlusion-aware ByteTrack variant | Newer; several knobs to tune |
-| **TrackTrack** | `tracktrack` | opt | ✅ | Multi-cue cost; best ID retention | Most parameters; highest compute |
-
-¹ GMC (in-tracker camera-motion compensation) runs during tracking and is independent of Stabilo's post-hoc trajectory stabilization stage.
-
-> 💡 Run `geotrax config show default` to print the full `tracker:` block, with every parameter for all six trackers documented inline. Run `geotrax config copy` to get an editable local copy. For a head-to-head comparison on your own data, see [`tools/compare_tracking.py`](tools/compare_tracking.py).
 
 ## Usage
 
