@@ -79,6 +79,11 @@ Processing Options:
                           build; no CPU fallback). Defaults to cfg -> stabilo -> gpu.
     --stab-gpu-device-id, -sgid <int> : CUDA device index used when stabilization GPU is enabled.
                           Defaults to cfg -> stabilo -> gpu_device_id.
+    --stab-detector, -sdet <str> : Stabilization feature detector: classical (orb, sift, rsift, brisk, kaze,
+                          akaze) or learning-based (xfeat, disk, dedode, keynet, loftr).
+                          Defaults to cfg -> stabilo -> detector_name.
+    --stab-device, -sdev <str> : Torch device for the learning-based detectors/matchers (auto, cpu, cuda,
+                          mps); ignored by the classical detectors. Defaults to cfg -> stabilo -> device.
     For full detection and tracking control (model, IoU, image size, tracker settings, etc.),
     edit cfg -> ultralytics and cfg -> tracker in the pipeline config (run 'geotrax config copy').
 
@@ -108,6 +113,11 @@ Georeferencing Options:
                           build; no CPU fallback). Defaults to cfg -> georef -> matching -> gpu.
     --geo-gpu-device-id, -ggid <int> : CUDA device index used when georeferencing GPU is enabled.
                           Defaults to cfg -> georef -> matching -> gpu_device_id.
+    --geo-detector, -gdet <str> : Registration detector: classical (orb, sift, rsift, brisk, kaze, akaze)
+                          or learning-based (xfeat, disk, dedode, keynet, loftr).
+                          Defaults to cfg -> georef -> matching -> detector_name.
+    --geo-device, -gdev <str> : Torch device for the learning-based detectors/matchers (auto, cpu, cuda,
+                          mps); ignored by the classical detectors. Defaults to cfg -> georef -> matching -> device.
 
 Visualization Options:
     --save / --no-save, -s  : Save the annotated output video to file.

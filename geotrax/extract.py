@@ -51,6 +51,11 @@ Processing Options:
                               OpenCV build; no CPU fallback). Defaults to cfg -> stabilo -> gpu.
     --stab-gpu-device-id, -sgid <int> : CUDA device index used when stabilization GPU is enabled.
                               Defaults to cfg -> stabilo -> gpu_device_id.
+    --stab-detector, -sdet <str> : Stabilization feature detector: classical (orb, sift, rsift, brisk, kaze,
+                              akaze) or learning-based (xfeat, disk, dedode, keynet, loftr).
+                              Defaults to cfg -> stabilo -> detector_name.
+    --stab-device, -sdev <str> : Torch device for the learning-based detectors/matchers (auto, cpu, cuda, mps);
+                              ignored by the classical detectors. Defaults to cfg -> stabilo -> device.
     For full detection, tracking, and stabilization control, edit cfg -> ultralytics, cfg -> tracker,
     and cfg -> stabilo. Run 'geotrax config copy' to get an editable local copy of the pipeline config.
     Object-detection GPU use is set via cfg -> ultralytics -> device (default: auto, uses CUDA when available).
@@ -120,6 +125,7 @@ from geotrax.utils.file_utils import (
     get_video_dimensions,
 )
 from geotrax.utils.logging_utils import setup_logger
+from geotrax.utils.registration import DETECTOR_CHOICES, DEVICE_CHOICES
 
 _INFERENCE_KEYS = {
     'conf', 'iou', 'imgsz', 'max_det', 'classes',
@@ -143,10 +149,14 @@ def detect_track_stabilize(args: argparse.Namespace, logger: logging.Logger) -> 
         'output_folder': out_cfg_raw.get('folder', 'results'),
         'stab_gpu': config['stabilo']['gpu'],
         'stab_gpu_device_id': config['stabilo']['gpu_device_id'],
+        'stab_detector': config['stabilo']['detector_name'],
+        'stab_device': config['stabilo'].get('device', 'auto'),  # .get: tolerate a custom config predating the key
     })
     out_cfg = {**out_cfg_raw, 'folder': args.output_folder}
     config['stabilo']['gpu'] = args.stab_gpu
     config['stabilo']['gpu_device_id'] = args.stab_gpu_device_id
+    config['stabilo']['detector_name'] = args.stab_detector
+    config['stabilo']['device'] = args.stab_device
     config['main']['extraction'].setdefault('sahi', {})['enable'] = args.sahi
     if args.sahi:
         validate_sahi_tracker(config['main'])
@@ -763,6 +773,8 @@ def add_processing_args(group) -> None:
     group.add_argument('--sahi', action=argparse.BooleanOptionalAction, default=None, help="Detect via SAHI sliced inference for improved small-object recall (requires: pip install 'geo-trax[sahi]'). Slicing parameters live in cfg -> extraction -> sahi. Defaults to cfg -> extraction -> sahi -> enable.")
     group.add_argument('--stab-gpu', '-sg', action=argparse.BooleanOptionalAction, default=None, help='CUDA-accelerate stabilization (requires a CUDA-enabled OpenCV build; no CPU fallback). Defaults to cfg -> stabilo -> gpu.')
     group.add_argument('--stab-gpu-device-id', '-sgid', type=int, default=None, help='CUDA device index used when stabilization GPU is enabled. Defaults to cfg -> stabilo -> gpu_device_id.')
+    group.add_argument('--stab-detector', '-sdet', choices=DETECTOR_CHOICES, default=None, help="Stabilization feature detector. Classical (OpenCV): orb, sift, rsift, brisk, kaze, akaze. Learning-based (kornia, use --stab-device): xfeat, disk, dedode, keynet, loftr. All learned ones except keynet are upright models (matching collapses past ~30 deg rotation) and are memory hungry at high resolution - lower cfg -> stabilo -> downsample_ratio for them. Defaults to cfg -> stabilo -> detector_name.")
+    group.add_argument('--stab-device', '-sdev', choices=DEVICE_CHOICES, default=None, help="Torch device for the learning-based stabilization detectors/matchers ('auto' picks cuda > mps > cpu); ignored by the classical detectors and independent of --stab-gpu (OpenCV CUDA). Defaults to cfg -> stabilo -> device.")
 
 
 def parse_cli_args() -> argparse.Namespace:

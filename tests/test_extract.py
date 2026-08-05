@@ -54,6 +54,26 @@ def test_stab_gpu_flags_parse():
     assert _parse_processing(['--no-stab-gpu']).stab_gpu is False
 
 
+def test_stab_detector_and_device_default_to_none():
+    args = _parse_processing([])
+    assert args.stab_detector is None
+    assert args.stab_device is None
+
+
+def test_stab_detector_and_device_parse():
+    args = _parse_processing(['--stab-detector', 'xfeat', '--stab-device', 'cpu'])
+    assert args.stab_detector == 'xfeat'
+    assert args.stab_device == 'cpu'
+    assert _parse_processing(['-sdet', 'orb', '-sdev', 'auto']).stab_detector == 'orb'
+
+
+def test_stab_detector_rejects_unknown_value():
+    with pytest.raises(SystemExit):
+        _parse_processing(['--stab-detector', 'not-a-detector'])
+    with pytest.raises(SystemExit):
+        _parse_processing(['--stab-device', 'tpu'])
+
+
 def test_sahi_flag_defaults_to_none():
     assert _parse_processing([]).sahi is None
 
