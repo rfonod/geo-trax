@@ -23,12 +23,16 @@ class CfgArg(NamedTuple):
                  already implement, including the CLI-vs-config provenance they report. The
                  mapping is still registered so that ``--set`` conflict detection covers them.
     ``coerce``   applied to the config value when it is pulled into the argument (e.g. Path).
+    ``flag``     the argument's own long flag (e.g. '--output-folder'), for conflict messages.
+                 Not derivable from ``dest`` alone: a parser registered with ``dest_prefix``
+                 (``add_plotting_args``) has a ``dest`` that differs from the real flag name.
     """
 
     path: str
     invert: bool = False
     no_sync: bool = False
     coerce: Optional[Callable] = None
+    flag: str = ''
 
 
 def add_cfg_arg(group, *flags, cfg: str, paths: dict, help: str, default_note: str = '',  # noqa: A002
@@ -50,7 +54,8 @@ def add_cfg_arg(group, *flags, cfg: str, paths: dict, help: str, default_note: s
         arrow_path = ' -> '.join(cfg.split('.'))
         help_text = f"{help} Defaults to cfg -> {arrow_path}{', ' + default_note if default_note else ''}."
     action = group.add_argument(*flags, default=None, help=help_text, **kwargs)
-    paths[action.dest] = CfgArg(path=cfg, invert=invert, no_sync=no_sync, coerce=coerce)
+    flag = next((f for f in action.option_strings if f.startswith('--')), action.option_strings[0])
+    paths[action.dest] = CfgArg(path=cfg, invert=invert, no_sync=no_sync, coerce=coerce, flag=flag)
     return action
 
 
@@ -85,12 +90,13 @@ def add_common_args(group, cfg: bool = True, output_folder: bool = True) -> dict
         group.add_argument('--cfg', '-c', type=Path, default=DEFAULT_CFG,
                            help="Pipeline config: a bundled preset name (default, confident, lenient, stable) or a path "
                                 "to a custom config file. Run 'geotrax config show' to list presets or 'geotrax config copy' to customize.")
-        group.add_argument('--set', '-st', dest='set', nargs='+', action='extend', default=None, metavar='KEY=VALUE',
-                           help="Override any pipeline config value for this run, e.g. --set conf=0.35 iou=0.6. KEY is a "
-                                "dotted path ('ultralytics.conf') or any unambiguous tail of one ('conf'); an ambiguous or "
-                                "unknown key is an error that lists the candidates. VALUE is read with YAML rules, so "
-                                "true/null/0.35/[0,1,2] all mean what they do in the config file. Use the dedicated flag "
-                                "instead where one exists (it validates its input); passing both for the same key is an error.")
+        group.add_argument('--set', '-st', dest='set', action='append', default=None, metavar='KEY=VALUE',
+                           help="Override a pipeline config value for this run; repeat for more than one, e.g. "
+                                "--set conf=0.35 --set iou=0.6. KEY is a dotted path ('ultralytics.conf') or any "
+                                "unambiguous tail of one ('conf'); an ambiguous or unknown key is an error that lists "
+                                "the candidates. VALUE is read with YAML rules, so true/null/0.35/[0,1,2] all mean what "
+                                "they do in the config file. Use the dedicated flag instead where one exists (it "
+                                "validates its input); passing both for the same key is an error.")
     if output_folder:
         add_cfg_arg(group, '--output-folder', '-of', type=str, cfg='output.folder', paths=paths,
                     help="Root folder for pipeline outputs. A bare name (e.g. 'results') creates a sub-folder next to "

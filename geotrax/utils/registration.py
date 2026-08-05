@@ -58,6 +58,14 @@ DETECTOR_CHOICES = list(Stabilizer.VALID_DETECTORS)
 DEVICE_CHOICES = list(Stabilizer.VALID_DEVICES)
 DL_DETECTORS = set(Stabilizer.DL_DETECTORS)
 
+# Every key estimate_homography knowingly forwards to the Stabilizer (mirrors cfg -> georef -> matching
+# in cfg/default.yaml). Update alongside that config block when a new stabilo option is adopted.
+KNOWN_STABILIZER_KWARGS = (
+    set(DEFAULT_STABILIZER_KWARGS)
+    | set(FIXED_STABILIZER_KWARGS)
+    | {'device', 'loftr_weights', 'loftr_confidence', 'disk_weights', 'dedode_detector_weights', 'dedode_descriptor_weights'}
+)
+
 
 def _clamp_dl_max_features(kwargs: dict, logger: logging.Logger) -> None:
     """Cap max_features for the learning-based detectors, which consume it as top_k / num_features."""
@@ -100,6 +108,10 @@ def estimate_homography(img_src: np.ndarray, img_dst: np.ndarray, logger: loggin
         and `num_matches` is the number of good matches fed to findHomography (i.e. the
         'inliers_count out of num_matches matches' figures).
     """
+    unknown = sorted(set(stabilizer_kwargs) - KNOWN_STABILIZER_KWARGS)
+    if unknown:
+        logger.warning(f"Ignoring unrecognized registration key(s) {unknown}; check cfg -> georef -> matching for typos.")
+
     kwargs = {**DEFAULT_STABILIZER_KWARGS, **stabilizer_kwargs}
 
     clashes = sorted(

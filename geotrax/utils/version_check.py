@@ -120,8 +120,8 @@ def check_for_updates(logger=None, blocking: bool = False) -> None:
     """
     Warn (once) if a newer geo-trax release is available on PyPI. Never raises.
 
-    When the cache is fresh the comparison is done in-process; otherwise the network
-    fetch runs in a daemon thread unless `blocking` is True.
+    The whole check (cache read, and the network fetch if the cache is stale or absent) runs in a
+    daemon thread unless `blocking` is True, so a short-lived process can exit before it completes.
     """
     if _opted_out():
         return

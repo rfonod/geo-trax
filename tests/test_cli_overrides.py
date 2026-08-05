@@ -160,6 +160,21 @@ def test_type_mismatch_is_rejected(cfg, token, caplog):
     assert 'wrong type' in caplog.text
 
 
+def test_null_is_rejected_for_a_non_nullable_slot(cfg, caplog):
+    """output.folder is a str in cfg/default.yaml, never null, so an explicit null must not land."""
+    with caplog.at_level(logging.CRITICAL), pytest.raises(SystemExit):
+        apply_cli_overrides(cfg, ['folder=null'], None, logger)
+    assert 'wrong type' in caplog.text
+    assert cfg['output']['folder'] == 'results'
+
+
+def test_null_is_accepted_for_a_documented_nullable_slot(cfg):
+    """georef.processing.geo_source ships as null in cfg/default.yaml, so null is a valid value."""
+    cfg['georef'] = {'processing': {'geo_source': 'metadata-tif'}}
+    apply_cli_overrides(cfg, ['geo_source=null'], None, logger)
+    assert cfg['georef']['processing']['geo_source'] is None
+
+
 # --- precedence and conflicts ------------------------------------------------------------------
 
 def _extract_args(argv):
@@ -192,9 +207,28 @@ def test_set_and_its_dedicated_flag_together_abort(cfg, caplog):
     assert '--set conf=0.1' in caplog.text and '--conf 0.5' in caplog.text
 
 
+def test_conflict_message_names_the_real_flag_when_dest_and_flag_differ(cfg, caplog):
+    """
+    geotrax plot registers dest_prefix='' (unlike batch's 'plot_'), so its dest 'points' does not
+    spell the real flag '--plot-points'; the reported flag must come from the registry, not dest.
+    """
+    from geotrax.plot import add_plotting_args
+
+    parser = argparse.ArgumentParser()
+    paths = add_common_args(parser)
+    paths |= add_plotting_args(parser)
+    args = finalize_cli_args(parser, paths, ['--set', 'plot_points=true', '--plot-points'])
+
+    cfg['plotting'] = {'plot_points': False}
+    with caplog.at_level(logging.CRITICAL), pytest.raises(SystemExit):
+        apply_cli_overrides(cfg, args.set, args, logger)
+    assert '--plot-points' in caplog.text
+    assert '--points' not in caplog.text
+
+
 def test_conflict_leaves_the_config_untouched(cfg):
     """Validation completes before anything is written, so a rejected command line is inert."""
-    args = _extract_args(['--set', 'iou=0.9', 'conf=0.1', '--conf', '0.5'])
+    args = _extract_args(['--set', 'iou=0.9', '--set', 'conf=0.1', '--conf', '0.5'])
     cfg['ultralytics']['iou'] = 0.7
     with pytest.raises(SystemExit):
         apply_cli_overrides(cfg, args.set, args, logger)
@@ -217,7 +251,7 @@ def test_set_survives_a_reloaded_config(cfg, caplog):
     keys off what was typed, not off what the namespace now holds, so the second pass must not
     mistake a pulled-back value for a dedicated flag.
     """
-    args = _extract_args(['--set', 'output.folder=results_new', 'processing.cut_frame_left=50'])
+    args = _extract_args(['--set', 'output.folder=results_new', '--set', 'processing.cut_frame_left=50'])
     apply_cli_overrides(cfg, args.set, args, logger)
     sync_args_with_config(args, cfg, logger)
     assert args.output_folder == 'results_new' and args.cut_frame_left == 50
@@ -252,6 +286,17 @@ def test_repeated_set_flags_accumulate(cfg):
     apply_cli_overrides(cfg, args.set, args, logger)
     assert cfg['ultralytics']['conf'] == 0.4
     assert cfg['stabilo']['max_features'] == 4000
+
+
+def test_set_does_not_swallow_a_following_positional():
+    """--set takes exactly one value per occurrence, so it cannot eat the positional source arg."""
+    parser = argparse.ArgumentParser()
+    parser.add_argument('source', type=Path)
+    paths = add_common_args(parser)
+
+    args = finalize_cli_args(parser, paths, ['--set', 'conf=0.35', '--set', 'iou=0.6', 'video.mp4'])
+    assert args.source == Path('video.mp4')
+    assert args.set == ['conf=0.35', 'iou=0.6']
 
 
 # --- sync_args_with_config ---------------------------------------------------------------------
@@ -307,11 +352,11 @@ def test_sync_does_not_coerce_a_null(cfg):
     assert args.ortho_folder is None
 
 
-def test_sync_leaves_the_arg_alone_when_the_key_is_absent(cfg):
-    """A custom config predating a new key must still load, falling back to the consumer default."""
+def test_sync_falls_back_to_the_bundled_default_when_the_key_is_absent(cfg):
+    """A custom config predating a new key must still load, falling back to the shipped default."""
     args = _synced({'stab_device': CfgArg('stabilo.device')}, cfg, stab_device=None)
-    assert args.stab_device is None
-    assert 'device' not in cfg['stabilo']
+    assert args.stab_device == 'auto'  # cfg/default.yaml -> stabilo -> device
+    assert 'device' not in cfg['stabilo']  # the loaded config itself is left untouched
 
 
 # --- anti-drift --------------------------------------------------------------------------------

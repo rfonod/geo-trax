@@ -49,10 +49,10 @@ Batch Processing Options:
 Shared Options:
     --cfg, -c <path>    : Path to a custom pipeline config file. Defaults to the bundled config;
                           run 'geotrax config show' to view it or 'geotrax config copy' to customize.
-    --set, -st <KEY=VALUE> [...] : Override any pipeline config value for this run, e.g.
-                          --set conf=0.35 iou=0.6. KEY is a dotted path or any unambiguous tail
-                          of one; VALUE uses YAML rules. Prefer the dedicated flag where one
-                          exists; passing both for the same key is an error.
+    --set, -st <KEY=VALUE>       : Override a pipeline config value for this run; repeat for more
+                          than one, e.g. --set conf=0.35 --set iou=0.6. KEY is a dotted path or any
+                          unambiguous tail of one; VALUE uses YAML rules. Prefer the dedicated flag
+                          where one exists; passing both for the same key is an error.
     --output-folder, -of <str> : Root folder for pipeline outputs (bare name or absolute path).
                           A bare name creates a sub-folder next to each input video; an absolute
                           path is shared across all inputs in the batch. Also sets the base for

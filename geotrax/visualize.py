@@ -28,10 +28,10 @@ Options:
   --help, -h          : Show this help message and exit.
   --cfg, -c <path>    : Path to a custom pipeline config file. Defaults to the bundled config;
                         run 'geotrax config show' to view it or 'geotrax config copy' to customize.
-  --set, -st <KEY=VALUE> [...] : Override any pipeline config value for this run, e.g.
-                        --set tail_length=90. KEY is a dotted path or any unambiguous tail of one;
-                        VALUE uses YAML rules. Prefer the dedicated flag where one exists;
-                        passing both for the same key is an error.
+  --set, -st <KEY=VALUE>    : Override a pipeline config value for this run; repeat for more than
+                        one, e.g. --set tail_length=90. KEY is a dotted path or any unambiguous
+                        tail of one; VALUE uses YAML rules. Prefer the dedicated flag where one
+                        exists; passing both for the same key is an error.
   --output-folder, -of <str> : Root folder for outputs (bare name or absolute path).
                         Defaults to cfg -> output -> folder (historical default: 'results').
   --model, -m <str>   : Detection model used to resolve vehicle class names — a local file path

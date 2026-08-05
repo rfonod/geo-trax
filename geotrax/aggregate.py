@@ -29,9 +29,9 @@ Options:
                                a 'DATASET' folder is created next to the PROCESSED folder (default: None).
   -c, --cfg <path>           : Pipeline config used to resolve the output folder name where
                                georeferenced CSVs are located. Defaults to the bundled config.
-  -st, --set <KEY=VALUE> [...]: Override any pipeline config value for this run, e.g.
-                               --set folder=out. KEY is a dotted path or any unambiguous tail
-                               of one; VALUE uses YAML rules.
+  -st, --set <KEY=VALUE>     : Override a pipeline config value for this run; repeat for more
+                               than one, e.g. --set folder=out. KEY is a dotted path or any
+                               unambiguous tail of one; VALUE uses YAML rules.
   -lp, --log-path <str>      : Where to write logs: a directory or a full file path; defaults to a platform-specific log directory.
   -v, --verbose              : Set print verbosity level to INFO (default: WARNING).
 

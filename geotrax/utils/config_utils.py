@@ -5,6 +5,7 @@
 
 import argparse
 import difflib
+import functools
 import json
 import logging
 import sys
@@ -283,6 +284,13 @@ def _get_by_path(cfg: dict, path: str, default: Any = _MISSING) -> Any:
     return node
 
 
+@functools.lru_cache(maxsize=1)
+def _bundled_defaults() -> dict:
+    """The shipped default.yaml, used as a fallback for a key absent from a loaded custom config."""
+    with open(CFG_DIR / 'default.yaml', encoding='utf-8') as f:
+        return yaml.safe_load(f)
+
+
 def _set_by_path(cfg: dict, path: str, value: Any) -> None:
     """Set the value at the dotted *path*, creating intermediate dicts as needed."""
     *parents, leaf = path.split('.')
@@ -310,8 +318,9 @@ def sync_args_with_config(args: argparse.Namespace, cfg: dict, logger: logging.L
     than the file's version of it. Flags marked ``no_sync`` are skipped in both directions; their
     precedence is resolved elsewhere (see :class:`~geotrax.utils.cli_utils.CfgArg`).
 
-    Config keys absent from the file are left alone, so a custom config predating a newly added
-    key still loads and the consumer falls back to its own default.
+    Config keys absent from the file fall back to the bundled default.yaml, so a custom config
+    predating a newly added key still loads with a sane value instead of leaving the argument
+    (and every downstream consumer of it) silently at ``None``.
     """
     for dest, spec in getattr(args, '_cfg_paths', {}).items():
         if spec.no_sync or not hasattr(args, dest):
@@ -320,7 +329,9 @@ def sync_args_with_config(args: argparse.Namespace, cfg: dict, logger: logging.L
         if value is None:
             config_value = _get_by_path(cfg, spec.path)
             if config_value is _MISSING:
-                continue
+                config_value = _get_by_path(_bundled_defaults(), spec.path)
+                if config_value is _MISSING:
+                    continue
             if spec.invert:
                 config_value = not config_value
             elif spec.coerce is not None and config_value is not None:
@@ -411,8 +422,7 @@ def _dedicated_flags_in_use(args: Optional[argparse.Namespace]) -> dict:
         if dest not in provided:
             continue
         value = getattr(args, dest, None)
-        flag = f"--{dest.replace('_', '-')}"
-        flags[spec.path] = flag if isinstance(value, bool) else f'{flag} {value}'
+        flags[spec.path] = spec.flag if isinstance(value, bool) else f'{spec.flag} {value}'
     return flags
 
 
@@ -462,8 +472,18 @@ def _resolve_override_key(key: str, leaf_paths: list, cfg: dict, logger: logging
 
 def _coerce_override_value(path: str, value: Any, current: Any, raw_value: str, logger: logging.Logger) -> Any:
     """Check an overridden value against the type already in the config, coercing where unambiguous."""
-    if current is None or value is None:
-        return value  # a null in the config carries no type information; an explicit null is always allowed
+    if current is None:
+        return value  # a null in the config carries no type information
+
+    if value is None:
+        if _get_by_path(_bundled_defaults(), path, default=None) is None:
+            return value  # the key is documented as nullable in the bundled config
+        expected = type(current).__name__
+        logger.critical(
+            f"--set {path}={raw_value} has the wrong type: expected {expected} (current value: {current!r}), "
+            "got NoneType."
+        )
+        sys.exit(1)
 
     is_bool, is_number = isinstance(value, bool), isinstance(value, (int, float)) and not isinstance(value, bool)
 

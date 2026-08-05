@@ -200,7 +200,7 @@ To switch the tracking algorithm, set `tracker.active` in the config (see [Track
 Change any config value for a single run, without copying a config file. Available on every command that takes `-c`:
 
 ```bash
-geotrax extract video.mp4 --set conf=0.35 iou=0.6          # several keys at once
+geotrax extract video.mp4 --set conf=0.35 --set iou=0.6     # repeat --set for several keys
 geotrax extract video.mp4 --set tracker.botsort.track_buffer=45
 geotrax georeference video.mp4 -orf ortho/ --set matching.downsample_ratio=0.25
 geotrax batch PROCESSED/ --set stabilo.max_features=4000 --set visualization.tail_length=90
