@@ -283,8 +283,10 @@ def load_sahi_detector(config: Dict, logger: logging.Logger) -> Any:
         from sahi import AutoDetectionModel
     except ImportError:
         logger.critical(
-            "SAHI mode is enabled but the 'sahi' package is not installed. "
-            "Install it with: pip install 'geo-trax[sahi]'"
+            "SAHI mode is enabled but the 'sahi' package is not installed. Install the optional extra:\n"
+            "  python -m pip install 'geo-trax[sahi]'   # if geo-trax was installed from PyPI\n"
+            "  python -m pip install -e '.[sahi]'       # if working from a source checkout\n"
+            "Alternatively, disable SAHI with --no-sahi or cfg -> extraction -> sahi -> enable: false."
         )
         sys.exit(1)
 

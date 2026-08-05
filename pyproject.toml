@@ -11,6 +11,9 @@
 #
 # Installation (requires Python >= 3.11):
 #   pip install geo-trax                # from PyPI; installs the 'geotrax' CLI and bundled configs
+#   pip install 'geo-trax[dev]'         # from PyPI + dev
+#   pip install 'geo-trax[export]'      # from PyPI + ONNX export
+#   pip install 'geo-trax[sahi]'        # from PyPI + SAHI sliced inference
 #   pip install -e .                    # core; -e (editable) reflects code changes without reinstalling
 #   pip install -e '.[dev]'             # core + dev (pip)
 #   pip install -e '.[export]'          # core + export (pip)
