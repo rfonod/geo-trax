@@ -143,8 +143,8 @@ stabilo:
   filter_ratio: 0.9     # Lowe ratio-test threshold; lower = stricter (fewer but better matches); (0.0, 1.0]
 
   # Transformation estimation
-  transformation_type: 'projective'  # Geometric model to estimate; choices: [projective, affine]
-  ransac_method: 38                  # RANSAC method; [4: LMEDS, 8: RANSAC, 16: RHO, 32: DEGENSAC, 33: DEGENSAC (alt.), 35: LO-RANSAC, 36: GC-RANSAC, 37: PROSAC, 38: MAGSAC++]
+  transformation_type: 'projective'  # Geometric model to estimate; choices: [projective, affine]. 'affine' accepts only ransac_method 4 (LMEDS) or 8 (RANSAC)
+  ransac_method: 38                  # RANSAC method; [4: LMEDS, 8: RANSAC, 16: RHO, 32: USAC-Default (LO-RANSAC), 33: USAC-Parallel (LO-RANSAC), 35: USAC-Fast (LO-RANSAC), 36: USAC-Accurate (GC-RANSAC), 37: PROSAC, 38: MAGSAC++]
   ransac_epipolar_threshold: 2.0     # Reprojection error threshold [px] for RANSAC inlier classification; (0.0, inf)
   ransac_max_iter: 5000              # Maximum RANSAC iterations; (0, inf]
   ransac_confidence: 0.999999        # Required probability that the best model is correct; (0.0, 1.0]
