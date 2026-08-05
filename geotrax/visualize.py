@@ -28,6 +28,10 @@ Options:
   --help, -h          : Show this help message and exit.
   --cfg, -c <path>    : Path to a custom pipeline config file. Defaults to the bundled config;
                         run 'geotrax config show' to view it or 'geotrax config copy' to customize.
+  --set, -st <KEY=VALUE> [...] : Override any pipeline config value for this run, e.g.
+                        --set tail_length=90. KEY is a dotted path or any unambiguous tail of one;
+                        VALUE uses YAML rules. Prefer the dedicated flag where one exists;
+                        passing both for the same key is an error.
   --output-folder, -of <str> : Root folder for outputs (bare name or absolute path).
                         Defaults to cfg -> output -> folder (historical default: 'results').
   --model, -m <str>   : Detection model used to resolve vehicle class names — a local file path
@@ -114,8 +118,8 @@ import pandas as pd
 from scipy.ndimage import gaussian_filter1d
 from tqdm import tqdm
 
-from geotrax.utils.cli_utils import add_common_args
-from geotrax.utils.config_utils import backfill_args_from_config, load_config, load_config_all
+from geotrax.utils.cli_utils import add_cfg_arg, add_common_args, finalize_cli_args
+from geotrax.utils.config_utils import load_config, load_config_all
 from geotrax.utils.data_utils import VizColors
 from geotrax.utils.file_utils import (
     build_result_path,
@@ -132,43 +136,15 @@ def visualize_results(args: argparse.Namespace, logger: logging.Logger) -> None:
     """
     Visualize the tracking results on a video.
     """
+    # load_config_all() has already reconciled the CLI flags with the config in both directions
+    # (see sync_args_with_config), so args and config agree and either can be read from here on.
     config = load_config_all(args, logger)['main']
-    viz = config['visualization']
-    proc = config['processing']
-    out_cfg_raw = config.get('output', {})
-    backfill_args_from_config(args, {
-        'save': viz['save'],
-        'show': viz['show'],
-        'viz_mode': viz['viz_mode'],
-        'plot_trajectories': viz['plot_trajectories'],
-        'plot_delay': viz['plot_delay'],
-        'show_conf': viz['show_conf'],
-        'show_lanes': viz['show_lanes'],
-        'show_class_names': viz['show_class_names'],
-        'hide_labels': viz['hide_labels'],
-        'hide_tracks': viz['hide_tracks'],
-        'hide_speed': viz['hide_speed'],
-        'speed_unit': viz['speed_unit'],
-        'speed_deadzone': viz['speed_deadzone'],
-        'class_filter': viz['class_filter'],
-        'tail_length': viz['tail_length'],
-        'line_width': viz['line_width'],
-        'heading_smoothing': viz['heading_smoothing'],
-        'heading_min_speed': viz['heading_min_speed'],
-        'edge_clip_margin': viz['edge_clip_margin'],
-        'edge_clip_smoothing': viz['edge_clip_smoothing'],
-        'cut_frame_left': proc['cut_frame_left'],
-        'cut_frame_right': proc['cut_frame_right'],
-        'output_folder': out_cfg_raw.get('folder', 'results'),
-    })
-    out_cfg = {**out_cfg_raw, 'folder': args.output_folder}
+    out_cfg = config.get('output', {})
     if not args.save and not args.show:
         logger.warning("Neither --save nor --show is enabled. Visualization will run but produce no output. "
                        "Set 'save' or 'show' in the config file, or pass --save / --show on the command line.")
     class_names = config['class_names']
     viz_config = config['visualization']
-    viz_config['tail_length'] = args.tail_length
-    viz_config['line_width'] = args.line_width
 
     viz_modes = normalize_viz_modes(args.viz_mode, logger)
     for viz_mode in viz_modes:
@@ -201,7 +177,7 @@ def resolve_viz_modes(args: argparse.Namespace, logger: logging.Logger) -> list:
     modes before the full config is otherwise loaded; the resolved value is cached on args.
     """
     if args.viz_mode is None:
-        args.viz_mode = load_config(args.cfg, logger)['visualization']['viz_mode']
+        args.viz_mode = load_config(args.cfg, logger, args)['visualization']['viz_mode']
     return normalize_viz_modes(args.viz_mode, logger)
 
 
@@ -983,62 +959,68 @@ def finalize_video(vid_reader: cv2.VideoCapture, vid_writer: cv2.VideoWriter, pb
     pbar.close()
 
 
-def add_visualization_args(group, include_frame_range: bool = True) -> None:
+def add_visualization_args(group, include_frame_range: bool = True) -> dict:
     """
     Register the shared visualization CLI flags on the given argparse parser/group.
 
     Used by both ``geotrax visualize`` and ``geotrax batch`` so the two commands expose an
     identical set of visualization options (single source of truth, no drift). Every flag
-    defaults to ``None`` and is backfilled from the config in ``visualize_results``.
+    defaults to ``None``; the returned ``dest -> CfgArg`` map tells ``sync_args_with_config``
+    which config key each one stands for.
 
     ``include_frame_range`` adds ``--cut-frame-left``/``--cut-frame-right``; batch sets it to
     ``False`` since it registers those under its processing options instead.
     """
-    group.add_argument('--save', '-s', action=argparse.BooleanOptionalAction, default=None,
-                       help='Save the annotated output video to file. Defaults to cfg -> visualization -> save.')
-    group.add_argument('--show', '-sh', action=argparse.BooleanOptionalAction, default=None,
-                       help='Open a live preview window during processing. Defaults to cfg -> visualization -> show.')
-    group.add_argument('--viz-mode', '-vm', type=int, nargs='+', default=None, choices=[0, 1, 2, 3, 4], metavar='MODE',
-                       help='Frame source(s) for annotation: 0=original, 1=stabilized, 2=reference frame, 3=rotated boxes on the original frame, 4=rotated boxes on the stabilized frame (3 and 4 rotate each box to the vehicle\'s per-frame heading; both require stabilization). Accepts multiple values, e.g. "--viz-mode 0 1 4" renders one video per mode. Defaults to cfg -> visualization -> viz_mode.')
-    group.add_argument('--plot-trajectories', '-pt', action=argparse.BooleanOptionalAction, default=None,
-                       help='Overlay trajectory positions on the first frame. Defaults to cfg -> visualization -> plot_trajectories.')
-    group.add_argument('--plot-delay', '-pd', type=int, default=None,
-                       help='Number of frames to display the trajectory overlay; only relevant when --plot-trajectories is enabled. Defaults to cfg -> visualization -> plot_delay.')
-    group.add_argument('--show-conf', '-sc', action=argparse.BooleanOptionalAction, default=None,
-                       help='Include detection confidence in bounding-box labels. Defaults to cfg -> visualization -> show_conf.')
-    group.add_argument('--show-lanes', '-sl', action=argparse.BooleanOptionalAction, default=None,
-                       help='Include lane ID in bounding-box labels. Defaults to cfg -> visualization -> show_lanes.')
-    group.add_argument('--show-class-names', '-scn', action=argparse.BooleanOptionalAction, default=None,
-                       help='Include vehicle class name in bounding-box labels. Defaults to cfg -> visualization -> show_class_names.')
-    group.add_argument('--hide-labels', '-hl', action=argparse.BooleanOptionalAction, default=None,
-                       help='Suppress all label text overlays. Defaults to cfg -> visualization -> hide_labels.')
-    group.add_argument('--hide-tracks', '-ht', action=argparse.BooleanOptionalAction, default=None,
-                       help='Suppress track tail lines. Defaults to cfg -> visualization -> hide_tracks.')
-    group.add_argument('--hide-speed', '-hs', action=argparse.BooleanOptionalAction, default=None,
-                       help='Suppress speed values in labels. Defaults to cfg -> visualization -> hide_speed.')
-    group.add_argument('--speed-unit', '-su', type=str, default=None, choices=['km/h', 'mi/h'],
-                       help='Speed display unit: km/h or mi/h. Defaults to cfg -> visualization -> speed_unit.')
-    group.add_argument('--speed-deadzone', '-sdz', type=float, default=None,
-                       help='Floor displayed speeds at or below this value (in the chosen speed unit) to 0, hiding stationary-vehicle jitter; 0 disables. Defaults to cfg -> visualization -> speed_deadzone.')
-    group.add_argument('--class-filter', '-cf', type=int, nargs='+', default=None,
-                       help='Vehicle class IDs to exclude from visualization (e.g., -cf 1 2). Defaults to cfg -> visualization -> class_filter.')
-    group.add_argument('--tail-length', '-tl', type=int, default=None,
-                       help='Number of past positions drawn as a fading track trail [frames]; [1, inf). Defaults to cfg -> visualization -> tail_length.')
-    group.add_argument('--line-width', '-lw', type=int, default=None,
-                       help='Bounding-box and track stroke width [px]; [1, inf). Defaults to cfg -> visualization -> line_width.')
-    group.add_argument('--heading-smoothing', '-hsm', type=int, default=None,
-                       help='(modes 3, 4) Gaussian smoothing window [frames] for the per-frame heading; larger = steadier, slower to follow turns. Defaults to cfg -> visualization -> heading_smoothing.')
-    group.add_argument('--heading-min-speed', '-hms', type=float, default=None,
-                       help='(modes 3, 4) Minimum smoothed pixel speed [px/frame] for a reliable heading; below this the heading is held from the last reliable frame. Defaults to cfg -> visualization -> heading_min_speed.')
-    group.add_argument('--edge-clip-margin', '-ecm', type=float, default=None,
-                       help='(modes 3, 4) Distance [px] within which a detection box is treated as touching a frame edge, triggering clipping of the oriented box to the visible part (absorbs HBB inaccuracy). Defaults to cfg -> visualization -> edge_clip_margin.')
-    group.add_argument('--edge-clip-smoothing', '-ecs', type=float, default=None,
-                       help='(modes 3, 4) Gaussian window [frames] for smoothing the clip rectangle of edge-touching boxes; larger = steadier shape as the vehicle exits, 0 disables. Defaults to cfg -> visualization -> edge_clip_smoothing.')
+    paths = {}
+    add_cfg_arg(group, '--save', '-s', action=argparse.BooleanOptionalAction, cfg='visualization.save', paths=paths,
+                help='Save the annotated output video to file.')
+    add_cfg_arg(group, '--show', '-sh', action=argparse.BooleanOptionalAction, cfg='visualization.show', paths=paths,
+                help='Open a live preview window during processing.')
+    add_cfg_arg(group, '--viz-mode', '-vm', type=int, nargs='+', choices=[0, 1, 2, 3, 4], metavar='MODE',
+                cfg='visualization.viz_mode', paths=paths,
+                help='Frame source(s) for annotation: 0=original, 1=stabilized, 2=reference frame, 3=rotated boxes on the original frame, 4=rotated boxes on the stabilized frame (3 and 4 rotate each box to the vehicle\'s per-frame heading; both require stabilization). Accepts multiple values, e.g. "--viz-mode 0 1 4" renders one video per mode.')
+    add_cfg_arg(group, '--plot-trajectories', '-pt', action=argparse.BooleanOptionalAction,
+                cfg='visualization.plot_trajectories', paths=paths,
+                help='Overlay trajectory positions on the first frame.')
+    add_cfg_arg(group, '--plot-delay', '-pd', type=int, cfg='visualization.plot_delay', paths=paths,
+                help='Number of frames to display the trajectory overlay; only relevant when --plot-trajectories is enabled.')
+    add_cfg_arg(group, '--show-conf', '-sc', action=argparse.BooleanOptionalAction, cfg='visualization.show_conf', paths=paths,
+                help='Include detection confidence in bounding-box labels.')
+    add_cfg_arg(group, '--show-lanes', '-sl', action=argparse.BooleanOptionalAction, cfg='visualization.show_lanes', paths=paths,
+                help='Include lane ID in bounding-box labels.')
+    add_cfg_arg(group, '--show-class-names', '-scn', action=argparse.BooleanOptionalAction,
+                cfg='visualization.show_class_names', paths=paths,
+                help='Include vehicle class name in bounding-box labels.')
+    add_cfg_arg(group, '--hide-labels', '-hl', action=argparse.BooleanOptionalAction, cfg='visualization.hide_labels', paths=paths,
+                help='Suppress all label text overlays.')
+    add_cfg_arg(group, '--hide-tracks', '-ht', action=argparse.BooleanOptionalAction, cfg='visualization.hide_tracks', paths=paths,
+                help='Suppress track tail lines.')
+    add_cfg_arg(group, '--hide-speed', '-hs', action=argparse.BooleanOptionalAction, cfg='visualization.hide_speed', paths=paths,
+                help='Suppress speed values in labels.')
+    add_cfg_arg(group, '--speed-unit', '-su', type=str, choices=['km/h', 'mi/h'], cfg='visualization.speed_unit', paths=paths,
+                help='Speed display unit: km/h or mi/h.')
+    add_cfg_arg(group, '--speed-deadzone', '-sdz', type=float, cfg='visualization.speed_deadzone', paths=paths,
+                help='Floor displayed speeds at or below this value (in the chosen speed unit) to 0, hiding stationary-vehicle jitter; 0 disables.')
+    add_cfg_arg(group, '--class-filter', '-cf', type=int, nargs='+', cfg='visualization.class_filter', paths=paths,
+                help='Vehicle class IDs to exclude from visualization (e.g., -cf 1 2).')
+    add_cfg_arg(group, '--tail-length', '-tl', type=int, cfg='visualization.tail_length', paths=paths,
+                help='Number of past positions drawn as a fading track trail [frames]; [1, inf).')
+    add_cfg_arg(group, '--line-width', '-lw', type=int, cfg='visualization.line_width', paths=paths,
+                help='Bounding-box and track stroke width [px]; [1, inf).')
+    add_cfg_arg(group, '--heading-smoothing', '-hsm', type=int, cfg='visualization.heading_smoothing', paths=paths,
+                help='(modes 3, 4) Gaussian smoothing window [frames] for the per-frame heading; larger = steadier, slower to follow turns.')
+    add_cfg_arg(group, '--heading-min-speed', '-hms', type=float, cfg='visualization.heading_min_speed', paths=paths,
+                help='(modes 3, 4) Minimum smoothed pixel speed [px/frame] for a reliable heading; below this the heading is held from the last reliable frame.')
+    add_cfg_arg(group, '--edge-clip-margin', '-ecm', type=float, cfg='visualization.edge_clip_margin', paths=paths,
+                help='(modes 3, 4) Distance [px] within which a detection box is treated as touching a frame edge, triggering clipping of the oriented box to the visible part (absorbs HBB inaccuracy).')
+    add_cfg_arg(group, '--edge-clip-smoothing', '-ecs', type=float, cfg='visualization.edge_clip_smoothing', paths=paths,
+                help='(modes 3, 4) Gaussian window [frames] for smoothing the clip rectangle of edge-touching boxes; larger = steadier shape as the vehicle exits, 0 disables.')
     if include_frame_range:
-        group.add_argument('--cut-frame-left', '-cfl', type=int, default=None,
-                           help='Skip the first N frames. Defaults to cfg -> processing -> cut_frame_left.')
-        group.add_argument('--cut-frame-right', '-cfr', type=int, default=None,
-                           help='Stop processing after this frame. Defaults to cfg -> processing -> cut_frame_right.')
+        add_cfg_arg(group, '--cut-frame-left', '-cfl', type=int, cfg='processing.cut_frame_left', paths=paths,
+                    help='Skip the first N frames.')
+        add_cfg_arg(group, '--cut-frame-right', '-cfr', type=int, cfg='processing.cut_frame_right', paths=paths,
+                    help='Stop processing after this frame.')
+    return paths
 
 
 def parse_cli_args() -> argparse.Namespace:
@@ -1050,14 +1032,17 @@ def parse_cli_args() -> argparse.Namespace:
     parser.add_argument('source', type=Path, help='Path to the input video file.')
 
     optional = parser.add_argument_group('Optional arguments')
-    add_common_args(optional)
-    optional.add_argument('--model', '-m', nargs='+', default=None, metavar='MODEL', help="Detection model used to resolve vehicle class names: a local path OR an 'hf://<org>/<repo>/<path/to/file>.pt' reference. Defaults to cfg -> extraction -> model.")
-    optional.add_argument('--class-names', '-cn', nargs='+', default=None, metavar='ID=NAME|FILE', help="Class-id -> name mapping: a .yaml/.json file or inline ID=NAME pairs (e.g. -cn 0=car 1=bus). Defaults to cfg -> extraction -> class_rename, then model names.")
+    cfg_paths = add_common_args(optional)
+    add_cfg_arg(optional, '--model', '-m', nargs='+', metavar='MODEL', cfg='extraction.model', paths=cfg_paths, no_sync=True,
+                help="Detection model used to resolve vehicle class names: a local path OR an 'hf://<org>/<repo>/<path/to/file>.pt' reference.")
+    add_cfg_arg(optional, '--class-names', '-cn', nargs='+', metavar='ID=NAME|FILE', cfg='extraction.class_rename', paths=cfg_paths, no_sync=True,
+                help="Class-id -> name mapping: a .yaml/.json file or inline ID=NAME pairs (e.g. -cn 0=car 1=bus).",
+                default_note='then model names')
 
     viz = parser.add_argument_group('Visualization arguments')
-    add_visualization_args(viz)
+    cfg_paths |= add_visualization_args(viz)
 
-    return parser.parse_args()
+    return finalize_cli_args(parser, cfg_paths)
 
 def main() -> None:
     """

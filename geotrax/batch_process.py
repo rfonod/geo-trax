@@ -49,6 +49,10 @@ Batch Processing Options:
 Shared Options:
     --cfg, -c <path>    : Path to a custom pipeline config file. Defaults to the bundled config;
                           run 'geotrax config show' to view it or 'geotrax config copy' to customize.
+    --set, -st <KEY=VALUE> [...] : Override any pipeline config value for this run, e.g.
+                          --set conf=0.35 iou=0.6. KEY is a dotted path or any unambiguous tail
+                          of one; VALUE uses YAML rules. Prefer the dedicated flag where one
+                          exists; passing both for the same key is an error.
     --output-folder, -of <str> : Root folder for pipeline outputs (bare name or absolute path).
                           A bare name creates a sub-folder next to each input video; an absolute
                           path is shared across all inputs in the batch. Also sets the base for
@@ -85,7 +89,8 @@ Processing Options:
     --stab-device, -sdev <str> : Torch device for the learning-based detectors/matchers (auto, cpu, cuda,
                           mps); ignored by the classical detectors. Defaults to cfg -> stabilo -> device.
     For full detection and tracking control (model, IoU, image size, tracker settings, etc.),
-    edit cfg -> ultralytics and cfg -> tracker in the pipeline config (run 'geotrax config copy').
+    use --set (e.g. --set iou=0.6) or edit cfg -> ultralytics and cfg -> tracker in the
+    pipeline config (run 'geotrax config copy').
 
 Georeferencing Options:
     --ortho-folder, -orf <path>    : Path to the folder with orthophotos (.png, .tif, .txt).
@@ -226,8 +231,8 @@ from tqdm import tqdm
 from geotrax.extract import add_processing_args, detect_track_stabilize
 from geotrax.georeference import add_georeferencing_args, georeference
 from geotrax.plot import add_plotting_args, default_plot_args, generate_plots
-from geotrax.utils.cli_utils import add_common_args
-from geotrax.utils.config_utils import backfill_args_from_config, load_config
+from geotrax.utils.cli_utils import add_cfg_arg, add_common_args, finalize_cli_args
+from geotrax.utils.config_utils import load_config, sync_args_with_config
 from geotrax.utils.constants import VIDEO_FORMATS
 from geotrax.utils.file_utils import DEFAULT_OUTPUT, check_if_results_exist, determine_suffix_and_fourcc
 from geotrax.utils.logging_utils import BColors, setup_logger
@@ -248,15 +253,11 @@ def process_input(args: argparse.Namespace, logger: logging.Logger) -> None:
         logger.critical(f"File or directory '{input_path}' not found.")
         return
 
-    full_cfg = load_config(args.cfg, logger)
-    batch_cfg = full_cfg['batch']
-    out_cfg_raw = full_cfg.get('output', DEFAULT_OUTPUT)
-    backfill_args_from_config(args, {
-        'folders_exclude': batch_cfg['folders_exclude'],
-        'exclude_patterns': batch_cfg['exclude_patterns'],
-        'output_folder': out_cfg_raw.get('folder', DEFAULT_OUTPUT['folder']),
-    })
-    out_cfg = {**out_cfg_raw, 'folder': args.output_folder}
+    # Each stage re-runs this reconciliation on its own config load; doing it here too gives the
+    # orchestrator itself (directory scan, output paths) the same effective values.
+    full_cfg = load_config(args.cfg, logger, args)
+    sync_args_with_config(args, full_cfg, logger)
+    out_cfg = full_cfg.get('output', DEFAULT_OUTPUT)
 
     try:
         if input_path.is_file() and input_path.suffix.lower() in VIDEO_FORMATS:
@@ -292,6 +293,7 @@ def run_plotting(path: Path, args: argparse.Namespace, logger: logging.Logger) -
             save=args.plot_save,
             show=args.plot_show,
             cfg=args.cfg,
+            set=args.set,  # --set overrides must reach the plotting stage too
             output_folder=args.output_folder,
             log_path=args.log_path,
             verbose=args.verbose,
@@ -415,27 +417,31 @@ def parse_cli_args() -> argparse.Namespace:
     batch.add_argument('--geo-only', '-go', action='store_true', help='Only run georeferencing; skip detection, tracking, and stabilization')
     batch.add_argument('--plot-only', '-po', action='store_true', help='Only generate plots; skip processing, georeferencing, and visualization')
     batch.add_argument('--no-geo', '-ng', action='store_true', help='Do not georeference the tracking data')
-    batch.add_argument("--folders-exclude", "-fe", type=str, nargs='+', default=None, help="Folders to exclude from the batch processing. Defaults to cfg -> batch -> folders_exclude.")
-    batch.add_argument("--exclude-patterns", "-ep", type=str, nargs='+', default=None, help="File name patterns to exclude (e.g., --exclude-patterns car_test drone_2023). Defaults to cfg -> batch -> exclude_patterns.")
+    cfg_paths = {}
+    add_cfg_arg(batch, "--folders-exclude", "-fe", type=str, nargs='+', cfg='batch.folders_exclude', paths=cfg_paths,
+                help="Folders to exclude from the batch processing.")
+    add_cfg_arg(batch, "--exclude-patterns", "-ep", type=str, nargs='+', cfg='batch.exclude_patterns', paths=cfg_paths,
+                help="File name patterns to exclude (e.g., --exclude-patterns car_test drone_2023).")
 
     shared = parser.add_argument_group('Shared options')
-    add_common_args(shared)
+    cfg_paths |= add_common_args(shared)
 
     processing = parser.add_argument_group('Processing options',
         'For full detection and tracking control (model, IoU, image size, tracker settings, etc.), '
-        "edit cfg -> ultralytics and cfg -> tracker in the pipeline config (run 'geotrax config copy').")
-    add_processing_args(processing)
+        "use --set (e.g. --set iou=0.6) or edit cfg -> ultralytics and cfg -> tracker in the "
+        "pipeline config (run 'geotrax config copy').")
+    cfg_paths |= add_processing_args(processing)
 
     georef = parser.add_argument_group('Georeferencing options')
-    add_georeferencing_args(georef)
+    cfg_paths |= add_georeferencing_args(georef)
 
     viz = parser.add_argument_group('Visualization options')
-    add_visualization_args(viz, include_frame_range=False)  # cut-frame args come from the processing group above
+    cfg_paths |= add_visualization_args(viz, include_frame_range=False)  # cut-frame args come from the processing group above
 
     plotting = parser.add_argument_group('Plotting options')
-    add_plotting_args(plotting, dest_prefix='plot_')  # plot_* dests so they don't clash with the visualization args
+    cfg_paths |= add_plotting_args(plotting, dest_prefix='plot_')  # plot_* dests so they don't clash with the visualization args
 
-    return parser.parse_args()
+    return finalize_cli_args(parser, cfg_paths)
 
 
 def main() -> None:

@@ -25,6 +25,7 @@ DEFAULT_OUTPUT = {
     'stab_transform_postfix': '_vid_transf',
     'geo_transform_postfix': '_geo_transf',
     'visualization_postfix': '',
+    'metadata_postfix': '',
 }
 
 
@@ -50,7 +51,7 @@ def build_result_path(
     """Return the expected output path for *result_type* given *source*.
 
     result_type choices: 'video', 'processed', 'video_transformations',
-    'geo_transformations', 'georeferenced', 'visualized'.
+    'geo_transformations', 'georeferenced', 'visualized', 'metadata'.
     Returns ``None`` for unknown types.
     """
     if result_type == 'video':
@@ -68,6 +69,8 @@ def build_result_path(
         return out_dir / f"{stem}{cfg.get('georeferenced_postfix', DEFAULT_OUTPUT['georeferenced_postfix'])}.csv"
     if result_type == 'visualized':
         return out_dir / f"{stem}{cfg.get('visualization_postfix', DEFAULT_OUTPUT['visualization_postfix'])}_mode_{viz_mode}.{ext}"
+    if result_type == 'metadata':
+        return out_dir / f"{stem}{cfg.get('metadata_postfix', DEFAULT_OUTPUT['metadata_postfix'])}.yaml"
     return None
 
 

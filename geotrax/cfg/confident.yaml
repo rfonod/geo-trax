@@ -61,6 +61,8 @@ input:
 # overwrite each other). Each *_postfix is inserted between the video stem (the filename
 # without its extension, e.g. 'video_file' for 'video_file.mp4') and the file extension.
 # The plots/ sub-folder is always created inside the configured output folder.
+# Every artifact, the run-metadata YAML included, is written under this folder; nothing is
+# written next to the input video, so the source dataset can stay read-only.
 output:
   folder: results                      # Output root; bare name or absolute path — CLI: --output-folder / -of
   tracks_postfix: ''                   # Pixel-coord tracking results → '<stem><postfix>.txt'
@@ -68,6 +70,7 @@ output:
   stab_transform_postfix: _vid_transf  # Stabilization homographies  → '<stem><postfix>.txt'
   geo_transform_postfix: _geo_transf   # Georeferencing homography   → '<stem><postfix>.txt'
   visualization_postfix: ''            # Annotated video             → '<stem><postfix>_mode_<X>.<ext>'
+  metadata_postfix: ''                 # Run metadata (YAML)         → '<stem><postfix>.yaml'
 
 # --- Frame range; shared by extraction and visualization (CLI override) ---
 # These control how many frames to process. Override with --cut-frame-left / --cut-frame-right.

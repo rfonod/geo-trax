@@ -134,8 +134,10 @@ Run `geotrax -h` or `geotrax batch -h` for all options. The scale-up commands ab
 - Comprehensive documentation in a dedicated `docs/` folder. A [`tools/README.md`](tools/README.md) index already covers the auxiliary scripts.
 - Modularized, OOP-based pipeline with custom reference frame support and georeferencing leveraging Stabilo's image-matching backend.
 - Per-class confidence thresholds.
-- Batch inference and multi-thread processing.
-- Real-world map visualization (e.g., MovingPandas, contextily) and interactive web app.
+- Simulation and scenario export: `geotrax export --format sumo` (and/or OpenDRIVE, CommonRoad) to turn an extracted dataset into a drop-in scenario for traffic simulators and digital twins, reusing the lane and road-section geometry already carried by the orthophoto segmentations.
+- Live/online mode: ingest RTMP-style drone feeds for real-time georeferenced output, for live monitoring and incident detection rather than offline batches.
+- Batch inference and multi-thread processing, plus distributed fan-out (Ray, Dask, or Slurm) so `geotrax batch` scales across a cluster for multi-drone, multi-intersection campaigns.
+- Real-world map visualization (e.g., MovingPandas, contextily) and an interactive web viewer with map-based playback and filtering by class, lane, speed, and time, so datasets can be explored without writing plotting code.
 
 </details>
 
@@ -189,6 +191,36 @@ geotrax extract video.mp4 -c default_copy.yaml
 ```
 
 To switch the tracking algorithm, set `tracker.active` in the config (see [Tracking](#tracking)).
+
+</details>
+
+<details>
+<summary><b>✏️ One-off overrides with <code>--set</code></b></summary>
+
+Change any config value for a single run, without copying a config file. Available on every command that takes `-c`:
+
+```bash
+geotrax extract video.mp4 --set conf=0.35 iou=0.6          # several keys at once
+geotrax extract video.mp4 --set tracker.botsort.track_buffer=45
+geotrax georeference video.mp4 -orf ortho/ --set matching.downsample_ratio=0.25
+geotrax batch PROCESSED/ --set stabilo.max_features=4000 --set visualization.tail_length=90
+```
+
+- **KEY** is a dotted path (`ultralytics.conf`) or any unambiguous tail of one (`conf`, `matching.gpu`). An ambiguous or misspelled key stops the run and lists the candidates rather than being silently ignored. The full dotted path is the stable form: a short name that is unique today could become ambiguous once a future release adds a config key.
+- **VALUE** is read with YAML rules, exactly as in the config file, so `true`, `null`, `0.35`, and `[0, 1, 2]` all mean what they look like. A value of the wrong kind (text where a number belongs, a scalar where a list belongs) is rejected; numbers stay interchangeable.
+- **Precedence** is CLI > config file. Every override is echoed to the console, so it is never silent.
+
+Where a dedicated flag exists, prefer it: flags validate their input (`--stab-detector xfeatt` fails immediately and lists the valid detectors, while `--set` can only check the type) and they show up in `--help`. Passing both for the same key is an error, not a precedence puzzle:
+
+```console
+$ geotrax extract video.mp4 --set conf=0.1 --conf 0.5
+CRITICAL - Conflicting overrides for 'ultralytics.conf':
+  --set conf=0.1
+  --conf 0.5
+Pass only one.
+```
+
+`--set` is for experimentation; to make a change durable, copy a preset and pass it with `-c`.
 
 </details>
 
@@ -567,7 +599,7 @@ Suppose the input video is `video_file.mp4`. By default, outputs are written to 
   - `frame_id`: Frame number of the stabilized frame (starts from `cut_frame_left + 1` since the reference frame itself has no transform).
   - `hij`: Elements of the 3x3 homography matrix that maps each frame (`frame_id`) to the reference frame.
 
-- **video_file.yaml**: Video metadata and the configuration settings used for processing `video_file.mp4`. (This file is saved in the same directory as the input video, not in the output folder.)
+- **video_file.yaml**: Video metadata and the configuration actually used to process `video_file.mp4` — the config file's values with every CLI flag and `--set` override already applied, so the file is a faithful record of the run rather than of the config it started from.
 
 - **video_file_mode_X.mp4** (`<stem><visualization_postfix>_mode_<X>.mp4`): Annotated video in five rendering modes (X = 0 / 1 / 2 / 3 / 4):
   - **Mode 0**: overlaid on the original (unstabilized) video
@@ -606,7 +638,7 @@ Suppose the input video is `video_file.mp4`. By default, outputs are written to 
   h11, h12, h13, h21, h22, h23, h31, h32, h33
   ```
 
-**Note:** *All output files (except `video_file.yaml`) are saved in the configured output folder (default: `results/` sub-folder next to the input video). Trajectory and distribution plots are always written to a `plots/` sub-folder inside the output folder.*
+**Note:** *All output files are saved in the configured output folder (default: `results/` sub-folder next to the input video); nothing is written next to the input video, so the source dataset can stay read-only. Trajectory and distribution plots are always written to a `plots/` sub-folder inside the output folder.*
 
 </details>
 
@@ -648,8 +680,8 @@ The layout below mirrors the Songdo experiment and matches the pipeline's auto-d
 │       ├── 0_merged.txt                   # cut list: start/end frames, one cut per line (temporary)
 │       ├── A1.mp4  A1.csv                 # cut clip + flight log; 'A' = location ID, '1' = sequence
 │       ├── A2.mp4  A2.csv                 # next clip at the same location
-│       ├── A1.yaml                        # run metadata, saved next to the clip (not in results/)
 │       └── results/                       # pipeline outputs, written next to each clip
+│           ├── A1.yaml                    # run metadata: the configuration actually used
 │           ├── A1.txt                     # pixel-coordinate tracks
 │           ├── A1_vid_transf.txt          # stabilization homographies
 │           ├── A1_geo_transf.txt          # georeferencing homography
