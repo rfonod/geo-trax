@@ -9,7 +9,7 @@
 # - [project.scripts]: The 'geotrax' console command (see geotrax/cli.py for subcommands).
 # - [tool.*]: Tool configurations (setuptools, ruff, pytest).
 #
-# Installation:
+# Installation (requires Python >= 3.11):
 #   pip install geo-trax                # from PyPI; installs the 'geotrax' CLI and bundled configs
 #   pip install -e .                    # core; -e (editable) reflects code changes without reinstalling
 #   pip install -e '.[dev]'             # core + dev (pip)
@@ -38,14 +38,12 @@ authors = [
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
-requires-python = ">=3.9"
+requires-python = ">=3.11"
 keywords = ["trajectory-extraction", "trajectory-stabilization", "georeferencing", "object-detection", "object-tracking", "vehicle-tracking", "computer-vision", "deep-learning", "yolo", "drone", "aerial-imagery", "traffic-analysis"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.9",
-    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
@@ -59,7 +57,7 @@ dependencies = [
     "ultralytics[extra]>=8.4.80,<9.0",
     "huggingface_hub>=0.30",
     "lapx>=0.5.2",
-    "stabilo>=1.3.1",
+    "stabilo>=1.4.0",
     "geopandas>=1.0.0",
     "matplotlib>=3.3.0",
     "seaborn>=0.11.0",
@@ -102,6 +100,7 @@ geotrax = ["cfg/*.yaml", "cfg/**/*.yaml"]  # bundle the default configuration tr
 
 [tool.ruff]
 line-length = 120
+target-version = "py311"
 
 [tool.ruff.lint]
 select = ['E', 'F', 'W', 'A', "B", 'PLC', 'PLE', 'PLW', 'I']
