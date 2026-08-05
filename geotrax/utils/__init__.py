@@ -20,6 +20,7 @@ from geotrax.utils.logging_utils import (
     FileFormatter,
     setup_logger,
 )
+from geotrax.utils.version_check import check_for_updates, check_for_updates_once
 
 __all__ = [
     "LINUX", "MACOS", "WINDOWS",
@@ -29,4 +30,5 @@ __all__ = [
     "determine_location_id", "determine_suffix_and_fourcc", "get_ortho_folder",
     "get_video_dimensions",
     "ColoredFormatter", "FileFormatter", "NOTICE_LEVEL", "BColors", "setup_logger",
+    "check_for_updates", "check_for_updates_once",
 ]

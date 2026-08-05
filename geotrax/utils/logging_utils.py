@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Union
 
 from geotrax.utils.constants import MACOS, WINDOWS
+from geotrax.utils.version_check import check_for_updates_once
 
 
 class BColors:
@@ -113,5 +114,14 @@ def setup_logger(name: str, verbose: bool = False, log_path: Union[str, Path, No
         print(f"Saving logs to: {log_filepath}")  # console-only notice; not written to the log file itself
 
     logger._original_formatters = {h: h.formatter for h in logger.handlers}  # used by suppress/restore_logging_format in check_dataset.py
+
+    # Non-blocking, cached for 24 h, silent when offline; GEOTRAX_DISABLE_UPDATE_CHECK=1 opts out.
+    # Placed last so the notice reaches both the console and (when enabled) the file handler.
+    # Belt-and-braces guard: a convenience notice must never prevent a run from getting a logger
+    # (starting the daemon thread can fail under resource pressure).
+    try:
+        check_for_updates_once(logger)
+    except Exception:  # noqa: BLE001 - best-effort by design
+        pass
 
     return logger
