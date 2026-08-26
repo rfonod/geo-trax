@@ -540,7 +540,7 @@ def compute_positional_and_speed_errors(df_stanford, df_extracted, args, logger)
                     trajectory_duration,
                     trajectory_length,
                 ) = video_error_stats[video]
-                f.write(f'    {video[-2:]} & ${positional_error_mean:.3f} \pm {positional_error_std:.3f}$ & ${speed_error_mean:.3f} \pm {speed_error_std:.3f}$ & {round(trajectory_length, 2):.2f} & {round(trajectory_duration, 2):.2f}\\\\ \n')
+                f.write(rf'    {video[-2:]} & ${positional_error_mean:.3f} \pm {positional_error_std:.3f}$ & ${speed_error_mean:.3f} \pm {speed_error_std:.3f}$ & {round(trajectory_length, 2):.2f} & {round(trajectory_duration, 2):.2f}\\ ' + '\n')
 
         with open(args.data / _folder / 'plots' / 'AV_positional_and_speed_errors_per_intersection.tex', 'w') as f:
             for intersection in sorted(intersection_error_stats.keys()):
@@ -549,7 +549,7 @@ def compute_positional_and_speed_errors(df_stanford, df_extracted, args, logger)
                 )
                 trajectory_duration = intersection_meta[intersection]['duration']
                 trajectory_length = intersection_meta[intersection]['length']
-                f.write(f'    {intersection} & ${positional_error_mean:.3f} \pm {positional_error_std:.3f}$ & ${speed_error_mean:.3f} \pm {speed_error_std:.3f}$ & {round(trajectory_length, 2):.2f} & {round(trajectory_duration, 2):.2f}\\\\ \n')
+                f.write(rf'    {intersection} & ${positional_error_mean:.3f} \pm {positional_error_std:.3f}$ & ${speed_error_mean:.3f} \pm {speed_error_std:.3f}$ & {round(trajectory_length, 2):.2f} & {round(trajectory_duration, 2):.2f}\\ ' + '\n')
 
     return df_stanford_with_errors, video_error_stats, intersection_error_stats, intersection_meta
 
@@ -603,18 +603,18 @@ def compute_errors_per_video(df_stanford, df_extracted):
         positional_errors.append(closest_distance)
 
         # compute the weighted speed error
-        if speed_1 is np.nan or speed_2 is np.nan:
-            if speed_1 is np.nan:
-                weight_1, weight_2 = 0, 1
-            else:
-                weight_1, weight_2 = 1, 0
+        if np.isnan(speed_1) or np.isnan(speed_2):
+            # Fall back to whichever speed is available; zero-weighting the missing one would not
+            # help, since 0 * nan is nan. Both missing still yields nan, which is the honest answer.
+            speed_ref = speed_2 if np.isnan(speed_1) else speed_1
         else:
             point_1_distance = np.sqrt((point_1[0] - point_stanford[0]) ** 2 + (point_1[1] - point_stanford[1]) ** 2)
             point_2_distance = np.sqrt((point_2[0] - point_stanford[0]) ** 2 + (point_2[1] - point_stanford[1]) ** 2)
             weight_1 = 1 - point_1_distance / (point_1_distance + point_2_distance)
             weight_2 = 1 - point_2_distance / (point_1_distance + point_2_distance)
-        speed_error = speed_stanford - (weight_1 * speed_1 + weight_2 * speed_2)
-        # speed_error = np.abs(speed_stanford -  (weight_1 * speed_1 + weight_2 * speed_2))
+            speed_ref = weight_1 * speed_1 + weight_2 * speed_2
+        speed_error = speed_stanford - speed_ref
+        # speed_error = np.abs(speed_stanford - speed_ref)
         speed_errors.append(speed_error)
 
     return positional_errors, speed_errors

@@ -345,8 +345,13 @@ ratio thresholds for the azimuth-based dimension estimator.
 
 ```bash
 python tools/analyze_bb_ratios.py data/ --hist
-python tools/analyze_bb_ratios.py results/video.yaml --id 42
+python tools/analyze_bb_ratios.py results/video.yaml   # names the video one level up
 ```
+
+Dimensions are recomputed with the pipeline's own estimator
+(`geotrax.extract.estimate_vehicle_dimensions`), overriding only `tau_c` and `theta_bar` with
+restrictive values so stationary vehicles drop out; every other parameter comes from `-c`. For a
+step-by-step visualization of that estimator on one vehicle ID, use `viz_dimension_estimation.py`.
 
 ### `viz_dimension_estimation.py`
 
@@ -417,6 +422,3 @@ python tools/find_source_id.py 2022-10-04_A/2022-10-04_A_AM1.csv 5 \
   repo root. This dependency is one reason the directory is kept flat.
 - **Shared conventions.** Every tool has a structured docstring (Usage/Arguments/Options/Examples),
   `--quiet`/`-q`, and `--log-path`/`-lp`; most accept `-c`/`--cfg`.
-- **File permissions.** `analyze_bb_ratios.py` and `compare_av_detections_and_tune_filters.py`
-  are mode `600` (owner-only) while the rest are `644`; normalize with
-  `chmod 644 tools/*.py` if desired.

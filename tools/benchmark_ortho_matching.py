@@ -178,7 +178,7 @@ def execute_ortho_benchmark(images_dir, orthos_dir, labels_dir, args, logger):
     for location_id, results_location_id in results_all.items():
         for ortho_w_new, results in results_location_id.items():
             formatted_resolution = format_with_apostrophe(ortho_w_new)
-            to_latex.append(f"{location_id} & {formatted_resolution:<6} & {np.mean(results['Comp_times']):>6.3f} & {np.mean(results['Errors']):>6.3f} $\pm$ {np.std(results['Errors']):.3f}  & {np.mean(results['Inliers'])} & {np.min(results['Inliers'])} \\\\")
+            to_latex.append(rf"{location_id} & {formatted_resolution:<6} & {np.mean(results['Comp_times']):>6.3f} & {np.mean(results['Errors']):>6.3f} $\pm$ {np.std(results['Errors']):.3f}  & {np.mean(results['Inliers'])} & {np.min(results['Inliers'])} \\")
 
     to_latex.append("\nAggregated results for all intersections:")
     for ortho_w_new in ortho_w_resolutions:
@@ -190,7 +190,7 @@ def execute_ortho_benchmark(images_dir, orthos_dir, labels_dir, args, logger):
             comp_times.extend(results_location_id[ortho_w_new]['Comp_times'])
             inliers.extend(results_location_id[ortho_w_new]['Inliers'])
         formatted_resolution = format_with_apostrophe(ortho_w_new)
-        to_latex.append(f"{formatted_resolution:<6} & {np.mean(comp_times):>6.3f} & {np.mean(errors):>6.3f} $\pm$ {np.std(errors):.3f} & {np.mean(inliers)} & {np.min(inliers)} \\\\")
+        to_latex.append(rf"{formatted_resolution:<6} & {np.mean(comp_times):>6.3f} & {np.mean(errors):>6.3f} $\pm$ {np.std(errors):.3f} & {np.mean(inliers)} & {np.min(inliers)} \\")
     logger.notice("\n%s", '\n'.join(to_latex))
 
     results_filepath = args.data / 'results.txt'
