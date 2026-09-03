@@ -51,7 +51,7 @@ Anomaly Detection Thresholds:
 
 Examples:
 1. Basic analysis with saved results and visualization:
-   python tools/find_cut_video_issues.py ../datasets/PROJECT/PROCESSED -s -sv -f
+   python tools/find_cut_video_issues.py /path/to/PROCESSED -s -sv -f
 
 2. Analysis with custom thresholds and tracking check:
    python tools/find_cut_video_issues.py /path/to/PROCESSED --radius-diff-threshold 10 --track-check
