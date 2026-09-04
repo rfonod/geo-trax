@@ -217,7 +217,7 @@ def track_with_model(model: Any, config: Dict, logger: logging.Logger) -> Tuple[
                 if len(boxes) > 0:
                     frame_arr.append(np.full((len(boxes), 1), frame_num, dtype=np.uint32))
                     if boxes.id is not None:
-                        track_ids = boxes.id.detach().numpy(force=True).astype(np.uint16).reshape(-1, 1)
+                        track_ids = boxes.id.detach().numpy(force=True).astype(np.uint32).reshape(-1, 1)
                     else:
                         track_ids = np.full((len(boxes), 1), -1)
                     track_id.append(track_ids)
@@ -466,6 +466,10 @@ def aggregate_results(frame_arr: list, track_id: list, bbox: list, bbox_stab: li
     Aggregate the results from all frames.
     """
     try:
+        if not frame_arr:
+            logger.warning('No detections in the processed frame range; no tracks will be written.')
+            return np.empty((0, 12)), (np.concatenate(transforms, axis=0) if transforms else np.empty((0, 10)))
+
         frame_arr = np.concatenate(frame_arr, axis=0) if frame_arr else np.array([[]])
         track_id = np.concatenate(track_id, axis=0) if track_id else np.array([[]])
         bbox = np.concatenate(bbox, axis=0) if bbox else np.array([[]])

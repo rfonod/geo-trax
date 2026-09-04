@@ -60,6 +60,9 @@ Notes:
 - Timestamps are converted to local time format (HH:MM:SS.fff)
 - Results without a 'Timestamp' column (georeferenced without the drone flight log) are skipped,
   since their rows cannot be time-aligned with the other drones of the group
+- Empty (header-only) result files are skipped so they cannot disturb the vehicle ID offset
+- 'Is_Interpolated' is preserved when present; rows from runs without it are marked 0, since a run
+  with interpolation disabled has no synthetic points
 - Road sections and lane numbers left empty by georeferencing without a segmentation file are kept empty
 - Lane numbers are standardized as strings
 - Output files are organized by date and location for easy access
@@ -132,6 +135,12 @@ def aggregate_results(args: argparse.Namespace, logger: logging.Logger) -> None:
             for file_path, drone_id in files:
                 try:
                     df = pd.read_csv(file_path)
+                    if df.empty:
+                        logger.warning(
+                            f"Skipping '{file_path}': no trajectory rows (every vehicle was filtered out by "
+                            f"cfg -> georef -> filtering -> min_traj_length, or the video yielded no tracks)."
+                        )
+                        continue
                     if 'Timestamp' not in df.columns:
                         logger.warning(
                             f"Skipping '{file_path}': no 'Timestamp' column, so its rows cannot be time-aligned "
@@ -173,6 +182,8 @@ def aggregate_results(args: argparse.Namespace, logger: logging.Logger) -> None:
                         'Lane_Number',
                         'Visibility',
                     ]
+                    if 'Is_Interpolated' in df.columns:
+                        columns.append('Is_Interpolated')
                     df = df[columns]
                     dfs.append(df)
                 except Exception as e:
@@ -186,6 +197,8 @@ def aggregate_results(args: argparse.Namespace, logger: logging.Logger) -> None:
 
             if dfs:
                 result_df = pd.concat(dfs, ignore_index=True)
+                if 'Is_Interpolated' in result_df.columns:
+                    result_df['Is_Interpolated'] = result_df['Is_Interpolated'].fillna(0).astype(int)
                 result_df.sort_values(['Vehicle_ID', 'Local_Time'], inplace=True)
 
                 unique_vehicles = len(result_df['Vehicle_ID'].unique())
