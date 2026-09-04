@@ -41,8 +41,10 @@ Georeferencing Options:
                                      same level as 'PROCESSED' in 'input'.
     --geo-source, -gs <str>        : Source of georeferencing parameters (metadata-tif, text-file, center-text-file).
                                      If not provided, the system will auto-detect. Defaults to cfg -> georef -> processing -> geo_source.
-    --ref-frame, -rf <int>         : Use custom reference frame number. Should be the same as the one
-                                     used for stabilization. Defaults to cfg -> georef -> processing -> ref_frame.
+    --ref-frame, -rf <int>         : Use custom reference frame number. Must be the same as the one used for
+                                     stabilization (cfg -> processing -> cut_frame_left); when this flag is not
+                                     given, that value is adopted automatically and a mismatch is warned about.
+                                     Defaults to cfg -> georef -> processing -> ref_frame.
     --no-master, -nm               : Disable the master frame approach regardless of config.
                                      When not set, cfg -> georef -> processing -> use_master applies.
     --master-folder, -mf <path>    : Custom path to the folder containing master frame files (.png).
@@ -93,6 +95,7 @@ Notes:
 
 import argparse
 import hashlib
+import json
 import logging
 import shutil
 import sys
@@ -147,6 +150,7 @@ def georeference(args: argparse.Namespace, logger: logging.Logger) -> None:
     pbar.update()
 
     pbar.set_postfix_str('reading reference frame')
+    resolve_reference_frame(args, full_config, config, logger)
     reference_frame, frame_size, fps = get_video_data(args.source, args.ref_frame, logger)
     pbar.update()
 
@@ -275,6 +279,42 @@ def get_timestamps(source: Path, frame_num: np.ndarray, logger: logging.Logger) 
         return np.array([])
 
 
+def resolve_reference_frame(args: argparse.Namespace, full_config: dict, config: dict, logger: logging.Logger) -> None:
+    """Keep the georeferencing anchor frame in step with the stabilization anchor frame.
+
+    The ``x_c_stab``/``y_c_stab`` columns of the tracks file are expressed in the coordinate
+    system of the frame ``extract.py`` handed to ``Stabilizer.set_ref_frame()``, which is
+    ``cfg -> processing -> cut_frame_left``. Registering a *different* frame against the
+    orthophoto silently displaces every trajectory by the drone drift between the two frames,
+    so the two keys must agree (as stated in the config comment and the ``--ref-frame`` help).
+
+    Nothing used to enforce that: both default to 0, so stock runs were correct, but passing
+    ``--cut-frame-left N`` without also passing ``--ref-frame N`` produced a whole dataset that
+    was wrong by a constant offset, with no warning. Adopt ``cut_frame_left`` when ``--ref-frame``
+    was not explicitly given, and warn loudly when the user asked for two different frames.
+    """
+    stab_ref_frame = full_config.get('main', {}).get('processing', {}).get('cut_frame_left', 0)
+    if stab_ref_frame is None or args.ref_frame == stab_ref_frame:
+        return
+
+    if 'ref_frame' in getattr(args, '_cli_provided', frozenset()):
+        logger.warning(
+            f"Reference frame ({args.ref_frame}) differs from the stabilization reference frame "
+            f"cfg -> processing -> cut_frame_left ({stab_ref_frame}). The stabilized track coordinates "
+            f"are expressed relative to frame {stab_ref_frame}, so every georeferenced coordinate will be "
+            f"offset by the drone drift between the two frames. Pass '--ref-frame {stab_ref_frame}' "
+            f"(or drop '--ref-frame') unless you know exactly why they should differ."
+        )
+        return
+
+    logger.notice(
+        f"Using reference frame {stab_ref_frame} to match cfg -> processing -> cut_frame_left "
+        f"(cfg -> georef -> processing -> ref_frame is {args.ref_frame})."
+    )
+    args.ref_frame = stab_ref_frame
+    config.setdefault('processing', {})['ref_frame'] = stab_ref_frame
+
+
 def get_video_data(video_filepath: Path, ref_frame_num: int, logger: logging.Logger) -> tuple:
     """
     Get video data (reference frame, frame dimensions, and FPS) from the video file.
@@ -334,7 +374,11 @@ def get_ortho_parameters(ortho_folder: Path, location_id: str, geo_source: str, 
                 dlng, dlat =  img_tif.tag_v2[33550][0], -img_tif.tag_v2[33550][1]
                 skew_x, skew_y = 0.0, 0.0
                 if 34264 in img_tif.tag_v2:
-                    skew_x, skew_y = img_tif.tag_v2[34264][1], img_tif.tag_v2[34264][2]
+                    # ModelTransformationTag is a row-major 4x4 matrix, so the x-from-y skew is
+                    # m[1] and the y-from-x skew is m[4]. Index 2 is the K (elevation) coefficient,
+                    # which GDAL always writes as 0.0 — reading it dropped the latitude's
+                    # dependence on ortho_x entirely (see ortho2geo).
+                    skew_x, skew_y = img_tif.tag_v2[34264][1], img_tif.tag_v2[34264][4]
             else:
                 logger.error(f"Failed to read georeferencing parameters from .tif metadata for orthophoto: '{ortho_filepath}'.")
                 sys.exit(1)
@@ -435,7 +479,7 @@ def read_ortho_config_file(filepath: Path) -> np.ndarray:
             if stripped_line and not stripped_line.startswith('#'):
                 processed_lines.append(stripped_line)
 
-    ortho_params = np.genfromtxt(processed_lines, delimiter=' ')
+    ortho_params = np.genfromtxt(processed_lines, delimiter=None)
     return ortho_params
 
 
@@ -467,7 +511,7 @@ def assign_road_section_lane(ortho_x: np.ndarray, ortho_y: np.ndarray, ortho_seg
     Assign road section and lane number to the vehicle trajectory points based on orthophoto segmentation.
     """
     if ortho_segmentation.empty:
-        return None, None
+        return np.full(len(ortho_x), np.nan), np.full(len(ortho_x), np.nan)
 
     ortho_segmentation['geometry'] = ortho_segmentation.apply(create_polygon, axis=1)
 
@@ -533,19 +577,33 @@ def get_master_to_ortho_homography(master_frame: np.ndarray, ortho_folder: Path,
         homography_filepath = master_folder / (location_id + '.txt')
 
     current_master_hash = compute_hash(master_frame)
+    current_ortho_hash = compute_file_hash(ortho_folder / (location_id + '.png'))
+    current_matching_hash = compute_config_hash(config)
 
     if homography_filepath.exists() and not recompute:
         try:
             with open(homography_filepath, 'r') as file:
                 lines = file.readlines()
-                homography_master_to_ortho = np.fromstring(lines[0], sep=',').reshape(3, 3)
-                saved_master_hash = lines[3].strip().split(': ')[1]
+            homography_master_to_ortho = np.fromstring(lines[0], sep=',').reshape(3, 3)
+            saved = parse_homography_cache_fields(lines[1:])
 
-            if saved_master_hash == current_master_hash:
+            if saved.get('Hash') != current_master_hash:
+                logger.warning("Master frame has changed. Recomputing 'master -> orthophoto' homography.")
+            elif 'Ortho_Hash' not in saved or 'Matching_Hash' not in saved:
+                logger.warning(
+                    f"Cached 'master -> orthophoto' homography in '{homography_filepath}' predates orthophoto "
+                    f"and matching-configuration provenance, so only the master frame could be validated. "
+                    f"Re-run with '--recompute' if the orthophoto or the 'georef -> matching' settings have changed."
+                )
                 logger.info(f"Loaded 'master -> orthophoto' homography from: '{homography_filepath}'.")
                 return homography_master_to_ortho
+            elif saved['Ortho_Hash'] != current_ortho_hash:
+                logger.warning("Orthophoto has changed. Recomputing 'master -> orthophoto' homography.")
+            elif saved['Matching_Hash'] != current_matching_hash:
+                logger.warning("Matching configuration has changed. Recomputing 'master -> orthophoto' homography.")
             else:
-                logger.warning("Master frame has changed. Recomputing 'master -> orthophoto' homography.")
+                logger.info(f"Loaded 'master -> orthophoto' homography from: '{homography_filepath}'.")
+                return homography_master_to_ortho
         except Exception as e:
             logger.error(f"Failed to load 'master -> orthophoto' homography from '{homography_filepath}' due to: {e}")
             sys.exit(1)
@@ -556,6 +614,9 @@ def get_master_to_ortho_homography(master_frame: np.ndarray, ortho_folder: Path,
             np.savetxt(file, homography_master_to_ortho.reshape(1, -1), fmt='%.20g', delimiter=',')
             file.write('\n# Hash of the master frame\n')
             file.write(f'Hash: {current_master_hash}\n')
+            file.write('\n# Hashes of the other inputs this homography depends on\n')
+            file.write(f'Ortho_Hash: {current_ortho_hash}\n')
+            file.write(f'Matching_Hash: {current_matching_hash}\n')
             file.write('\n# Image matching stats\n')
             file.write(f'Stats: {stats_txt}\n')
     except Exception as e:
@@ -571,6 +632,45 @@ def compute_hash(image: np.ndarray) -> str:
     Compute a hash for the given image.
     """
     return hashlib.md5(image.tobytes()).hexdigest()
+
+
+def compute_file_hash(filepath: Path) -> str:
+    """Compute a hash of a file's bytes, or ``'unavailable'`` if it cannot be read.
+
+    Hashes the encoded file rather than the decoded image so that validating a cached homography
+    against a multi-thousand-pixel orthophoto does not pay for a full decode.
+    """
+    try:
+        digest = hashlib.md5()
+        with open(filepath, 'rb') as file:
+            for chunk in iter(lambda: file.read(1 << 20), b''):
+                digest.update(chunk)
+        return digest.hexdigest()
+    except OSError:
+        return 'unavailable'
+
+
+def compute_config_hash(config: dict) -> str:
+    """
+    Compute a hash of a configuration block, insensitive to key ordering.
+    """
+    return hashlib.md5(json.dumps(config, sort_keys=True, default=str).encode()).hexdigest()
+
+
+def parse_homography_cache_fields(lines: list) -> dict:
+    """Parse the ``Key: value`` fields of a master -> orthophoto homography cache file.
+
+    Reads fields by name rather than by line index so that adding a field does not shift the
+    others, and so that a file written by an older version simply lacks the newer keys.
+    """
+    fields = {}
+    for line in lines:
+        stripped = line.strip()
+        if stripped and not stripped.startswith('#'):
+            key, separator, value = stripped.partition(': ')
+            if separator:
+                fields[key] = value
+    return fields
 
 
 def compute_homography(img_src: np.ndarray, img_dst: np.ndarray, src_dst: tuple, logger: logging.Logger,

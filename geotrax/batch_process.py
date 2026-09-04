@@ -99,8 +99,9 @@ Georeferencing Options:
     --geo-source, -gs <choice>     : Georeferencing parameter source: metadata-tif, text-file, or
                           center-text-file. Auto-detected if omitted.
                           Defaults to cfg -> georef -> processing -> geo_source.
-    --ref-frame, -rf <int>         : Reference frame number; must match the value used for
-                          stabilization. Defaults to cfg -> georef -> processing -> ref_frame.
+    --ref-frame, -rf <int>         : Reference frame number; must match the value used for stabilization
+                          (--cut-frame-left), which is adopted automatically when this flag is
+                          omitted. Defaults to cfg -> georef -> processing -> ref_frame.
     --no-master, -nm               : Disable the master-frame approach regardless of config.
                           When not set, cfg -> georef -> processing -> use_master applies.
     --master-folder, -mf <path>    : Path to the folder containing master frame files (.png).
@@ -258,6 +259,16 @@ def process_input(args: argparse.Namespace, logger: logging.Logger) -> None:
     full_cfg = load_config(args.cfg, logger, args)
     sync_args_with_config(args, full_cfg, logger)
     out_cfg = full_cfg.get('output', DEFAULT_OUTPUT)
+
+    # Every artifact — including the annotated '<stem>_mode_<N>.mp4' videos, which match
+    # VIDEO_FORMATS — is written to cfg -> output -> folder. That folder is configurable, but
+    # batch.folders_exclude defaults to the literal ['results'], so with a custom output folder
+    # the recursive scan re-ingested its own annotated videos as inputs on the next run. Derive
+    # the exclusion from the configured folder instead of relying on the two happening to match.
+    output_folder_name = Path(out_cfg.get('folder', DEFAULT_OUTPUT['folder'])).name
+    if output_folder_name and output_folder_name not in args.folders_exclude:
+        args.folders_exclude = list(args.folders_exclude) + [output_folder_name]
+        logger.info(f"Excluding the configured output folder '{output_folder_name}' from the video scan.")
 
     try:
         if input_path.is_file() and input_path.suffix.lower() in VIDEO_FORMATS:

@@ -143,6 +143,22 @@ _INFERENCE_KEYS = {
 }
 
 
+def to_homography(matrix: np.ndarray) -> np.ndarray:
+    """Return *matrix* as a 3x3 homography.
+
+    Stabilo returns a 2x3 matrix when ``stabilo -> transformation_type`` is 'affine' and a 3x3 one
+    for 'projective'. The stabilization transform file and every consumer of it (``visualize`` and
+    ``georeference``) are defined in terms of 3x3 matrices, so promote the affine form by appending
+    its implicit ``[0, 0, 1]`` row. Without this, an affine run wrote 7-column rows that the 3x3
+    reshape in :func:`save_results` either rejected, losing the file entirely, or silently
+    reinterpreted as unrelated matrices.
+    """
+    matrix = np.asarray(matrix, dtype=np.float64)
+    if matrix.shape == (2, 3):
+        return np.vstack((matrix, np.array([0.0, 0.0, 1.0])))
+    return matrix
+
+
 def detect_track_stabilize(args: argparse.Namespace, logger: logging.Logger) -> None:
     """
     Process video based on provided arguments.
@@ -188,7 +204,7 @@ def track_with_model(model: Any, config: Dict, logger: logging.Logger) -> Tuple[
     try:
         while reader.isOpened():
             success, frame = reader.read()
-            if frame_num < config['main']['args'].cut_frame_left:
+            if success and frame_num < config['main']['args'].cut_frame_left:
                 frame_num += 1
                 pbar.update()
                 continue
@@ -201,7 +217,7 @@ def track_with_model(model: Any, config: Dict, logger: logging.Logger) -> Tuple[
                 if len(boxes) > 0:
                     frame_arr.append(np.full((len(boxes), 1), frame_num, dtype=np.uint32))
                     if boxes.id is not None:
-                        track_ids = boxes.id.detach().numpy(force=True).astype(np.uint16).reshape(-1, 1)
+                        track_ids = boxes.id.detach().numpy(force=True).astype(np.uint32).reshape(-1, 1)
                     else:
                         track_ids = np.full((len(boxes), 1), -1)
                     track_id.append(track_ids)
@@ -225,7 +241,7 @@ def track_with_model(model: Any, config: Dict, logger: logging.Logger) -> Tuple[
                             bbox_stab.append(stabilizer.transform_cur_boxes())
                         transf_matrix = stabilizer.get_cur_trans_matrix()
                         if transf_matrix is not None:
-                            transf_matrix = transf_matrix.flatten().reshape(1, -1)
+                            transf_matrix = to_homography(transf_matrix).flatten().reshape(1, -1)
                             transforms.append(np.hstack((np.array([[frame_num]]), transf_matrix)))
                     stab_time.append(1000 * (time.time() - start_time))
             else:
@@ -450,6 +466,10 @@ def aggregate_results(frame_arr: list, track_id: list, bbox: list, bbox_stab: li
     Aggregate the results from all frames.
     """
     try:
+        if not frame_arr:
+            logger.warning('No detections in the processed frame range; no tracks will be written.')
+            return np.empty((0, 12)), (np.concatenate(transforms, axis=0) if transforms else np.empty((0, 10)))
+
         frame_arr = np.concatenate(frame_arr, axis=0) if frame_arr else np.array([[]])
         track_id = np.concatenate(track_id, axis=0) if track_id else np.array([[]])
         bbox = np.concatenate(bbox, axis=0) if bbox else np.array([[]])

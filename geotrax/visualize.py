@@ -574,6 +574,13 @@ def read_georeferenced_results(tracks_csv_filepath: Path, tracks: pd.DataFrame, 
             f"Speed/lane data cannot be displayed. Re-run 'geotrax georeference' to regenerate the CSV."
         )
         return None
+    for column in ('Vehicle_Speed', 'Lane_Number'):
+        if column not in georeferenced_data.columns:
+            logger.warning(
+                f"'{column}' column missing from '{tracks_csv_filepath.name}'. It will not be displayed. "
+                f"Re-run 'geotrax georeference' (with '-osf'/a segmentation file for lane data) to regenerate the CSV."
+            )
+            georeferenced_data[column] = np.nan
     georeferenced_data = georeferenced_data[['Frame_ID', 'Vehicle_ID', 'Vehicle_Speed', 'Lane_Number']]
     return georeferenced_data
 
