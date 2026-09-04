@@ -58,6 +58,9 @@ Notes:
 - The script expects CSV files to be located in a specific directory structure: date/drone_id/flight_session/results/
 - Vehicle IDs are automatically offset to ensure uniqueness across different drone data
 - Timestamps are converted to local time format (HH:MM:SS.fff)
+- Results without a 'Timestamp' column (georeferenced without the drone flight log) are skipped,
+  since their rows cannot be time-aligned with the other drones of the group
+- Road sections and lane numbers left empty by georeferencing without a segmentation file are kept empty
 - Lane numbers are standardized as strings
 - Output files are organized by date and location for easy access
 """
@@ -129,11 +132,26 @@ def aggregate_results(args: argparse.Namespace, logger: logging.Logger) -> None:
             for file_path, drone_id in files:
                 try:
                     df = pd.read_csv(file_path)
+                    if 'Timestamp' not in df.columns:
+                        logger.warning(
+                            f"Skipping '{file_path}': no 'Timestamp' column, so its rows cannot be time-aligned "
+                            f"with the other drones of this group. Georeferencing only writes timestamps when the "
+                            f"drone flight log ('{file_path.stem}.csv' next to the video) is present; restore it and "
+                            f"re-run 'geotrax georeference'."
+                        )
+                        continue
                     df['Local_Time'] = pd.to_datetime(df['Timestamp']).dt.strftime('%H:%M:%S.%f').str[:-3]
 
                     df['Drone_ID'] = int(drone_id[1:])
                     df['Vehicle_ID'] = df['Vehicle_ID'] + vehicle_id_offset
                     vehicle_id_offset = df['Vehicle_ID'].max()
+                    for optional_column in ('Road_Section', 'Lane_Number'):
+                        if optional_column not in df.columns:
+                            logger.warning(
+                                f"'{optional_column}' column missing from '{file_path}' (georeferenced without a "
+                                f"segmentation file); it will be empty in the aggregated dataset."
+                            )
+                            df[optional_column] = pd.NA
                     df['Lane_Number'] = df['Lane_Number'].apply(lambda x: str(int(x)) if pd.notna(x) else '')
 
                     columns = [
@@ -159,6 +177,12 @@ def aggregate_results(args: argparse.Namespace, logger: logging.Logger) -> None:
                     dfs.append(df)
                 except Exception as e:
                     logger.warning(f"Error processing file {file_path}: {str(e)}")
+
+            if not dfs:
+                logger.warning(
+                    f"Group {date}_{location_id}_{flight_session}: no usable georeferenced results among "
+                    f"{len(files)} file(s); nothing was aggregated for this group."
+                )
 
             if dfs:
                 result_df = pd.concat(dfs, ignore_index=True)

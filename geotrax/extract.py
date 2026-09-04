@@ -143,6 +143,22 @@ _INFERENCE_KEYS = {
 }
 
 
+def to_homography(matrix: np.ndarray) -> np.ndarray:
+    """Return *matrix* as a 3x3 homography.
+
+    Stabilo returns a 2x3 matrix when ``stabilo -> transformation_type`` is 'affine' and a 3x3 one
+    for 'projective'. The stabilization transform file and every consumer of it (``visualize`` and
+    ``georeference``) are defined in terms of 3x3 matrices, so promote the affine form by appending
+    its implicit ``[0, 0, 1]`` row. Without this, an affine run wrote 7-column rows that the 3x3
+    reshape in :func:`save_results` either rejected, losing the file entirely, or silently
+    reinterpreted as unrelated matrices.
+    """
+    matrix = np.asarray(matrix, dtype=np.float64)
+    if matrix.shape == (2, 3):
+        return np.vstack((matrix, np.array([0.0, 0.0, 1.0])))
+    return matrix
+
+
 def detect_track_stabilize(args: argparse.Namespace, logger: logging.Logger) -> None:
     """
     Process video based on provided arguments.
@@ -188,7 +204,7 @@ def track_with_model(model: Any, config: Dict, logger: logging.Logger) -> Tuple[
     try:
         while reader.isOpened():
             success, frame = reader.read()
-            if frame_num < config['main']['args'].cut_frame_left:
+            if success and frame_num < config['main']['args'].cut_frame_left:
                 frame_num += 1
                 pbar.update()
                 continue
@@ -225,7 +241,7 @@ def track_with_model(model: Any, config: Dict, logger: logging.Logger) -> Tuple[
                             bbox_stab.append(stabilizer.transform_cur_boxes())
                         transf_matrix = stabilizer.get_cur_trans_matrix()
                         if transf_matrix is not None:
-                            transf_matrix = transf_matrix.flatten().reshape(1, -1)
+                            transf_matrix = to_homography(transf_matrix).flatten().reshape(1, -1)
                             transforms.append(np.hstack((np.array([[frame_num]]), transf_matrix)))
                     stab_time.append(1000 * (time.time() - start_time))
             else:

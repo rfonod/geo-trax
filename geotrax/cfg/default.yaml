@@ -72,7 +72,7 @@ processing:
 # --- Batch processing (CLI override) ---
 # Defaults for the batch orchestrator's directory scan ('geotrax batch' on a folder).
 batch:
-  folders_exclude: ['results']  # Sub-folder names to skip when scanning for videos; 'results' holds pipeline output (e.g. annotated mode videos) that must not be re-ingested as input — CLI: --folders-exclude
+  folders_exclude: ['results']  # Sub-folder names to skip when scanning for videos; pipeline output (e.g. annotated mode videos) must not be re-ingested as input, so the configured output -> folder is always excluded on top of this list — CLI: --folders-exclude
   exclude_patterns: null        # Skip videos whose filename contains any of these substrings (null = none) — CLI: --exclude-patterns
 
 
@@ -215,7 +215,7 @@ georef:
 
   # Processing settings (CLI override)
   processing:
-    ref_frame: 0          # Video frame index used as the registration anchor; must match the stabilization reference frame; [0, inf) — CLI: --ref-frame
+    ref_frame: 0          # Video frame index used as the registration anchor; must match the stabilization reference frame (processing -> cut_frame_left), and is taken from it automatically unless --ref-frame is given explicitly; [0, inf) — CLI: --ref-frame
     use_master: true      # Use a pre-computed master→orthophoto homography for faster, more robust matching — CLI: --no-master (disables)
     recompute: false      # Force recomputation of the master→orthophoto homography even if a cached version exists — CLI: --recompute
     geo_source: null      # Orthophoto parameter source; null = auto-detect from available files; choices: [null, metadata-tif, text-file, center-text-file] — CLI: --geo-source
