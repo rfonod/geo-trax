@@ -124,7 +124,7 @@ from ultralytics.utils.files import increment_path
 
 from geotrax import __version__
 from geotrax.utils.cli_utils import add_cfg_arg, add_common_args, finalize_cli_args
-from geotrax.utils.config_utils import load_config_all
+from geotrax.utils.config_utils import load_config_all, merge_bundled_defaults
 from geotrax.utils.constants import DEFAULT_TRACK_BUFFER
 from geotrax.utils.file_utils import (
     build_result_path,
@@ -187,7 +187,7 @@ def track_with_model(model: Any, config: Dict, logger: logging.Logger) -> Tuple[
     reader, pbar = initialize_streams(config['main'], config['ultralytics']['imgsz'], logger)
     stabilizer = Stabilizer(**config['stabilo'])
 
-    sahi_cfg = config['main']['extraction'].get('sahi') or {}
+    sahi_cfg = merge_bundled_defaults(config['main']['extraction'].get('sahi'), 'extraction.sahi')
     if sahi_cfg.get('enable', False):
         tracker = create_manual_tracker(config['main'])
 

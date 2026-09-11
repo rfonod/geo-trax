@@ -78,7 +78,11 @@ def setup_logger(name: str, verbose: bool = False, log_path: Union[str, Path, No
     """Set up a logger with a given name, verbosity level, and optional log path.
 
     ``log_path`` may be a directory (an auto-named ``<stage>_<timestamp>_<pid>.log`` file is
-    created inside it) or a full file path (used verbatim). When omitted, logs go to a
+    created inside it) or a full file path (used verbatim). A path that does not exist yet counts
+    as a directory unless it carries a suffix, so '--log-path ./logs' creates the directory the
+    user asked for; testing ``is_dir()`` alone took that down the file branch and left a regular
+    file named 'logs' that every later run appended to, since the test then kept returning False.
+    Give a full file path a suffix to pin it. When omitted, logs go to a
     platform-specific directory (see default_log_dir). The timestamp keeps the auto-derived name
     from ever landing on a stale file left by an earlier, unrelated run (a plain PID would
     eventually be reused, e.g. after a reboot, and FileHandler's append mode would silently merge
@@ -105,7 +109,8 @@ def setup_logger(name: str, verbose: bool = False, log_path: Union[str, Path, No
             log_filepath = default_log_dir() / stage_filename
         else:
             log_path = Path(log_path)
-            log_filepath = log_path / stage_filename if log_path.is_dir() else log_path
+            treat_as_dir = log_path.is_dir() or (not log_path.exists() and not log_path.suffix)
+            log_filepath = log_path / stage_filename if treat_as_dir else log_path
         log_filepath.parent.mkdir(parents=True, exist_ok=True)
         file_handler = logging.FileHandler(log_filepath)
         file_handler.setFormatter(file_formatter)

@@ -10,7 +10,7 @@ from unittest.mock import patch
 
 import pytest
 
-from geotrax.batch_process import filter_files_to_process, handle_existing_results
+from geotrax.batch_process import filter_files_to_process, handle_existing_results, process_file
 
 logger = logging.getLogger(__name__)
 
@@ -77,3 +77,59 @@ def test_handle_existing_results_exists_overwrite_prompts(user_input, expected):
             Path('v.mp4'), _args(overwrite=True, yes=False), logger, exists=True, action='extract'
         )
     assert result is expected
+
+
+def test_filter_files_excludes_nested_folders():
+    files = [Path('archive/2024/v1.mp4'), Path('archive/v2.mp4'), Path('keep/v3.mp4')]
+    result = filter_files_to_process(files, _args(folders_exclude=['archive']), logger)
+    assert result == [Path('keep/v3.mp4')]
+
+
+def test_filter_files_ignores_folder_names_above_the_scan_root():
+    files = [Path('/data/P/keep/v.mp4')]
+    result = filter_files_to_process(files, _args(folders_exclude=['data']), logger, Path('/data/P'))
+    assert result == files
+
+
+def test_filter_files_tolerates_null_folders_exclude():
+    files = [Path('VIDEOS/v.mp4')]
+    args = _args()
+    args.folders_exclude = None
+    assert filter_files_to_process(files, args, logger) == files
+
+
+# --- process_file isolation --------------------------------------------------
+
+def _process_file_args(**overrides):
+    args = argparse.Namespace(
+        viz_only=False, geo_only=False, plot_only=False, no_geo=True,
+        save=False, show=False, plot_save=False, plot_show=False,
+        input=Path('/videos'), dry_run=False,
+    )
+    for key, value in overrides.items():
+        setattr(args, key, value)
+    return args
+
+
+def test_process_file_contains_a_stage_sys_exit():
+    """A stage that calls sys.exit must not terminate a directory run (SystemExit is a BaseException)."""
+    with patch('geotrax.batch_process.process_step', side_effect=SystemExit(1)):
+        assert process_file(Path('bad.mp4'), _process_file_args(), logger) is False
+
+
+def test_process_file_contains_a_stage_exception():
+    with patch('geotrax.batch_process.process_step', side_effect=RuntimeError('boom')):
+        assert process_file(Path('bad.mp4'), _process_file_args(), logger) is False
+
+
+def test_process_file_reports_success():
+    with patch('geotrax.batch_process.process_step'):
+        assert process_file(Path('good.mp4'), _process_file_args(), logger) is True
+
+
+def test_geo_only_skips_visualization():
+    """--geo-only must not reach the visualization stage, which cfg -> visualization -> save enables."""
+    with patch('geotrax.batch_process.process_step') as step:
+        process_file(Path('v.mp4'), _process_file_args(geo_only=True, no_geo=False, save=True), logger)
+    actions = [call.args[3] for call in step.call_args_list]
+    assert 'Visualizing' not in actions and 'Georeferencing' in actions

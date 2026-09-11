@@ -16,8 +16,8 @@ video file or an entire directory tree of videos. Key features:
   executed. Combine with --verbose for a full preview before committing to a long batch job.
 - Batch-directory mode: recursively finds all videos under the input path, with optional
   exclusion of specific sub-folders (--folders-exclude) or filename patterns
-  (--exclude-patterns). Note: --cut-frame-right is silently ignored in batch-directory mode
-  so that every video is always processed in full.
+  (--exclude-patterns). Note: --cut-frame-right is ignored in batch-directory mode (with a
+  warning if it was passed) so that every video is always processed in full.
 
 Usage:
   geotrax batch <input> [options]
@@ -41,7 +41,8 @@ Batch Processing Options:
     --no-geo, -ng       : Skip georeferencing; run detection/tracking/stabilization and
                           visualization only (pixel-coordinate output).
     --folders-exclude, -fe <str> [<str> ...] : Sub-folder names to skip when scanning for
-                          videos. Defaults to cfg -> batch -> folders_exclude (['results']).
+                          videos; a matching folder is skipped together with everything nested
+                          below it. Defaults to cfg -> batch -> folders_exclude (['results']).
     --exclude-patterns, -ep <str> [<str> ...] : Skip videos whose filename contains any of
                           these substrings (e.g., --exclude-patterns test temp).
                           Defaults to cfg -> batch -> exclude_patterns.
@@ -72,7 +73,8 @@ Processing Options:
                           Defaults to cfg -> ultralytics -> classes.
     --cut-frame-left, -cfl <int> : Skip the first N frames. Defaults to cfg -> processing -> cut_frame_left.
     --cut-frame-right, -cfr <int> : Stop at this frame number. Applies to single-file input only;
-                          silently ignored in batch-directory mode. Defaults to cfg -> processing -> cut_frame_right.
+                          ignored in batch-directory mode, which warns and processes every video
+                          in full. Defaults to cfg -> processing -> cut_frame_right.
     --interpolate / --no-interpolate : Fill per-track frame gaps with linear interpolation; adds
                           an is_interpolated column to the .txt output (0 = detected, 1 = synthetic).
                           Defaults to cfg -> extraction -> interpolate (default: false).
@@ -225,6 +227,7 @@ Notes:
 
 import argparse
 import logging
+import sys
 from pathlib import Path
 
 from tqdm import tqdm
@@ -248,6 +251,10 @@ ACTION_VISUALIZE = "Visualizing"
 def process_input(args: argparse.Namespace, logger: logging.Logger) -> None:
     """
     Process the input file or directory.
+
+    Videos that could not be processed are collected rather than aborting the run, and reported
+    together at the end; the command then exits non-zero so a failure inside a long unattended
+    batch is still visible to a caller that only inspects the exit status.
     """
     input_path = args.input
     if not input_path.exists():
@@ -260,6 +267,9 @@ def process_input(args: argparse.Namespace, logger: logging.Logger) -> None:
     sync_args_with_config(args, full_cfg, logger)
     out_cfg = full_cfg.get('output', DEFAULT_OUTPUT)
 
+    # A config may set batch.folders_exclude to null; normalize before appending to it.
+    args.folders_exclude = list(args.folders_exclude or [])
+
     # Every artifact — including the annotated '<stem>_mode_<N>.mp4' videos, which match
     # VIDEO_FORMATS — is written to cfg -> output -> folder. That folder is configurable, but
     # batch.folders_exclude defaults to the literal ['results'], so with a custom output folder
@@ -267,23 +277,32 @@ def process_input(args: argparse.Namespace, logger: logging.Logger) -> None:
     # the exclusion from the configured folder instead of relying on the two happening to match.
     output_folder_name = Path(out_cfg.get('folder', DEFAULT_OUTPUT['folder'])).name
     if output_folder_name and output_folder_name not in args.folders_exclude:
-        args.folders_exclude = list(args.folders_exclude) + [output_folder_name]
+        args.folders_exclude.append(output_folder_name)
         logger.info(f"Excluding the configured output folder '{output_folder_name}' from the video scan.")
 
+    failed = []
     try:
         if input_path.is_file() and input_path.suffix.lower() in VIDEO_FORMATS:
-            process_file(input_path, args, logger, out_cfg)
+            if not process_file(input_path, args, logger, out_cfg):
+                failed.append(input_path)
         elif input_path.is_dir():
             logger.notice(f"Batch processing all videos in: '{input_path}'")
+            if args.cut_frame_right is not None and 'cut_frame_right' in getattr(args, '_cli_provided', ()):
+                logger.warning(
+                    f"Ignoring --cut-frame-right {args.cut_frame_right}: in batch-directory mode "
+                    "every video is processed through to its last frame."
+                )
             args.cut_frame_right = None
+            args._cfg_pinned = {'cut_frame_right'}
             potential_files_to_process = [file for file in input_path.rglob('*') if file.is_file() and file.suffix.lower() in VIDEO_FORMATS]
-            files_to_process = filter_files_to_process(potential_files_to_process, args, logger)
+            files_to_process = filter_files_to_process(potential_files_to_process, args, logger, input_path)
             files_to_process = sorted(files_to_process)
 
             pbar = tqdm(files_to_process, unit="video")
             for file in files_to_process:
                 pbar.set_description(f"Processing: '{file}'")
-                process_file(file, args, logger, out_cfg)
+                if not process_file(file, args, logger, out_cfg):
+                    failed.append(file)
                 pbar.update(1)
     except KeyboardInterrupt:
         logger.error("Batch processing interrupted by user.")
@@ -291,6 +310,11 @@ def process_input(args: argparse.Namespace, logger: logging.Logger) -> None:
 
     if (args.plot_save is not False or args.plot_show is not False) and not args.viz_only and not args.geo_only and input_path.is_dir():
         run_plotting(input_path, args, logger)
+
+    if failed:
+        listed = '\n  '.join(str(file) for file in failed)
+        logger.error(f"{len(failed)} video(s) could not be processed:\n  {listed}")
+        sys.exit(1)
 
 
 def run_plotting(path: Path, args: argparse.Namespace, logger: logging.Logger) -> None:
@@ -320,9 +344,17 @@ def run_plotting(path: Path, args: argparse.Namespace, logger: logging.Logger) -
         generate_plots(plot_args, logger)
 
 
-def process_file(file: Path, args: argparse.Namespace, logger: logging.Logger, out_cfg: dict = None) -> None:
+def process_file(file: Path, args: argparse.Namespace, logger: logging.Logger, out_cfg: dict = None) -> bool:
     """
     Process the file if it is a video file and not in the results directory.
+
+    Returns True when every requested stage ran, False when the video was abandoned. This is the
+    only isolation between videos in a directory run, so SystemExit is caught alongside Exception:
+    the stage functions signal an unrecoverable per-video condition (an unreadable video, a
+    missing master frame) by logging and calling sys.exit(1) rather than by raising, and
+    SystemExit derives from BaseException, so it would otherwise pass straight through here and
+    through the KeyboardInterrupt handler in process_input, abandoning every remaining video and
+    the final plotting pass. A genuine Ctrl+C still propagates.
     """
     try:
         logger.info(f"Processing: '{file}'")
@@ -332,14 +364,20 @@ def process_file(file: Path, args: argparse.Namespace, logger: logging.Logger, o
         if not args.viz_only and not args.no_geo and not args.plot_only:
             process_step(file, args, logger, ACTION_GEOREF, georeference, out_cfg)
 
-        if (args.save is not False or args.show is not False) and not args.plot_only:
+        if (args.save is not False or args.show is not False) and not args.plot_only and not args.geo_only:
             process_step(file, args, logger, ACTION_VISUALIZE, visualize_results, out_cfg)
 
         if (args.plot_save is not False or args.plot_show is not False) and not args.viz_only and not args.geo_only and not args.input.is_dir():
             run_plotting(file, args, logger)
 
+    except SystemExit:
+        logger.error(f"Error with {file}: a pipeline stage stopped the run (see the error above).")
+        return False
     except Exception as e:
         logger.error(f"Error with {file}: {e}")
+        return False
+
+    return True
 
 
 def process_step(file: Path, args: argparse.Namespace, logger: logging.Logger, action: str, func, out_cfg: dict = None) -> None:
@@ -353,13 +391,24 @@ def process_step(file: Path, args: argparse.Namespace, logger: logging.Logger, a
             func(args, logger)
 
 
-def filter_files_to_process(files: list, args: argparse.Namespace, logger: logging.Logger) -> list:
+def filter_files_to_process(files: list, args: argparse.Namespace, logger: logging.Logger, root: Path = None) -> list:
     """
     Filter files based on exclusion criteria (folders and patterns).
+
+    An excluded folder is excluded together with everything beneath it, so every directory
+    component of the path is tested rather than only the immediate parent, which let
+    '<excluded>/<subdir>/video.mp4' through on a recursive scan. Components are taken relative to
+    *root* when given, so that a directory name above the scanned tree cannot match by accident.
     """
+    excluded_folders = set(args.folders_exclude or [])
     filtered_files = []
     for file in files:
-        if file.parent.name in args.folders_exclude:
+        try:
+            scanned_parts = file.relative_to(root).parent.parts if root else file.parent.parts
+        except ValueError:
+            scanned_parts = file.parent.parts
+
+        if excluded_folders.intersection(scanned_parts):
             logger.info(f"Skipping '{file}' as it's in an excluded folder.")
             continue
 
@@ -430,7 +479,7 @@ def parse_cli_args() -> argparse.Namespace:
     batch.add_argument('--no-geo', '-ng', action='store_true', help='Do not georeference the tracking data')
     cfg_paths = {}
     add_cfg_arg(batch, "--folders-exclude", "-fe", type=str, nargs='+', cfg='batch.folders_exclude', paths=cfg_paths,
-                help="Folders to exclude from the batch processing.")
+                help="Folders to exclude from the batch processing, together with everything below them.")
     add_cfg_arg(batch, "--exclude-patterns", "-ep", type=str, nargs='+', cfg='batch.exclude_patterns', paths=cfg_paths,
                 help="File name patterns to exclude (e.g., --exclude-patterns car_test drone_2023).")
 

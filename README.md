@@ -1,6 +1,6 @@
 # Geo-trax
 
-[![GitHub Release](https://img.shields.io/github/v/release/rfonod/geo-trax?include_prereleases)](https://github.com/rfonod/geo-trax/releases) [![PyPI - Version](https://img.shields.io/pypi/v/geo-trax)](https://pypi.org/project/geo-trax/) [![PyPI - Total Downloads](https://img.shields.io/pepy/dt/geo-trax?label=total%20downloads)](https://pepy.tech/project/geo-trax) [![PyPI - Downloads per Month](https://img.shields.io/pypi/dm/geo-trax?color=%234c1)](https://pypi.org/project/geo-trax/) [![CI](https://github.com/rfonod/geo-trax/actions/workflows/ci.yml/badge.svg)](https://github.com/rfonod/geo-trax/actions/workflows/ci.yml) [![Python](https://img.shields.io/badge/python-3.11--3.13-blue)](https://www.python.org/) [![License](https://img.shields.io/github/license/rfonod/geo-trax)](https://github.com/rfonod/geo-trax/blob/main/LICENSE) [![GitHub Issues](https://img.shields.io/github/issues/rfonod/geo-trax)](https://github.com/rfonod/geo-trax/issues) [![Open Access](https://img.shields.io/badge/Journal-10.1016%2Fj.trc.2025.105205-blue)](https://doi.org/10.1016/j.trc.2025.105205) [![arXiv](https://img.shields.io/badge/arXiv-2411.02136-b31b1b.svg)](https://arxiv.org/abs/2411.02136) [![Archived Code](https://img.shields.io/badge/Zenodo-Software%20Archive-blue)](https://zenodo.org/doi/10.5281/zenodo.12119542) [![Hugging Face](https://img.shields.io/badge/🤗%20Model-rfonod%2Fgeo--trax-yellow)](https://huggingface.co/rfonod/geo-trax) [![Hugging Face Space](https://img.shields.io/badge/🤗%20Space-Live%20Demo-yellow)](https://huggingface.co/spaces/rfonod/geo-trax) [![Project Website](https://img.shields.io/badge/REAL%20Lab-Geo--trax-informational)](https://www.real-lab.ch/geo-trax) [![YouTube](https://img.shields.io/badge/YouTube-Video-red?logo=youtube&logoColor=red)](https://youtu.be/gOGivL9FFLk)
+[![GitHub Release](https://img.shields.io/github/v/release/rfonod/geo-trax?include_prereleases)](https://github.com/rfonod/geo-trax/releases) [![PyPI - Version](https://img.shields.io/pypi/v/geo-trax)](https://pypi.org/project/geo-trax/) [![PyPI - Total Downloads](https://img.shields.io/pepy/dt/geo-trax?label=total%20downloads)](https://pepy.tech/project/geo-trax) [![CI](https://github.com/rfonod/geo-trax/actions/workflows/ci.yml/badge.svg)](https://github.com/rfonod/geo-trax/actions/workflows/ci.yml) [![Python](https://img.shields.io/badge/python-3.11--3.13-blue)](https://www.python.org/) [![License](https://img.shields.io/github/license/rfonod/geo-trax)](https://github.com/rfonod/geo-trax/blob/main/LICENSE) [![GitHub Issues](https://img.shields.io/github/issues/rfonod/geo-trax)](https://github.com/rfonod/geo-trax/issues) [![Open Access](https://img.shields.io/badge/Journal-10.1016%2Fj.trc.2025.105205-blue)](https://doi.org/10.1016/j.trc.2025.105205) [![arXiv](https://img.shields.io/badge/arXiv-2411.02136-b31b1b.svg)](https://arxiv.org/abs/2411.02136) [![Archived Code](https://img.shields.io/badge/Zenodo-Software%20Archive-blue)](https://zenodo.org/doi/10.5281/zenodo.12119542) [![Hugging Face](https://img.shields.io/badge/🤗%20Model-rfonod%2Fgeo--trax-yellow)](https://huggingface.co/rfonod/geo-trax) [![Hugging Face Space](https://img.shields.io/badge/🤗%20Space-Live%20Demo-yellow)](https://huggingface.co/spaces/rfonod/geo-trax) [![Project Website](https://img.shields.io/badge/REAL%20Lab-Geo--trax-informational)](https://www.real-lab.ch/geo-trax) [![YouTube](https://img.shields.io/badge/YouTube-Video-red?logo=youtube&logoColor=red)](https://youtu.be/gOGivL9FFLk)
 
 **Geo-trax** (GEO-referenced TRAjectory eXtraction) is a comprehensive pipeline that extracts high-accuracy, georeferenced vehicle trajectories from high-altitude drone imagery. Built for quasi-stationary aerial monitoring of urban traffic, it turns raw bird's-eye view (BEV) drone footage into precise, real-world vehicle trajectories. The framework combines YOLO detection, multi-object tracking, and video stabilization with a robust orthophoto-based georeferencing stage, producing geo-coordinated, lane-resolved trajectories that are spatially and temporally consistent and ready for large-scale traffic analysis and simulation. It is optimized for urban intersections and arterial corridors, where high-fidelity, vehicle-level insights drive intelligent transportation systems and digital twin applications.
 
@@ -762,34 +762,34 @@ If you use **Geo-trax** in your research or software, please cite:
 
 1. **Journal article** (preferred for any use of the framework):
 
-    ```bibtex
-    @article{fonod2025advanced,
-      title = {Advanced computer vision for extracting georeferenced vehicle trajectories from drone imagery},
-      author = {Fonod, Robert and Cho, Haechan and Yeo, Hwasoo and Geroliminis, Nikolas},
-      journal = {Transportation Research Part C: Emerging Technologies},
-      volume = {178},
-      pages = {105205},
-      year = {2025},
-      publisher = {Elsevier},
-      doi = {10.1016/j.trc.2025.105205},
-      url = {https://doi.org/10.1016/j.trc.2025.105205}
-    }
-    ```
+```bibtex
+@article{fonod2025advanced,
+  title = {Advanced computer vision for extracting georeferenced vehicle trajectories from drone imagery},
+  author = {Fonod, Robert and Cho, Haechan and Yeo, Hwasoo and Geroliminis, Nikolas},
+  journal = {Transportation Research Part C: Emerging Technologies},
+  volume = {178},
+  pages = {105205},
+  year = {2025},
+  publisher = {Elsevier},
+  doi = {10.1016/j.trc.2025.105205},
+  url = {https://doi.org/10.1016/j.trc.2025.105205}
+}
+```
 
 2. **Software archive** (when referencing or building on the code itself):
 
-    ```bibtex
-    @software{fonod2026geo-trax,
-      author = {Fonod, Robert},
-      title = {Geo-trax: A Comprehensive Framework for Georeferenced Vehicle Trajectory Extraction from Drone Imagery},
-      year = {2026},
-      month = sep,
-      version = {1.4.2},
-      doi = {10.5281/zenodo.12119542},
-      url = {https://github.com/rfonod/geo-trax},
-      license = {MIT}
-    }
-    ```
+```bibtex
+@software{fonod2026geo-trax,
+  author = {Fonod, Robert},
+  title = {Geo-trax: A Comprehensive Framework for Georeferenced Vehicle Trajectory Extraction from Drone Imagery},
+  year = {2026},
+  month = sep,
+  version = {1.4.3},
+  license = {MIT},
+  doi = {10.5281/zenodo.12119542},
+  url = {https://github.com/rfonod/geo-trax}
+}
+```
 
 ## Contributions
 

@@ -12,7 +12,9 @@ import pytest
 
 from geotrax import CFG_DIR
 from geotrax.utils.config_utils import (
+    apply_cli_overrides,
     backfill_args_from_config,
+    merge_bundled_defaults,
     load_class_names_from_model,
     load_config,
     load_config_all,
@@ -20,7 +22,9 @@ from geotrax.utils.config_utils import (
     resolve_class_names,
     resolve_config_path,
     resolve_model_path,
+    sync_args_with_config,
 )
+from geotrax.utils.cli_utils import CfgArg
 
 logger = logging.getLogger(__name__)
 
@@ -262,3 +266,101 @@ def test_backfill_args_missing_key_raises():
     args = argparse.Namespace()
     with pytest.raises(AttributeError):
         backfill_args_from_config(args, {'no_such_attr': 42})
+
+
+# --- integer-keyed config blocks ---------------------------------------------
+
+def test_set_override_reaches_an_integer_keyed_leaf():
+    """
+    tau_c is keyed by integer class id; dotted paths are strings.
+
+    The path helpers must agree on the key type, or --set writes a string-keyed duplicate that
+    nothing reads while reporting the override as applied.
+    """
+    cfg = load_config('default', logger)
+    apply_cli_overrides(cfg, ['tau_c.0=2.5'], None, logger)
+    tau_c = cfg['extraction']['dimension_estimation']['tau_c']
+    assert tau_c[0] == 2.5
+    assert '0' not in tau_c
+
+
+def test_set_override_type_checks_an_integer_keyed_leaf():
+    cfg = load_config('default', logger)
+    with pytest.raises(SystemExit):
+        apply_cli_overrides(cfg, ['tau_c.0=not-a-number'], None, logger)
+
+
+# --- malformed configs fail fast ---------------------------------------------
+
+@pytest.mark.parametrize('content', ['', 'a: [1,\nb: }{\n', '- just\n- a list\n'])
+def test_load_config_unusable_file_exits(tmp_path, content):
+    cfg_file = tmp_path / 'broken.yaml'
+    cfg_file.write_text(content)
+    with pytest.raises(SystemExit):
+        load_config(cfg_file, logger)
+
+
+@pytest.mark.parametrize('given', ['', '.', '..'])
+def test_resolve_config_path_tolerates_an_empty_name(given):
+    """A suffix-less path with no final component must not raise; load_config reports it."""
+    assert resolve_config_path(given) == Path(given)
+
+
+# --- bundled-default merge for config-only blocks -----------------------------
+
+def test_merge_bundled_defaults_fills_a_missing_block():
+    """A config predating extraction.sahi must still reach the SAHI stage fully populated."""
+    merged = merge_bundled_defaults({'enable': True}, 'extraction.sahi')
+    assert merged['enable'] is True
+    assert merged['slice_height'] == 1080
+    assert 'postprocess_match_threshold' in merged
+
+
+def test_merge_bundled_defaults_keeps_user_values():
+    merged = merge_bundled_defaults({'slice_height': 640}, 'extraction.sahi')
+    assert merged['slice_height'] == 640
+
+
+# --- pinned dests --------------------------------------------------------------
+
+def _pin_args(pinned):
+    args = argparse.Namespace(
+        cut_frame_right=None,
+        _cli_provided=set(),
+        _cfg_paths={'cut_frame_right': CfgArg(path='processing.cut_frame_right', flag='--cut-frame-right')},
+    )
+    if pinned:
+        args._cfg_pinned = {'cut_frame_right'}
+    return args
+
+
+def test_unpinned_dest_is_backfilled_from_the_config():
+    cfg = {'processing': {'cut_frame_right': 900}}
+    args = _pin_args(pinned=False)
+    sync_args_with_config(args, cfg, logger)
+    assert args.cut_frame_right == 900
+
+
+def test_pinned_dest_survives_the_config_resync():
+    """
+    'batch' clears cut_frame_right in directory mode; every stage re-loads the config and
+    re-syncs, which would otherwise pull the value straight back in and truncate every video.
+    """
+    cfg = {'processing': {'cut_frame_right': 900}}
+    args = _pin_args(pinned=True)
+    sync_args_with_config(args, cfg, logger)
+    assert args.cut_frame_right is None
+    assert cfg['processing']['cut_frame_right'] is None
+
+
+# --- ultralytics key drift -----------------------------------------------------
+
+@pytest.mark.parametrize('preset', ['default', 'confident', 'lenient', 'stable'])
+def test_presets_carry_no_dead_half_key(preset):
+    """
+    ultralytics drops 'half' whenever 'quantize' is also present, so shipping both made 'half'
+    an inert knob that silently never took effect. 'quantize' is the live one.
+    """
+    ultralytics = load_config(preset, logger)['ultralytics']
+    assert 'half' not in ultralytics
+    assert 'quantize' in ultralytics

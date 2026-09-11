@@ -46,7 +46,14 @@ class PlotColors:
         self.colors = colors
 
     def get_color(self, index: int) -> str:
+        """Return the hex colour for *index*, deriving a stable one beyond the configured list.
+
+        plot.py calls this once per trajectory, so an index past the palette must return the same
+        colour every time or a single source is drawn in many colours and its legend swatch, bound
+        to the first line only, matches none of them. Seeding on the index makes the overflow
+        colour a function of the index alone: identical across calls and across runs, and drawn
+        from a private generator so the global random state stays untouched.
+        """
         if index < len(self.colors):
             return self.colors[index]
-        else:
-            return "#{:06x}".format(random.randint(0, 0xFFFFFF))
+        return "#{:06x}".format(random.Random(index).randrange(0x1000000))
