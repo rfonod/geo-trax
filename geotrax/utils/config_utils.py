@@ -4,6 +4,7 @@
 """YAML configuration loading and path resolution for the geo-trax pipeline."""
 
 import argparse
+import atexit
 import difflib
 import functools
 import json
@@ -45,14 +46,17 @@ def resolve_config_path(cfg_filepath: Union[str, Path]) -> Path:
     configuration directory (geotrax/cfg). A missing '.yaml' suffix and a legacy leading 'cfg/'
     component are tolerated, so e.g. 'confident', 'cfg/default.yaml', and 'lenient' all resolve
     to the bundled presets. Returns the path unchanged if no candidate exists.
+
+    A path with no final component ('', '.', '..') gets no suffix appended, since with_suffix
+    rejects an empty name; it falls through unchanged and load_config reports it.
     """
     path = Path(cfg_filepath)
-    if not path.suffix:
+    if not path.suffix and path.name:
         path = path.with_suffix('.yaml')
 
     candidates = [path]
     if not path.is_absolute():
-        bundled = Path(*path.parts[1:]) if path.parts[0] == 'cfg' else path
+        bundled = Path(*path.parts[1:]) if path.parts[:1] == ('cfg',) else path
         candidates += [ROOT_DIR / path, CFG_DIR / bundled]
 
     for candidate in candidates:
@@ -201,7 +205,9 @@ def _write_tracker_yaml(tracker_section: dict, cfg_name: Union[str, Path], logge
     The pipeline config's ``tracker`` section holds an ``active`` selector plus one parameter
     block per supported tracker. Only the active block is passed to Ultralytics, which requires
     a file path for the tracker config; this bridges the unified config to that interface.
-    The temp file persists until OS cleanup.
+    The file must outlive this call (Ultralytics reads it later), so it cannot be removed here;
+    it is unlinked at interpreter exit instead, which keeps a long 'batch' run from leaving one
+    stray file per video behind.
     """
     active = tracker_section.get('active')
     if active is None:
@@ -221,10 +227,21 @@ def _write_tracker_yaml(tracker_section: dict, cfg_name: Union[str, Path], logge
             mode='w', suffix='.yaml', delete=False, prefix='geotrax_tracker_', encoding='utf-8'
         ) as tmp:
             yaml.dump(tracker_cfg, tmp, default_flow_style=False, allow_unicode=True)
-            return Path(tmp.name)
+            tracker_path = Path(tmp.name)
     except OSError as exc:
         logger.critical(f"Failed to write temporary tracker config: {exc}")
         sys.exit(1)
+
+    atexit.register(_unlink_quietly, tracker_path)
+    return tracker_path
+
+
+def _unlink_quietly(path: Path) -> None:
+    """Remove *path*, ignoring an already-removed file or an unwritable temp directory."""
+    try:
+        path.unlink()
+    except OSError:
+        pass
 
 
 def load_config(cfg_filepath: Union[str, Path], logger: logging.Logger,
@@ -233,6 +250,10 @@ def load_config(cfg_filepath: Union[str, Path], logger: logging.Logger,
 
     When *args* is given, its ``--set KEY=VALUE`` overrides are applied to the loaded config
     (see :func:`apply_cli_overrides`). Callers without a ``--set`` flag can omit it.
+
+    Every way the file can fail to yield a config mapping is reported as a fatal, named error:
+    a hand-edited config that is unreadable, malformed or empty would otherwise surface much
+    later as an opaque traceback from whichever stage first indexed the missing section.
     """
     resolved_filepath = resolve_config_path(cfg_filepath)
     try:
@@ -241,6 +262,21 @@ def load_config(cfg_filepath: Union[str, Path], logger: logging.Logger,
     except FileNotFoundError:
         logger.critical(f"Configuration file '{cfg_filepath}' not found.")
         sys.exit(1)
+    except OSError as exc:
+        logger.critical(f"Configuration file '{resolved_filepath}' could not be read: {exc}")
+        sys.exit(1)
+    except yaml.YAMLError as exc:
+        logger.critical(f"Configuration file '{resolved_filepath}' is not valid YAML: {exc}")
+        sys.exit(1)
+
+    if not isinstance(kwargs, dict):
+        found = 'nothing' if kwargs is None else f'a {type(kwargs).__name__}'
+        logger.critical(
+            f"Configuration file '{resolved_filepath}' does not contain a top-level mapping of "
+            f"sections (found {found}). Run 'geotrax config copy' for a valid starting point."
+        )
+        sys.exit(1)
+
     if args is not None:
         apply_cli_overrides(kwargs, getattr(args, 'set', None), args, logger)
     return kwargs
@@ -274,13 +310,33 @@ def _iter_leaf_paths(cfg: dict, prefix: str = '') -> Iterator[str]:
             yield path
 
 
+def _resolve_key(node: dict, key: str) -> Any:
+    """Return the key of *node* that the dotted-path component *key* names, or ``_MISSING``.
+
+    Dotted paths are strings, but one config block is keyed by integer class id
+    (``extraction -> dimension_estimation -> tau_c``), and ``_iter_leaf_paths`` renders those
+    keys through an f-string. Matching on the string form keeps the three path helpers agreeing
+    on the same key, so an override of an integer-keyed leaf reaches the value that the pipeline
+    actually reads instead of writing a string-keyed duplicate beside it.
+    """
+    if key in node:
+        return key
+    for candidate in node:
+        if not isinstance(candidate, str) and str(candidate) == key:
+            return candidate
+    return _MISSING
+
+
 def _get_by_path(cfg: dict, path: str, default: Any = _MISSING) -> Any:
     """Return the value at the dotted *path*, or *default* if any component is absent."""
     node = cfg
     for key in path.split('.'):
-        if not isinstance(node, dict) or key not in node:
+        if not isinstance(node, dict):
             return default
-        node = node[key]
+        actual = _resolve_key(node, key)
+        if actual is _MISSING:
+            return default
+        node = node[actual]
     return node
 
 
@@ -291,17 +347,31 @@ def _bundled_defaults() -> dict:
         return yaml.safe_load(f)
 
 
+def merge_bundled_defaults(section: Optional[dict], path: str) -> dict:
+    """Return *section* with every key missing from it filled in from the bundled default.yaml.
+
+    ``sync_args_with_config`` already gives that fallback to each registered CLI flag, so a
+    custom config predating a new key still loads with a sane value. A block whose keys are
+    config-only has no registered dest and so is skipped by it, and would reach its consumer
+    half-populated. Use this wherever such a block is read as a whole.
+    """
+    defaults = _get_by_path(_bundled_defaults(), path, default={}) or {}
+    return {**defaults, **(section or {})}
+
+
 def _set_by_path(cfg: dict, path: str, value: Any) -> None:
     """Set the value at the dotted *path*, creating intermediate dicts as needed."""
     *parents, leaf = path.split('.')
     node = cfg
     for key in parents:
-        child = node.get(key)
+        actual = _resolve_key(node, key)
+        child = node[actual] if actual is not _MISSING else None
         if not isinstance(child, dict):
             child = {}
             node[key] = child
         node = child
-    node[leaf] = value
+    actual = _resolve_key(node, leaf)
+    node[leaf if actual is _MISSING else actual] = value
 
 
 def sync_args_with_config(args: argparse.Namespace, cfg: dict, logger: logging.Logger) -> None:
@@ -321,12 +391,18 @@ def sync_args_with_config(args: argparse.Namespace, cfg: dict, logger: logging.L
     Config keys absent from the file fall back to the bundled default.yaml, so a custom config
     predating a newly added key still loads with a sane value instead of leaving the argument
     (and every downstream consumer of it) silently at ``None``.
+
+    A dest listed in ``args._cfg_pinned`` is always pushed, never pulled, even when it is
+    ``None``. That is how a caller suppresses a config key outright: 'batch' clears
+    ``cut_frame_right`` in directory mode, and without the pin the very next stage would read the
+    value straight back out of the config it just re-loaded.
     """
+    pinned = getattr(args, '_cfg_pinned', ())
     for dest, spec in getattr(args, '_cfg_paths', {}).items():
         if spec.no_sync or not hasattr(args, dest):
             continue
         value = getattr(args, dest)
-        if value is None:
+        if value is None and dest not in pinned:
             config_value = _get_by_path(cfg, spec.path)
             if config_value is _MISSING:
                 config_value = _get_by_path(_bundled_defaults(), spec.path)
@@ -338,7 +414,9 @@ def sync_args_with_config(args: argparse.Namespace, cfg: dict, logger: logging.L
                 config_value = spec.coerce(config_value)
             setattr(args, dest, config_value)
         else:
-            _set_by_path(cfg, spec.path, not value if spec.invert else value)
+            _set_by_path(cfg, spec.path, not value if spec.invert and value is not None else value)
+            if dest in pinned:  # the caller suppressed the key; it did not come from the CLI
+                continue
             provided = getattr(args, '_cli_provided', None)
             if provided is None or dest in provided:  # a pulled value pushed back is not news
                 logger.info(f"CLI argument applied to the configuration: {spec.path} = {value}.")

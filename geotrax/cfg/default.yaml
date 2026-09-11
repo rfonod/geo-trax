@@ -72,7 +72,7 @@ processing:
 # --- Batch processing (CLI override) ---
 # Defaults for the batch orchestrator's directory scan ('geotrax batch' on a folder).
 batch:
-  folders_exclude: ['results']  # Sub-folder names to skip when scanning for videos; pipeline output (e.g. annotated mode videos) must not be re-ingested as input, so the configured output -> folder is always excluded on top of this list — CLI: --folders-exclude
+  folders_exclude: ['results']  # Sub-folder names to skip when scanning for videos, together with everything nested below them; pipeline output (e.g. annotated mode videos) must not be re-ingested as input, so the configured output -> folder is always excluded on top of this list — CLI: --folders-exclude
   exclude_patterns: null        # Skip videos whose filename contains any of these substrings (null = none) — CLI: --exclude-patterns
 
 
@@ -281,7 +281,6 @@ ultralytics:
   classes: [0,1,2,3]  # (int | list[int]) filter by class id(s); 0=car, 1=bus, 2=truck, 3=motorcycle
   augment: false      # (bool) apply test-time augmentation during prediction
   agnostic_nms: true  # (bool) class-agnostic NMS
-  half: false         # (bool) use half precision (FP16) if supported
   dnn: false          # (bool) use OpenCV DNN for ONNX inference
   vid_stride: 1       # (int) read every Nth frame for video sources
   stream_buffer: false # (bool) true buffers all frames; false keeps the most recent frame
@@ -306,7 +305,7 @@ ultralytics:
   format: torchscript  # (str) export target format; e.g. torchscript|onnx|openvino|engine|coreml|...
   keras: false         # (bool) TF SavedModel only; enable Keras layers during export
   optimize: false      # (bool) TorchScript: mobile optimizations
-  quantize:            # (int|str, optional) export precision: 8/'int8', 16/'fp16', 32/'fp32', 'w8a8', 'w8a16', 'w16a16'; null = default (fp32)
+  quantize:            # (int|str, optional) inference and export precision: 8/'int8', 16/'fp16', 32/'fp32', 'w8a8', 'w8a16', 'w16a16'; null = default (fp32). Replaces the removed 'half' key, which ultralytics discards whenever 'quantize' is also present — CLI: --set quantize=16
   dynamic: false       # (bool) dynamic shapes for torchscript, onnx, openvino, engine, coreml
   simplify: false      # (bool) ONNX/engine only; run graph simplifier for cleaner ONNX before conversion
   opset:               # (int, optional) ONNX/engine only; opset version; leave unset for tested default

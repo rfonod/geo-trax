@@ -205,3 +205,22 @@ def test_setup_logger_survives_failing_update_check(tmp_path, monkeypatch):
         logger.info('still usable')
     finally:
         _cleanup(logger)
+
+
+def test_log_path_creates_a_missing_directory(tmp_path):
+    """
+    A directory that does not exist yet is still a directory.
+
+    Testing is_dir() alone took '--log-path ./logs' down the file branch and created a regular
+    file named 'logs' that every later run then appended to, since the test kept returning False.
+    """
+    target = tmp_path / 'runlogs'
+    setup_logger('geotrax.extract', log_path=target)
+    assert target.is_dir()
+    assert [f.suffix for f in target.iterdir()] == ['.log']
+
+
+def test_log_path_with_a_suffix_is_used_verbatim(tmp_path):
+    target = tmp_path / 'pinned.log'
+    setup_logger('geotrax.georeference', log_path=target)
+    assert target.is_file()

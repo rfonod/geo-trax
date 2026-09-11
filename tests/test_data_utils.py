@@ -43,3 +43,22 @@ def test_plotcolors_set_colors():
     palette = PlotColors()
     palette.set_colors(['#123456'])
     assert palette.get_color(0) == '#123456'
+
+
+def test_plot_color_overflow_is_stable():
+    """
+    plot.py calls get_color once per trajectory, so an index past the palette must return the
+    same colour every time; a fresh random colour per call drew one source in many colours and
+    left its legend swatch, bound to the first line only, matching none of them.
+    """
+    colors = PlotColors(['#111111', '#222222'])
+    assert colors.get_color(5) == colors.get_color(5)
+    assert PlotColors([]).get_color(5) == PlotColors(['#111111', '#222222']).get_color(5)
+    assert colors.get_color(5) != colors.get_color(6)
+    assert colors.get_color(5).startswith('#') and len(colors.get_color(5)) == 7
+
+
+def test_plot_color_within_palette_is_unchanged():
+    colors = PlotColors(['#111111', '#222222'])
+    assert colors.get_color(0) == '#111111'
+    assert colors.get_color(1) == '#222222'
