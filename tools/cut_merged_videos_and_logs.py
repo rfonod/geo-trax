@@ -150,7 +150,6 @@ import argparse
 import json
 import logging
 import math
-import platform
 import re
 import shlex
 import subprocess
@@ -163,6 +162,7 @@ import pandas as pd
 from tqdm import tqdm
 
 from geotrax.utils.constants import VIDEO_FORMATS
+from geotrax.utils.file_utils import get_keyframe_times
 from geotrax.utils.logging_utils import setup_logger
 
 # Canonical CSV field name → known DJI SRT key aliases (case-insensitive).
@@ -351,17 +351,16 @@ def cut_and_save_video(
     fps = cap.get(cv2.CAP_PROP_FPS)
     cap.release()
 
-    video_q = shlex.quote(str(filepaths['merged_video']))
-    out_q = shlex.quote(str(cut_video_path))
-    cmd = f'ffmpeg -y -i {video_q} -ss {cut_start_adjusted / fps} -to {cut_end / fps} -c copy {out_q}'
-    if not debug:
-        cmd += ' -v quiet'
+    cmd = ['ffmpeg'] + ([] if debug else ['-v', 'quiet']) + [
+        '-y', '-i', str(filepaths['merged_video']), '-ss', str(cut_start_adjusted / fps), '-to', str(cut_end / fps),
+        '-c', 'copy', str(cut_video_path),
+    ]
 
     if dry_run:
-        logger.info(f"[DRY RUN] Would run: {cmd}")
+        logger.info(f"[DRY RUN] Would run: {shlex.join(cmd)}")
     else:
-        logger.info(f"Running: {cmd}")
-        result = subprocess.run(cmd, shell=True)
+        logger.info(f"Running: {shlex.join(cmd)}")
+        result = subprocess.run(cmd)
         if result.returncode == 0:
             logger.info(f"Cut video saved to '{cut_video_path}'.")
         else:
@@ -372,13 +371,15 @@ def cut_and_save_video(
 
     if int(rotation) != 0 and not debug:
         temp_path = cut_video_path.with_name(cut_video_path.stem + '_temp' + cut_video_path.suffix)
-        temp_q = shlex.quote(str(temp_path))
-        rotation_cmd = f'ffmpeg -i {temp_q} -c copy -map_metadata 0 -metadata:s:v rotate="{rotation}" {out_q} -v quiet'
+        rotation_cmd = [
+            'ffmpeg', '-v', 'quiet', '-i', str(temp_path), '-c', 'copy', '-map_metadata', '0',
+            '-metadata:s:v', f'rotate={rotation}', str(cut_video_path),
+        ]
         if dry_run:
-            logger.info(f"[DRY RUN] Would apply rotation {rotation}°: {rotation_cmd}")
+            logger.info(f"[DRY RUN] Would apply rotation {rotation}°: {shlex.join(rotation_cmd)}")
         else:
             cut_video_path.rename(temp_path)
-            subprocess.run(rotation_cmd, shell=True)
+            subprocess.run(rotation_cmd)
             temp_path.unlink(missing_ok=True)
 
 
@@ -590,31 +591,17 @@ def get_and_save_adjusted_cuts(
     debug: bool = False,
     dry_run: bool = False,
 ) -> dict[int, tuple[int, int, int]]:
-    video_q = shlex.quote(str(filepaths['merged_video']))
-
     cap = cv2.VideoCapture(str(filepaths['merged_video']))
     fps = cap.get(cv2.CAP_PROP_FPS)
     frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     cap.release()
 
-    if platform.system() in ('Windows', 'Darwin'):
-        key_frames_cmd = (
-            f"ffprobe -loglevel error -select_streams v:0 -show_entries packet=pts_time,flags "
-            f"-of csv=print_section=0 {video_q} | awk -F',' '/K/ {{print $1}}'"
-        )
-    else:
-        key_frames_cmd = (
-            f"ffmpeg -i {video_q} -vf select='eq(pict_type\\,PICT_TYPE_I)',showinfo "
-            f"-vsync vfr -f null - -loglevel debug 2>&1 | "
-            "awk '/pts_time/ {gsub(/.*pts_time:/, \"\"); gsub(/ .*/, \"\"); print;}'"
-        )
-
     try:
-        key_frames = subprocess.check_output(key_frames_cmd, shell=True, text=True).split()
-    except subprocess.CalledProcessError as e:
+        key_frames_arr = get_keyframe_times(filepaths['merged_video'])
+    except (subprocess.CalledProcessError, OSError) as e:
         logger.error(f"Failed to retrieve keyframes from '{filepaths['merged_video']}': {e}")
         sys.exit(1)
-    key_frames_arr = np.array([float(kf) for kf in key_frames])
+    key_frames = key_frames_arr.tolist()
 
     all_cuts_adjusted: dict[int, tuple[int, int, int]] = {}
     for cut_num, (cut_start, cut_end, rotation) in all_cuts.items():

@@ -268,19 +268,26 @@ def merge_videos(
         logger.info(f"[dry-run] Would write merged video to '{output_path}'.")
         return True
 
+    unsafe = [video for video in video_files if '\n' in str(video) or '\r' in str(video)]
+    if unsafe:
+        logger.error(f"Cannot merge: a line break in the path of {', '.join(repr(str(v)) for v in unsafe)} would end the concat entry.")
+        return False
+
     with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as f:
         manifest_path = Path(f.name)
         for video in video_files:
-            f.write(f"file '{video}'\n")
+            f.write(f"file {_concat_quote(video)}\n")
 
-    result = subprocess.run([
-        'ffmpeg', '-loglevel', 'error', '-y',
-        '-f', 'concat', '-safe', '0',
-        '-i', str(manifest_path),
-        '-codec', 'copy',
-        str(output_path),
-    ])
-    manifest_path.unlink(missing_ok=True)
+    try:
+        result = subprocess.run([
+            'ffmpeg', '-loglevel', 'error', '-y',
+            '-f', 'concat', '-safe', '0',
+            '-i', str(manifest_path),
+            '-codec', 'copy',
+            str(output_path),
+        ])
+    finally:
+        manifest_path.unlink(missing_ok=True)
 
     if result.returncode == 0:
         logger.notice(f"Merged video saved to '{output_path}'.")
@@ -288,6 +295,15 @@ def merge_videos(
     else:
         logger.error(f"ffmpeg failed (exit code {result.returncode}) while merging video.")
         return False
+
+
+def _concat_quote(path: Path) -> str:
+    """Quote a path for an ffmpeg concat list: single quotes, with each literal quote written as '\\''.
+
+    Without this, an apostrophe anywhere in the path (e.g. a volume named "Robert's SSD") ends the
+    quoted string early and the whole merge fails.
+    """
+    return "'" + str(path).replace("'", "'\\''") + "'"
 
 
 def merge_srt_files(

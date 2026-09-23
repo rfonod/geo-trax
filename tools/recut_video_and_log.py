@@ -87,7 +87,6 @@ Notes:
 import argparse
 import logging
 import os
-import platform
 import shlex
 import subprocess
 import sys
@@ -98,6 +97,7 @@ import cv2
 import numpy as np
 import pandas as pd
 
+from geotrax.utils.file_utils import get_keyframe_times
 from geotrax.utils.logging_utils import setup_logger
 
 
@@ -119,32 +119,26 @@ def cut_and_save_video(filepaths: Dict[str, Path], cuts: Tuple[int, int, int], l
     fps = cap.get(cv2.CAP_PROP_FPS)
     cap.release()
 
-    # Quote paths for safe shell execution
-    input_video_q = shlex.quote(input_video)
-    output_video_q = shlex.quote(output_video)
-
-    # Choose cutting mode
+    # Choose cutting mode; commands are argument lists (no shell), so any path is passed verbatim
+    cmd = ['ffmpeg'] + ([] if debug else ['-v', 'quiet']) + ['-y', '-i', input_video]
     if exact_cut:
         # Exact frame cutting with re-encoding
-        cmd = f'ffmpeg -y -i {input_video_q} -ss {cut_start/fps}'
+        cmd += ['-ss', str(cut_start / fps)]
         if cut_end != -1:
-            cmd += f' -to {cut_end / fps}'
+            cmd += ['-to', str(cut_end / fps)]
         if bitrate:
-            cmd += f' -b:v {bitrate}'
-        cmd += f' -async 1 -strict -2 {output_video_q}'
+            cmd += ['-b:v', bitrate]
+        cmd += ['-async', '1', '-strict', '-2', output_video]
     else:
         # Fast keyframe-aligned cutting without re-encoding
-        cmd = f'ffmpeg -y -i {input_video_q}'
         if cut_start > 0:
-            cmd += f' -ss {cut_start / fps}'
+            cmd += ['-ss', str(cut_start / fps)]
         if cut_end != -1:
-            cmd += f' -to {cut_end / fps}'
-        cmd += f' -c copy {output_video_q}'
+            cmd += ['-to', str(cut_end / fps)]
+        cmd += ['-c', 'copy', output_video]
 
-    if not debug:
-        cmd += ' -v quiet'
-    logger.info(f"Running the following command: {cmd}")
-    result = subprocess.run(cmd, shell=True)
+    logger.info(f"Running the following command: {shlex.join(cmd)}")
+    result = subprocess.run(cmd)
     if result.returncode == 0:
         logger.notice(f"Cut video saved to '{output_video}'")
     else:
@@ -156,12 +150,11 @@ def cut_and_save_video(filepaths: Dict[str, Path], cuts: Tuple[int, int, int], l
     if int(rotation) != 0 and not debug:
         output_path = Path(output_video)
         temp_filepath = str(output_path.with_name(output_path.stem + "_temp" + output_path.suffix))
-        temp_filepath_q = shlex.quote(temp_filepath)
         os.rename(output_video, temp_filepath)
-        subprocess.run(
-            f'ffmpeg -i {temp_filepath_q} -c copy -map_metadata 0 -metadata:s:v rotate="{rotation}" {output_video_q} -v quiet',
-            shell=True
-        )
+        subprocess.run([
+            'ffmpeg', '-v', 'quiet', '-i', temp_filepath, '-c', 'copy', '-map_metadata', '0',
+            '-metadata:s:v', f'rotate={rotation}', output_video,
+        ])
         os.remove(temp_filepath)
 
 
@@ -276,31 +269,12 @@ def get_adjusted_cuts(
         logger.info(f"Exact cutting enabled: cutting from frame {cut_start} to frame {cut_end} (with re-encoding).")
         return cuts
 
-    input_video = str(filepaths['input_video'])
-    input_video_q = shlex.quote(input_video)
-    cap = cv2.VideoCapture(input_video)
+    cap = cv2.VideoCapture(str(filepaths['input_video']))
     fps = cap.get(cv2.CAP_PROP_FPS)
     cap.release()
 
-    # Retrieve key-frames using ffprobe/ffmpeg and awk based on OS
-    if platform.system() == "Windows" or platform.system() == "Darwin":
-        key_frames_retrieval_cmd = (
-            "ffprobe -loglevel error -select_streams v:0 "
-            "-show_entries packet=pts_time,flags -of "
-            f"csv=print_section=0 {input_video_q}"
-            " | awk -F',' '/K/ {print $1}'"
-        )
-    elif platform.system() == "Linux":
-        key_frames_retrieval_cmd = (
-            f"ffmpeg -i {input_video_q} -vf select='eq(pict_type\\,PICT_TYPE_I)',showinfo "
-            "-vsync vfr -f null - -loglevel debug 2>&1 | "
-            "awk '/pts_time/ {gsub(/.*pts_time:/, \"\"); gsub(/ .*/, \"\"); print;}'"
-        )
-    else:
-        raise RuntimeError("Unsupported operating system for key-frame retrieval.")
-
-    key_frames = subprocess.check_output(key_frames_retrieval_cmd, shell=True, text=True).split()
-    key_frames_arr = np.array([float(key_frame) for key_frame in key_frames])
+    key_frames_arr = get_keyframe_times(filepaths['input_video'])
+    key_frames = key_frames_arr.tolist()
 
     # Find the closest key-frame (from right) for the provided cut_start
     if cut_start == 0:
