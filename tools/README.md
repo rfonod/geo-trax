@@ -108,7 +108,10 @@ Turn raw DJI drone footage and flight logs into clean, per-location clips for th
 🟢 **General** — Merges multiple per-flight DJI video files and their SRT flight logs from a
 session directory into a single `0_merged.mp4` / `0_merged.srt` pair, handling the DJI counter
 reset and `_trimmed` conventions. Configurable video extension and output stem; can process one
-session or sweep an entire tree. (Developed for Songdo, but assumes only DJI conventions.)
+session or sweep an entire tree. Previously merged `<output_stem>.*` files are never re-read as
+input. A flight without a usable SRT is tolerated only at the end of a session: anywhere else it
+would shift the telemetry of every later flight, so that session's SRT is not merged. (Developed for
+Songdo, but assumes only DJI conventions.)
 
 ```bash
 python tools/merge_videos_and_logs.py /path/to/RAW --output-dir /path/to/PROCESSED
@@ -129,8 +132,9 @@ python tools/cut_merged_videos_and_logs.py /path/to/PROCESSED \
 ### `recut_video_and_log.py`
 
 🟢 **General** — Re-cuts a video and its companion CSV log to a frame range, via a cuts file or
-direct `--start`/`--end`. Defaults to keyframe-aligned cuts for codec efficiency (`--exact-cut`
-for exact frames), supports `--rotate`, and rebases CSV frame numbers to start at 0.
+direct `--start`/`--end`. Defaults to keyframe-aligned cuts for codec efficiency (only the start
+moves to a keyframe; `--exact-cut` for exact frames), supports `--rotate`, and rebases CSV frame
+numbers to start at 0. The end frame is exclusive in both the video and the CSV.
 
 ```bash
 python tools/recut_video_and_log.py video.MP4 cuts.txt
