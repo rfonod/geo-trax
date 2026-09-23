@@ -269,20 +269,21 @@ def extract_flight_logs_stats(flight_logs: list, input_folder: Path, ref_frame: 
         y_deviation = y_local_all - y_local_ref
         rel_altitude_deviation = rel_altitude - rel_altitude_ref
 
-        x_max_idx = np.argmax(np.abs(x_deviation))
-        y_max_idx = np.argmax(np.abs(y_deviation))
-        rel_altitude_max_idx = np.argmax(np.abs(rel_altitude_deviation))
-
-        x_max_deviation = x_deviation[x_max_idx]
-        y_max_deviation = y_deviation[y_max_idx]
-        r_max_deviation = np.sqrt(x_max_deviation**2 + y_max_deviation**2).round(2)
-        x_max_deviation = x_max_deviation.round(2)
-        y_max_deviation = y_max_deviation.round(2)
-        rel_altitude_max_deviation = rel_altitude_deviation[rel_altitude_max_idx].round(2)
+        x_max_deviation = max_abs_deviation(x_deviation)
+        y_max_deviation = max_abs_deviation(y_deviation)
+        r_max_deviation = np.round(np.sqrt(x_max_deviation**2 + y_max_deviation**2), 2)
+        x_max_deviation = np.round(x_max_deviation, 2)
+        y_max_deviation = np.round(y_max_deviation, 2)
+        rel_altitude_max_deviation = np.round(max_abs_deviation(rel_altitude_deviation), 2)
+        if np.isnan(r_max_deviation):
+            logger.warning(f"No valid GPS data in {flight_log}; its position drift cannot be checked.")
 
         # camera parameters
         iso_max_deviation = np.max(np.abs(iso - iso_ref))
-        shutter_max_deviation = np.max(np.abs(np.array([eval(shutter) for shutter in shutter]) - eval(shutter_ref)))
+        shutter_deviation = np.array([parse_shutter(s) for s in shutter]) - parse_shutter(shutter_ref)
+        shutter_max_deviation = abs(max_abs_deviation(shutter_deviation))
+        if np.isnan(shutter_max_deviation):
+            logger.warning(f"No valid shutter speed in {flight_log}; its shutter deviation cannot be checked.")
         fnum_max_deviation = np.max(np.abs(fnum - fnum_ref))
         ct_max_deviation = np.max(np.abs(ct - ct_ref))
         focal_len_max_deviation = np.max(np.abs(focal_len - focal_len_ref))
@@ -308,6 +309,37 @@ def extract_flight_logs_stats(flight_logs: list, input_folder: Path, ref_frame: 
     df.reset_index(drop=True, inplace=True)
 
     return df
+
+
+def max_abs_deviation(deviation: np.ndarray) -> float:
+    """Return the signed deviation with the largest magnitude, ignoring NaN (missing values).
+
+    Plain np.argmax returns the index of the first NaN, which would turn the result into NaN and
+    silently exempt the clip from the anomaly thresholds whenever a single value is missing.
+    Returns NaN only when every value is missing.
+    """
+    deviation = np.asarray(deviation, dtype=float)
+    if np.isnan(deviation).all():
+        return np.nan
+    return float(deviation[np.nanargmax(np.abs(deviation))])
+
+
+def parse_shutter(value) -> float:
+    """Parse a flight-log shutter speed ('1/1000.0', '0.5' or a number) into seconds; NaN if unparseable.
+
+    The CSV cells are data, so they are parsed rather than evaluated; the cutting tool writes
+    'unknown' when an SRT block has no shutter field.
+    """
+    if isinstance(value, (int, float, np.number)):
+        return float(value)
+    text = str(value).strip()
+    try:
+        if '/' in text:
+            numerator, denominator = text.split('/', 1)
+            return float(numerator) / float(denominator)
+        return float(text)
+    except (ValueError, ZeroDivisionError):
+        return np.nan
 
 
 def find_anomalies(df: pd.DataFrame, args: argparse.Namespace, logger: logging.Logger) -> pd.DataFrame:
@@ -415,12 +447,12 @@ def visualize_flight_logs_data(df_all: pd.DataFrame, output_folder: Path, visual
     for i in range(n_location_ids, n_rows * n_cols):
         fig.delaxes(axs[i])
 
-    if visualize:
-        plt.show()
     if save:
         filepath = output_folder / 'flight_logs_hovering_stats_viz.pdf'
         plt.savefig(filepath, transparent=True, bbox_inches='tight')
         logger.info(f"Hovering stats visualization saved to {filepath}")
+    if visualize:
+        plt.show()
     plt.close()
 
     # Plot selected camera settings deviations
@@ -449,12 +481,12 @@ def visualize_flight_logs_data(df_all: pd.DataFrame, output_folder: Path, visual
     for i in range(n_location_ids, n_rows * n_cols):
         fig.delaxes(axs[i])
 
-    if visualize:
-        plt.show()
     if save:
         filepath = output_folder / 'flight_logs_camera_stats_viz.pdf'
         plt.savefig(filepath, transparent=True, bbox_inches='tight')
         logger.info(f"Visualization saved to {filepath}")
+    if visualize:
+        plt.show()
     plt.close()
 
 

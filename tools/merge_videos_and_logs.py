@@ -94,11 +94,15 @@ Notes:
   formats used across DJI drone families are handled automatically.
 - GPS coordinates and other telemetry fields in the SRT content are preserved
   verbatim from the original per-flight files.
-- If a video file has no companion SRT, it is still included in the video merge but
-  its corresponding time window will be absent from the merged SRT (with a warning).
+- The cutting tool reads the merged SRT block index as the video frame number, so a
+  flight without a usable SRT (missing, empty or unparseable) is only tolerated at the
+  end of a session, where its time window is simply absent from the merged SRT (with a
+  warning). Anywhere else it would shift the telemetry of every later flight, so the
+  session's SRT is not merged (with an error) while its video still is.
 - Existing output files are skipped unless --overwrite is specified.
-- It is recommended to keep <source_dir> and <output_dir> as separate root directories
-  to prevent the recursive scan from picking up previously merged files on a second run.
+- Files named <output_stem>.* are never taken as input, so a re-run into the default
+  output location (<source_dir>) cannot merge a previous merged video into itself.
+  Keeping <source_dir> and <output_dir> as separate root directories is still recommended.
 
 Directory structure (Songdo dataset — non-prescriptive example):
   RAW/
@@ -132,12 +136,14 @@ from pathlib import Path
 from geotrax.utils.logging_utils import setup_logger
 
 
-def find_session_dirs(source_dir: Path, video_ext: str, logger: logging.Logger) -> list[Path]:
-    """Recursively find all directories that directly contain at least one video file."""
-    session_dirs = sorted({
-        p.parent for p in source_dir.rglob('*')
-        if p.is_file() and p.suffix.lower() == video_ext.lower()
-    })
+def _is_input_video(path: Path, video_ext: str, output_stem: str) -> bool:
+    """Return True for a per-flight video file, excluding previously merged outputs (<output_stem>.*)."""
+    return path.is_file() and path.suffix.lower() == video_ext.lower() and path.stem != output_stem
+
+
+def find_session_dirs(source_dir: Path, video_ext: str, output_stem: str, logger: logging.Logger) -> list[Path]:
+    """Recursively find all directories that directly contain at least one per-flight video file."""
+    session_dirs = sorted({p.parent for p in source_dir.rglob('*') if _is_input_video(p, video_ext, output_stem)})
     logger.info(f"Found {len(session_dirs)} session director{'y' if len(session_dirs) == 1 else 'ies'} under '{source_dir}'.")
     return session_dirs
 
@@ -145,13 +151,11 @@ def find_session_dirs(source_dir: Path, video_ext: str, logger: logging.Logger) 
 def find_video_srt_pairs(
     session_dir: Path,
     video_ext: str,
+    output_stem: str,
     logger: logging.Logger,
 ) -> list[tuple[Path, Path | None]]:
-    """Scan session_dir for video files (sorted by name), validate them, and find companion SRTs."""
-    video_files = sorted(
-        p for p in session_dir.iterdir()
-        if p.is_file() and p.suffix.lower() == video_ext.lower()
-    )
+    """Scan session_dir for per-flight video files (sorted by name), validate them, and find companion SRTs."""
+    video_files = sorted(p for p in session_dir.iterdir() if _is_input_video(p, video_ext, output_stem))
 
     if not video_files:
         logger.error(f"No '{video_ext}' files found in '{session_dir}'.")
@@ -210,6 +214,40 @@ def _find_companion_srt(video: Path, logger: logging.Logger) -> Path | None:
     return None
 
 
+def _read_srt_blocks(srt_file: Path) -> list[dict]:
+    """Read an SRT file with normalised line endings and parse it into blocks."""
+    text = srt_file.read_text(encoding='utf-8', errors='replace').replace('\r\n', '\n').replace('\r', '\n')
+    return _parse_srt_blocks(text)
+
+
+def select_srt_files(pairs: list[tuple[Path, Path | None]], logger: logging.Logger) -> list[Path] | None:
+    """Return the SRT files to merge, or None when a missing one would misalign the merged log.
+
+    The cutting tool treats the merged SRT block index as the global video frame number. A flight
+    without a usable SRT (missing, empty, or with no parseable blocks) contributes video frames but
+    no blocks, so every later flight's telemetry would be attributed to frames that are too early by
+    that flight's whole length. Such flights are therefore only tolerated at the end of the session.
+    """
+    usable = [srt is not None and bool(_read_srt_blocks(srt)) for _, srt in pairs]
+    n_usable = sum(usable)
+    if not n_usable:
+        return []
+    if not all(usable[:n_usable]):
+        gaps = ', '.join(video.name for (video, _), ok in zip(pairs, usable) if not ok)
+        logger.error(
+            f"No usable SRT for {gaps}, which is not at the end of the session; merging the other SRTs "
+            f"would shift the telemetry of every later flight against the video frames. The merged SRT "
+            f"is not written for this session; restore the missing SRT(s) and re-run with --overwrite."
+        )
+        return None
+    if n_usable < len(pairs):
+        logger.warning(
+            f"{len(pairs) - n_usable} trailing flight(s) have no usable SRT; their metadata will be absent "
+            f"from the end of the merged log."
+        )
+    return [srt for (_, srt), ok in zip(pairs, usable) if ok]
+
+
 def merge_videos(
     video_files: list[Path],
     output_path: Path,
@@ -230,19 +268,26 @@ def merge_videos(
         logger.info(f"[dry-run] Would write merged video to '{output_path}'.")
         return True
 
+    unsafe = [video for video in video_files if '\n' in str(video) or '\r' in str(video)]
+    if unsafe:
+        logger.error(f"Cannot merge: a line break in the path of {', '.join(repr(str(v)) for v in unsafe)} would end the concat entry.")
+        return False
+
     with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as f:
         manifest_path = Path(f.name)
         for video in video_files:
-            f.write(f"file '{video}'\n")
+            f.write(f"file {_concat_quote(video)}\n")
 
-    result = subprocess.run([
-        'ffmpeg', '-loglevel', 'error', '-y',
-        '-f', 'concat', '-safe', '0',
-        '-i', str(manifest_path),
-        '-codec', 'copy',
-        str(output_path),
-    ])
-    manifest_path.unlink(missing_ok=True)
+    try:
+        result = subprocess.run([
+            'ffmpeg', '-loglevel', 'error', '-y',
+            '-f', 'concat', '-safe', '0',
+            '-i', str(manifest_path),
+            '-codec', 'copy',
+            str(output_path),
+        ])
+    finally:
+        manifest_path.unlink(missing_ok=True)
 
     if result.returncode == 0:
         logger.notice(f"Merged video saved to '{output_path}'.")
@@ -250,6 +295,15 @@ def merge_videos(
     else:
         logger.error(f"ffmpeg failed (exit code {result.returncode}) while merging video.")
         return False
+
+
+def _concat_quote(path: Path) -> str:
+    """Quote a path for an ffmpeg concat list: single quotes, with each literal quote written as '\\''.
+
+    Without this, an apostrophe anywhere in the path (e.g. a volume named "Robert's SSD") ends the
+    quoted string early and the whole merge fails.
+    """
+    return "'" + str(path).replace("'", "'\\''") + "'"
 
 
 def merge_srt_files(
@@ -273,8 +327,7 @@ def merge_srt_files(
     frame_offset = 0
 
     for srt_file in srt_files:
-        text = srt_file.read_text(encoding='utf-8', errors='replace').replace('\r\n', '\n').replace('\r', '\n')
-        blocks = _parse_srt_blocks(text)
+        blocks = _read_srt_blocks(srt_file)
         if not blocks:
             logger.warning(f"No SRT blocks parsed from '{srt_file.name}'; skipping.")
             continue
@@ -399,7 +452,7 @@ def main() -> None:
 
     output_root = (args.output_dir or source_dir).resolve()
 
-    session_dirs = find_session_dirs(source_dir, args.video_ext, logger)
+    session_dirs = find_session_dirs(source_dir, args.video_ext, args.output_stem, logger)
     if not session_dirs:
         logger.error(f"No '{args.video_ext}' files found under '{source_dir}'.")
         return
@@ -411,7 +464,7 @@ def main() -> None:
         out_dir = output_root / rel
         logger.info(f"--- Session: '{session_dir}' ---")
 
-        pairs = find_video_srt_pairs(session_dir, args.video_ext, logger)
+        pairs = find_video_srt_pairs(session_dir, args.video_ext, args.output_stem, logger)
         if not pairs:
             logger.warning(f"No valid video files in '{session_dir}'; skipping.")
             continue
@@ -423,16 +476,13 @@ def main() -> None:
         output_srt = out_dir / f'{args.output_stem}.srt'
 
         video_files = [v for v, _ in pairs]
-        srt_files = [s for _, s in pairs if s is not None]
+        srt_files = select_srt_files(pairs, logger)
 
         merge_videos(video_files, output_video, args.overwrite, args.dry_run, logger)
 
         if srt_files:
-            missing = len(pairs) - len(srt_files)
-            if missing:
-                logger.warning(f"{missing} flight(s) have no SRT; their metadata will be absent from the merged log.")
             merge_srt_files(srt_files, output_srt, args.overwrite, args.dry_run, logger)
-        else:
+        elif srt_files is not None:
             logger.warning("No SRT flight logs found in this session; only the video will be merged.")
 
 

@@ -105,8 +105,9 @@ done
 # Remove trailing slash from the search path if present
 search_path=$(echo "$search_path" | sed 's#/$##')
 
-# Find all *.pt files recursively and export each one
-find "$search_path" -type f -name "*.pt" |
+# Find all *.pt files recursively and export each one (process substitution keeps the loop in this
+# shell, so the failure count survives it)
+failed=0
 while IFS= read -r file; do
 
     # Skip already-exported files unless overwrite is requested
@@ -119,11 +120,20 @@ while IFS= read -r file; do
 
     # Run the export (include cfg= only when a config file is provided)
     echo -e "\033[1;32mExporting:\033[0m $file"
-    cfg_arg=""
+    # Build the command as an array, so paths with spaces stay single arguments
+    cmd=(yolo)
     if [ -n "$cfg_file" ]; then
-        cfg_arg="cfg=${cfg_file} "
+        cmd+=("cfg=${cfg_file}")
     fi
-    cmd="yolo ${cfg_arg}mode=export model=${file} format=${format} batch=${batch_size} ${device}"
-    echo -e "$cmd\n"
-    $cmd
-done
+    cmd+=(mode=export "model=${file}" "format=${format}" "batch=${batch_size}")
+    if [ -n "$device" ]; then
+        cmd+=("$device")
+    fi
+    echo -e "${cmd[*]}\n"
+    "${cmd[@]}" || { echo -e "\033[0;31mExport failed:\033[0m $file"; failed=$((failed + 1)); }
+done < <(find "$search_path" -type f -name "*.pt")
+
+if [ "$failed" -gt 0 ]; then
+    echo -e "\033[0;31m${failed} export(s) failed.\033[0m"
+    exit 1
+fi

@@ -56,8 +56,10 @@ Output:
 - 'dimensions_distribution': all accepted candidate boxes and the final estimate (blue)
 
 Notes:
-- GSD and tau_c constants below are tuned to the Songdo experiment (4K drone footage
-  at 140–150 m altitude). Adjust them for other datasets.
+- The estimator parameters (gsd, eps, r0, theta_bar, tau_c) are read from
+  cfg -> extraction -> dimension_estimation of the -c config, the same values extract uses.
+- Rows filled in by --interpolate (is_interpolated == 1) are dropped before estimating, since
+  extract estimates the dimensions from real detections before interpolating.
 - The azimuth-based algorithm mirrors geotrax/extract.py exactly; any changes
   to the pipeline estimator should be reflected here for consistency.
 - Stabilised coordinates (columns 6/7) are used when available; raw coordinates
@@ -78,31 +80,32 @@ from geotrax.utils.config_utils import load_config
 from geotrax.utils.file_utils import DEFAULT_OUTPUT, detect_delimiter, get_output_dir
 from geotrax.utils.logging_utils import setup_logger
 
-# Ground sampling distance constants for the Songdo experiment
-# (4K resolution, 140–150 m flight altitude)
-GSD_150 = 0.0282  # m/px at 150 m
-GSD_140 = 0.0263  # m/px at 140 m
-GSD = (GSD_150 + GSD_140) / 2
-
-# Length-to-width ratio thresholds per vehicle class (used when azimuth is unavailable)
-# Tuned for the Songdo experiment; adjust for other datasets.
-TAU_C = {
-    0: 2.0,   # car (incl. vans, SUVs)
-    1: 2.5,   # bus
-    2: 2.1,   # truck
-    3: 1.9,   # motorcycle
-    -1: 1.7,  # unknown / fallback
-}
-
 
 def visualize_dimension_estimation(args: argparse.Namespace, logger: logging.Logger) -> None:
-    """Visualize the azimuth-based vehicle dimension estimation step by step."""
+    """Visualize the azimuth-based vehicle dimension estimation step by step.
+
+    The estimator parameters come from cfg -> extraction -> dimension_estimation, so the plot shows
+    what extract computed with the same config.
+    """
+    dim_cfg = load_config(args.cfg, logger).get('extraction', {}).get('dimension_estimation')
+    if not dim_cfg:
+        logger.critical(f"Config '{args.cfg}' has no 'extraction -> dimension_estimation' section.")
+        sys.exit(1)
     tracks = load_tracks(args, logger)
     args = resolve_vehicle_id(tracks, args, logger)
-    visualize_id(tracks, args, logger)
+    visualize_id(
+        tracks, args, logger, eps=dim_cfg['eps'], r0=dim_cfg['r0'], gsd=dim_cfg['gsd'],
+        theta_bar_deg=dim_cfg['theta_bar'], tau_c=dim_cfg['tau_c'],
+    )
 
 
 def load_tracks(args: argparse.Namespace, logger: logging.Logger) -> np.ndarray:
+    """Load the saved tracks, keeping only real detections.
+
+    With extraction.interpolate the file has an is_interpolated column (15 columns, or 11 without
+    stabilization); its interpolated rows are dropped, since extract estimated the dimensions before
+    they existed.
+    """
     output_cfg = load_config(args.cfg, logger).get('output', DEFAULT_OUTPUT)
     tracks_postfix = output_cfg.get('tracks_postfix', DEFAULT_OUTPUT['tracks_postfix'])
     tracks_file = get_output_dir(args.source, output_cfg) / f'{args.source.stem}{tracks_postfix}.txt'
@@ -113,6 +116,8 @@ def load_tracks(args: argparse.Namespace, logger: logging.Logger) -> np.ndarray:
     tracks = np.loadtxt(tracks_file, delimiter=delimiter)
     if tracks.ndim == 1:
         tracks = tracks.reshape(1, -1)
+    if tracks.shape[1] in (11, 15):
+        tracks = tracks[tracks[:, -1] == 0]
     return tracks
 
 
@@ -187,11 +192,12 @@ def visualize_id(
     tracks: np.ndarray,
     args: argparse.Namespace,
     logger: logging.Logger,
-    eps: int = 4,
-    r0: float = 1.25,
-    gsd: float = GSD,
-    theta_bar_deg: float = 15.0,
-    tau_c: dict = TAU_C,
+    *,
+    eps: int,
+    r0: float,
+    gsd: float,
+    theta_bar_deg: float,
+    tau_c: dict,
 ) -> None:
     radius_threshold = r0 / gsd
     theta_bar = np.deg2rad(theta_bar_deg)

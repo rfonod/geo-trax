@@ -87,7 +87,7 @@ These chains show how the tools compose around the `geotrax` stages:
 | [`compare_tracking.py`](#compare_trackingpy) | Compare trackers via track-length distributions and KL divergence | 🟢 |
 | [`compute_bb_center_error.py`](#compute_bb_center_errorpy) | Bounding-box center error between human labels and model predictions | 🟢 |
 | [`analyze_bb_ratios.py`](#analyze_bb_ratiospy) | Length/width aspect-ratio statistics and histograms per vehicle class | 🧪 |
-| [`viz_dimension_estimation.py`](#viz_dimension_estimationpy) | Step-by-step visualization of the azimuth-based dimension estimator | 🔵 |
+| [`viz_dimension_estimation.py`](#viz_dimension_estimationpy) | Step-by-step visualization of the azimuth-based dimension estimator | 🟢 |
 | [`compare_av_detections_and_tune_filters.py`](#compare_av_detections_and_tune_filterspy) | Compare extracted vs. RTK-GNSS AV trajectories; tune smoothing filters | 🧪 |
 
 ### 5. Dataset QA & traceability
@@ -108,7 +108,10 @@ Turn raw DJI drone footage and flight logs into clean, per-location clips for th
 🟢 **General** — Merges multiple per-flight DJI video files and their SRT flight logs from a
 session directory into a single `0_merged.mp4` / `0_merged.srt` pair, handling the DJI counter
 reset and `_trimmed` conventions. Configurable video extension and output stem; can process one
-session or sweep an entire tree. (Developed for Songdo, but assumes only DJI conventions.)
+session or sweep an entire tree. Previously merged `<output_stem>.*` files are never re-read as
+input. A flight without a usable SRT is tolerated only at the end of a session: anywhere else it
+would shift the telemetry of every later flight, so that session's SRT is not merged. (Developed for
+Songdo, but assumes only DJI conventions.)
 
 ```bash
 python tools/merge_videos_and_logs.py /path/to/RAW --output-dir /path/to/PROCESSED
@@ -129,8 +132,9 @@ python tools/cut_merged_videos_and_logs.py /path/to/PROCESSED \
 ### `recut_video_and_log.py`
 
 🟢 **General** — Re-cuts a video and its companion CSV log to a frame range, via a cuts file or
-direct `--start`/`--end`. Defaults to keyframe-aligned cuts for codec efficiency (`--exact-cut`
-for exact frames), supports `--rotate`, and rebases CSV frame numbers to start at 0.
+direct `--start`/`--end`. Defaults to keyframe-aligned cuts for codec efficiency (only the start
+moves to a keyframe; `--exact-cut` for exact frames), supports `--rotate`, and rebases CSV frame
+numbers to start at 0. The end frame is exclusive in both the video and the CSV.
 
 ```bash
 python tools/recut_video_and_log.py video.MP4 cuts.txt
@@ -206,7 +210,9 @@ python tools/annotate_frames.py path/to/images/ --save-masked --margin 0.2 -z pa
 
 🟢 **General** — Converts a directory of YOLO `.txt` labels (normalized) to COCO JSON with
 absolute pixel coordinates. The class map comes inline (`-cm 0=Car ...`), from a YAML/JSON file
-(`-mf`), or — by default — is extracted from the pipeline's configured YOLO model.
+(`-mf`), or by default from the config (`extraction -> class_rename`, else the names of the
+`extraction -> model` weights). Label and JSON paths mirror the image's sub-folder, and existing
+JSON files are kept unless `--overwrite` is given.
 
 ```bash
 python tools/yolo_to_coco.py path/to/labels/                       # class map from model (config)
@@ -217,7 +223,8 @@ python tools/yolo_to_coco.py path/to/labels/ -cm 0=Car 1=Bus 2=Truck 3=Motorcycl
 
 🟢 **General** — Batch-cleans COCO-like JSON annotation files: strip embedded image data
 (`--remove-image-data`), normalize paths (`--normalize-to-unix`/`-windows`), and convert
-between horizontal and oriented boxes (`--to-obb`/`--to-hbb`).
+between horizontal and oriented boxes (`--to-obb`/`--to-hbb`). Files that are not LabelMe
+annotations are skipped, and each file is rewritten atomically.
 
 ```bash
 python tools/fix_json_annotations.py path/to/annotations/ --remove-image-data
@@ -355,9 +362,10 @@ step-by-step visualization of that estimator on one vehicle ID, use `viz_dimensi
 
 ### `viz_dimension_estimation.py`
 
-🔵 **Songdo** — Renders step-by-step visualizations of the azimuth-based dimension estimator for
+🟢 **General** — Renders step-by-step visualizations of the azimuth-based dimension estimator for
 one vehicle ID: a trajectory plot with colour-coded boxes and a dimension-distribution histogram.
-Constants are tuned to the Songdo DJI Mavic 3 setup (140–150 m, 4K, EPSG:5186).
+The estimator parameters come from `extraction -> dimension_estimation` of the `-c` config, the same
+values `extract` uses, and rows added by `--interpolate` are left out, as they are in `extract`.
 
 ```bash
 python tools/viz_dimension_estimation.py path/to/video.mp4 --id 42 --show
@@ -404,8 +412,9 @@ python tools/check_dataset.py dataset/ --speed-threshold 100 --acceleration-thre
 ### `find_source_id.py`
 
 🔵 **Songdo** — Given a `Vehicle_ID` in an aggregated dataset CSV, traces it back to the original
-source video and per-video ID using the `PROCESSED/` structure and the ID-offset logic from
-`geotrax aggregate`. Useful for verifying or debugging specific trajectories.
+source video and per-video ID using the `PROCESSED/` structure. The ID offsets are replayed with
+`geotrax aggregate`'s own code, so files and rows it skipped are accounted for. Useful for verifying
+or debugging specific trajectories.
 
 ```bash
 python tools/find_source_id.py 2022-10-04_A/2022-10-04_A_AM1.csv 5 \

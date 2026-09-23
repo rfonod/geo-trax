@@ -112,7 +112,11 @@ def execute_ortho_benchmark(images_dir, orthos_dir, labels_dir, args, logger):
 
     images_filepaths = sorted(images_dir.glob('*.png'))
     orthos_filepaths = sorted(orthos_dir.glob('*.png'))
+    if not orthos_filepaths:
+        logger.error(f"No orthophotos (*.png) found in '{orthos_dir}'; nothing to benchmark.")
+        return
 
+    ortho_w_resolutions = range(args.min_resolution, args.max_resolution + 1, args.resolution_step)
     results_all = {}
     for ortho_filepath in orthos_filepaths:
         location_id = ortho_filepath.stem
@@ -123,7 +127,6 @@ def execute_ortho_benchmark(images_dir, orthos_dir, labels_dir, args, logger):
         ortho_h_original, ortho_w_original = ortho.shape[:2]
 
         results_location_id = {}
-        ortho_w_resolutions = range(args.min_resolution, args.max_resolution + 1, args.resolution_step)
         for ortho_w_new in ortho_w_resolutions:
             if ortho_w_new > ortho_w_original:
                 logger.warning(f"Orthophoto width {ortho_w_new} is larger than the original width {ortho_w_original}. Skipping.")
@@ -182,10 +185,16 @@ def execute_ortho_benchmark(images_dir, orthos_dir, labels_dir, args, logger):
 
     to_latex.append("\nAggregated results for all intersections:")
     for ortho_w_new in ortho_w_resolutions:
-        if ortho_w_new not in results_all[location_id]:
+        locations_with_resolution = [results for results in results_all.values() if ortho_w_new in results]
+        if not locations_with_resolution:
             continue
+        if len(locations_with_resolution) < len(results_all):
+            logger.warning(
+                f"Resolution {ortho_w_new} exceeds the width of {len(results_all) - len(locations_with_resolution)} "
+                f"orthophoto(s); its aggregate covers only the other {len(locations_with_resolution)} location(s)."
+            )
         errors, comp_times, inliers = [], [], []
-        for _, results_location_id in results_all.items():
+        for results_location_id in locations_with_resolution:
             errors.extend(results_location_id[ortho_w_new]['Errors'])
             comp_times.extend(results_location_id[ortho_w_new]['Comp_times'])
             inliers.extend(results_location_id[ortho_w_new]['Inliers'])

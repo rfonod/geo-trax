@@ -12,6 +12,7 @@ import pandas as pd
 import pytest
 
 from geotrax.georeference import (
+    resolve_reference_frame,
     add_georeferencing_args,
     apply_filter,
     apply_homography,
@@ -424,8 +425,8 @@ def test_create_and_format_georeferenced_df_rounding():
     df = create_and_format_georeferenced_df(**inputs, min_traj_length=0, logger=logger)
     assert df['Ortho_X'].iloc[0] == pytest.approx(round(123.456, 1))
     assert df['Local_X'].iloc[0] == pytest.approx(round(1000.123, 2))
-    assert df['Longitude'].iloc[0] == pytest.approx(round(127.987654321, 7), abs=1e-6)
-    assert df['Latitude'].iloc[0] == pytest.approx(round(37.123456789, 7), abs=1e-6)
+    assert df['Longitude'].iloc[0] == pytest.approx(round(127.987654321, 7), abs=1e-12)
+    assert df['Latitude'].iloc[0] == pytest.approx(round(37.123456789, 7), abs=1e-12)
 
 
 def test_create_and_format_georeferenced_df_visibility_is_int():
@@ -439,3 +440,34 @@ def test_create_and_format_georeferenced_df_min_traj_length_filters():
     inputs = _make_georef_inputs(n_veh=3, n_frames=4)
     df = create_and_format_georeferenced_df(**inputs, min_traj_length=5, logger=logger)
     assert len(df) == 0
+
+
+def _anchor_setup(tmp_path, recorded, configured, ref_frame=0, cli_provided=()):
+    source = tmp_path / 'A1.mp4'
+    if recorded is not None:
+        (tmp_path / 'results').mkdir()
+        (tmp_path / 'results' / 'A1.yaml').write_text(f'processing:\n  cut_frame_left: {recorded}\n')
+    args = argparse.Namespace(source=source, ref_frame=ref_frame, _cli_provided=frozenset(cli_provided))
+    full_config = {'main': {'processing': {'cut_frame_left': configured}, 'output': {'folder': 'results'}}}
+    return args, full_config
+
+
+def test_resolve_reference_frame_prefers_the_recorded_stabilization_anchor(tmp_path):
+    """A separate georeference run without --cut-frame-left must still use extract's anchor."""
+    args, full_config = _anchor_setup(tmp_path, recorded=300, configured=0)
+    config = {}
+    resolve_reference_frame(args, full_config, config, logger)
+    assert args.ref_frame == 300
+    assert config['processing']['ref_frame'] == 300
+
+
+def test_resolve_reference_frame_falls_back_to_this_runs_cut_frame_left(tmp_path):
+    args, full_config = _anchor_setup(tmp_path, recorded=None, configured=40)
+    resolve_reference_frame(args, full_config, {}, logger)
+    assert args.ref_frame == 40
+
+
+def test_resolve_reference_frame_keeps_an_explicit_ref_frame(tmp_path):
+    args, full_config = _anchor_setup(tmp_path, recorded=300, configured=0, ref_frame=5, cli_provided={'ref_frame'})
+    resolve_reference_frame(args, full_config, {}, logger)
+    assert args.ref_frame == 5

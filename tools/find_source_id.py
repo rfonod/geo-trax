@@ -52,7 +52,8 @@ Output:
 
 Notes:
 - Automatically detects PROCESSED folder from dataset location or uses custom path
-- Applies same ID offset logic as aggregation process to reverse-map vehicle IDs
+- Replays the aggregation's ID offsets with the same code (geotrax.aggregate), so files and rows
+  skipped during aggregation shift the offsets exactly as they did then
 - Searches within specific date/location/session scope for efficiency
 - Handles multiple drone data with proper sorting and offset calculation
 - Useful for validation, debugging, and detailed vehicle trajectory analysis
@@ -67,6 +68,7 @@ from typing import Union
 
 import pandas as pd
 
+from geotrax.aggregate import trace_dataset_vehicle
 from geotrax.utils.cli_utils import DEFAULT_CFG
 from geotrax.utils.config_utils import load_config
 from geotrax.utils.constants import VIDEO_FORMATS
@@ -78,6 +80,9 @@ def find_source_id(dataset_filepath: Path, vehicle_id: int, logger: logging.Logg
                    processed_folder: Union[Path, None] = None, folder_name: str = None) -> tuple:
     """
     Find the original vehicle ID extracted from the source video from the dataset ID.
+
+    The per-drone ID offsets are replayed by geotrax.aggregate.trace_dataset_vehicle, with the same
+    file grouping, skipped files and dropped rows as the aggregation itself.
     """
     if not dataset_filepath.exists():
         logger.error(f"Input folder '{dataset_filepath}' does not exist.")
@@ -93,61 +98,28 @@ def find_source_id(dataset_filepath: Path, vehicle_id: int, logger: logging.Logg
         logger.warning(f"Vehicle ID {vehicle_id} not found in the dataset.")
         return None, None
 
-    # Get the drone ID
-    drone_id = vehicle_df['Drone_ID'].iloc[0]
-
-    # Narrow down the search to the specific date, location, and flight session
-    date, location_id, flight_session = dataset_filepath.stem.split('_')[0:3]
+    date, _, flight_session = dataset_filepath.stem.split('_')[0:3]
     folder = folder_name or DEFAULT_OUTPUT['folder']
-    search_space = f"{date}/D*/{flight_session}/{folder}/{location_id}*.csv"
-
-    # Find all relevant georeferenced results (.csv files) in the PROCESSED directory
-    csv_files = list(processed_folder.rglob(search_space))
-    if not csv_files:
-        logger.warning(f"No CSV files found in '{processed_folder}'.")
+    source_results, source_id = trace_dataset_vehicle(processed_folder, dataset_filepath.stem, vehicle_id, folder, logger)
+    if source_results is None:
+        logger.warning(f"No georeferenced results in '{processed_folder}' contain dataset vehicle ID {vehicle_id}.")
         return None, None
 
-    # Group files by date, flight session, and location id
-    files = []
-    for source_results in csv_files:
-        try:
-            drone_id = source_results.parents[2].name
-            files.append((source_results, drone_id))
-        except Exception as e:
-            logger.warning(f"Skipping invalid file path: {source_results} ({str(e)})")
-
-    # Sort values for each key based on drone ID and file name
-    files = sorted(files, key=lambda x: (int(x[1][1:]), x[0]))
-
-    # Find the source ID and source video
-    source_id, source_video = None, None
-    vehicle_id_offset = 0
-    for source_results, drone_id in files:
-        try:
-            df = pd.read_csv(source_results)
-            df['Vehicle_ID'] = df['Vehicle_ID'] + vehicle_id_offset
-            if vehicle_id in df['Vehicle_ID'].values:
-                source_id = vehicle_id - vehicle_id_offset
-                clip_dir = source_results.parents[1]
-                source_video = next(
-                    (p for p in clip_dir.glob(source_results.stem + '.*') if p.suffix.lower() in VIDEO_FORMATS),
-                    clip_dir / (source_results.stem + '.MP4'),
-                )
-                logger.notice(
-                    f"Date     : {date}\n"
-                    f"Drone ID : {drone_id}\n"
-                    f"Session  : {flight_session}\n"
-                    f"Video ID : {source_results.stem}\n"
-                    f"Vehicle ID (dataset) : {vehicle_id}\n"
-                    f"Vehicle ID (video)   : {source_id}\n"
-                    f"{source_video}\n"
-                    f"{source_results}"
-                )
-                break
-            vehicle_id_offset = df['Vehicle_ID'].max()
-        except Exception as e:
-            logger.error(f"Error processing file {source_results}: {str(e)}")
-
+    clip_dir = source_results.parents[1]
+    source_video = next(
+        (p for p in clip_dir.glob(source_results.stem + '.*') if p.suffix.lower() in VIDEO_FORMATS),
+        clip_dir / (source_results.stem + '.MP4'),
+    )
+    logger.notice(
+        f"Date     : {date}\n"
+        f"Drone ID : {source_results.parents[2].name}\n"
+        f"Session  : {flight_session}\n"
+        f"Video ID : {source_results.stem}\n"
+        f"Vehicle ID (dataset) : {vehicle_id}\n"
+        f"Vehicle ID (video)   : {source_id}\n"
+        f"{source_video}\n"
+        f"{source_results}"
+    )
     return source_id, source_video
 
 

@@ -266,9 +266,14 @@ if [ "$arg_debug_mode" == "1" ]; then
 else
     mkdir -p "projects/${dataset}/${run_name}"
     echo -e "$cmd_train\n" > projects/${dataset}/${run_name}/commands.txt
-    $cmd_train
+    # Validate only weights this run produced: after a failed training, best.pt is missing or left
+    # over from an earlier (or partial) run, and the exit code must report the failure (e.g. to SLURM)
+    $cmd_train || { rc=$?; echo -e "\nTraining failed (exit code $rc); skipping the test validations."; exit $rc; }
     echo -e "$cmd_test\n" | tee -a projects/${dataset}/${run_name}/commands.txt
     $cmd_test
+    rc_test=$?
     echo -e "$cmd_test_sc\n" | tee -a projects/${dataset}/${run_name}/commands.txt
     $cmd_test_sc
+    rc_test_sc=$?
+    exit $(( rc_test != 0 ? rc_test : rc_test_sc ))
 fi

@@ -59,13 +59,16 @@ Notes:
 - Prevents conflicts with existing higher sequence numbers
 - Uses tools/recut_video_and_log.py and 'geotrax batch' for processing
 - Debug mode shows operations without modifying files
-- Automatically handles backup file creation and restoration
+- Keeps the originals as *_original; if a recut fails, its partial outputs are deleted and the
+  originals are renamed back, so the clip can be fixed on a re-run
 """
 
 import argparse
 import logging
 import os
+import shlex
 import subprocess
+import sys
 from pathlib import Path
 
 import pandas as pd
@@ -153,27 +156,51 @@ def fix_timestamp_anomalies(args: argparse.Namespace, logger: logging.Logger) ->
         if not args.debug:
             os.rename(csv_filepath, csv_filepath_original)
 
-        # recut the videos and process the cut files
-        for cut in cuts:
-            cut_filepath = cut[0]
-            output_filepath = cut_filepath.with_name(cut_filepath.stem.split('_')[-2] + video_filepath.suffix)
-            cmd1 = f"python tools/recut_video_and_log.py {video_filepath_original} {cut_filepath} -o {output_filepath}"
-            logger.info(f"Running: {cmd1}")
-            if not args.debug:
-                try:
-                    subprocess.run(cmd1, shell=True, check=True)
-                except subprocess.CalledProcessError as e:
-                    logger.error(f"Recut failed for '{output_filepath}': {e}")
-                    continue
+        # recut the videos, restoring the originals if any recut fails, then process the cut files
+        outputs = [cut[0].with_name(cut[0].stem.split('_')[-2] + video_filepath.suffix) for cut in cuts]
+        if not args.debug and not recut_all(cuts, outputs, video_filepath_original, logger):
+            restore_originals(outputs, (video_filepath_original, video_filepath), (csv_filepath_original, csv_filepath), logger)
+            continue
 
-            cmd2 = f"geotrax batch {output_filepath} -y -o"
-            logger.info(f"Running: {cmd2}")
+        for output_filepath in outputs:
+            cmd = [sys.executable, '-m', 'geotrax', 'batch', str(output_filepath), '-y', '-o']
+            logger.info(f"Running: {shlex.join(cmd)}")
             if not args.debug:
                 try:
-                    subprocess.run(cmd2, shell=True, check=True)
+                    subprocess.run(cmd, check=True)
                 except subprocess.CalledProcessError as e:
                     logger.error(f"Batch processing failed for '{output_filepath}': {e}")
 
+
+def recut_all(cuts: list, outputs: list, video_filepath_original: Path, logger: logging.Logger) -> bool:
+    """Run tools/recut_video_and_log.py for every cut; return False as soon as one fails.
+
+    The script is located next to this file and run with the current interpreter, without a shell,
+    so neither the working directory nor spaces in the paths can make it fail.
+    """
+    recut_script = Path(__file__).resolve().with_name('recut_video_and_log.py')
+    for cut, output_filepath in zip(cuts, outputs):
+        cmd = [sys.executable, str(recut_script), str(video_filepath_original), str(cut[0]), '-o', str(output_filepath)]
+        logger.info(f"Running: {shlex.join(cmd)}")
+        try:
+            subprocess.run(cmd, check=True)
+        except subprocess.CalledProcessError as e:
+            logger.error(f"Recut failed for '{output_filepath}': {e}")
+            return False
+    return True
+
+
+def restore_originals(outputs: list, *renamed: tuple, logger: logging.Logger) -> None:
+    """Undo a failed fix: delete the partial recut outputs and rename the originals back.
+
+    Without this the clip would exist only as *_original, and a re-run would skip it as not found.
+    """
+    for output_filepath in outputs:
+        for path in (output_filepath, output_filepath.with_suffix('.csv'), output_filepath.with_suffix('.CSV')):
+            path.unlink(missing_ok=True)
+    for original, restored in renamed:
+        os.rename(original, restored)
+        logger.warning(f"Restored '{restored}' from '{original.name}'.")
 
 def parse_cli_args() -> argparse.Namespace:
     """Parse command-line arguments."""

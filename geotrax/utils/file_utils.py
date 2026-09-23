@@ -5,11 +5,16 @@
 
 import argparse
 import logging
+import os
+import subprocess
 import sys
+from contextlib import contextmanager
 from pathlib import Path
-from typing import Optional, Tuple, Union
+from typing import Iterator, Optional, Tuple, Union
 
 import cv2
+import numpy as np
+import yaml
 
 from geotrax.utils.constants import MACOS, WINDOWS
 
@@ -72,6 +77,45 @@ def build_result_path(
     if result_type == 'metadata':
         return out_dir / f"{stem}{cfg.get('metadata_postfix', DEFAULT_OUTPUT['metadata_postfix'])}.yaml"
     return None
+
+
+def read_recorded_stab_anchor(source: Path, output_cfg: Optional[dict] = None) -> Optional[int]:
+    """Return the stabilization anchor frame recorded in the run-metadata YAML of *source*, or None.
+
+    The stabilized track coordinates are expressed relative to the ``cut_frame_left`` that ``extract``
+    ran with, which it records under ``processing`` in the metadata YAML. Stages that run separately
+    (``georeference``, ``visualize``) must use that frame rather than their own ``cut_frame_left``.
+    Returns None when the file is missing or unreadable (e.g. results from before v1.4.0) or holds no
+    integer anchor, leaving the fallback to the caller.
+    """
+    metadata_path = build_result_path(source, 'metadata', output_cfg)
+    try:
+        with open(metadata_path) as f:
+            metadata = yaml.safe_load(f) or {}
+    except (OSError, yaml.YAMLError):
+        return None
+    processing = metadata.get('processing') if isinstance(metadata, dict) else None
+    anchor = processing.get('cut_frame_left') if isinstance(processing, dict) else None
+    if not isinstance(anchor, int) or isinstance(anchor, bool):
+        return None
+    return anchor
+
+
+@contextmanager
+def atomic_output(path: Path) -> Iterator[Path]:
+    """Yield a temporary path next to *path* that replaces *path* only if the block completes.
+
+    Result files are written in place otherwise, and ``batch`` treats any existing result as complete,
+    so an interrupted or failed write (Ctrl+C, a SLURM kill, a full disk) would leave a truncated file
+    that later runs skip and downstream stages read as valid. With this, *path* holds either its
+    previous content or the complete new one, and the temporary file is always removed.
+    """
+    tmp_path = path.with_name(f'.{path.name}.tmp')
+    try:
+        yield tmp_path
+        os.replace(tmp_path, path)
+    finally:
+        tmp_path.unlink(missing_ok=True)
 
 
 def detect_delimiter(filepath: Path, lines_to_check: int = 5) -> str:
@@ -207,3 +251,24 @@ def check_if_results_exist(
     """
     result_path = build_result_path(file, result_type, output_cfg, viz_mode, ext)
     return (result_path.exists() if result_path else False), result_path
+
+
+def get_keyframe_times(video_path: Path) -> np.ndarray:
+    """Return the presentation times (seconds) of the video keyframes, in stream order.
+
+    Reads ffprobe's per-packet ``pts_time,flags`` output and keeps the packets flagged ``K``. ffprobe
+    runs with an argument list, without a shell, so any path works on every platform (a shell pipe
+    through awk would need POSIX quoting, which cmd.exe does not honor). Raises
+    ``subprocess.CalledProcessError`` if ffprobe fails.
+    """
+    output = subprocess.check_output(
+        ['ffprobe', '-loglevel', 'error', '-select_streams', 'v:0', '-show_entries', 'packet=pts_time,flags',
+         '-of', 'csv=print_section=0', str(video_path)],
+        text=True,
+    )
+    times = []
+    for line in output.splitlines():
+        fields = line.strip().split(',')
+        if len(fields) >= 2 and 'K' in fields[1] and fields[0] not in ('', 'N/A'):
+            times.append(float(fields[0]))
+    return np.array(times)

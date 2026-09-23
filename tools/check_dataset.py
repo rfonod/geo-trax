@@ -57,60 +57,29 @@ from typing import Union
 import pandas as pd
 import tqdm
 
+from geotrax.aggregate import trace_dataset_vehicle
 from geotrax.utils.cli_utils import DEFAULT_CFG
 from geotrax.utils.config_utils import load_config
 from geotrax.utils.file_utils import DEFAULT_OUTPUT
 from geotrax.utils.logging_utils import setup_logger
 
 
-def find_source_id(dataset_filepath: Path, vehicle_id: int, processed_folder: Union[Path, None] = None, folder_name: str = None) -> tuple:
+def find_source_id(dataset_filepath: Path, vehicle_id: int, logger: logging.Logger, processed_folder: Union[Path, None] = None, folder_name: str = None) -> tuple:
     """
     Trace an aggregated-dataset vehicle ID back to its original ID and source video, by
-    reversing the per-drone ID offset applied during aggregation.
+    reversing the per-drone ID offset applied during aggregation. The offsets are replayed by
+    geotrax.aggregate.trace_dataset_vehicle, with the same skipped files and dropped rows.
     """
     if not dataset_filepath.exists():
         print(f"Input folder '{dataset_filepath}' does not exist.")
         return None, None
 
     processed_folder = get_processed_folder(dataset_filepath, processed_folder)
-
-    df = pd.read_csv(dataset_filepath, dtype={'Column14': str}, low_memory=False)
-    if df[df['Vehicle_ID'] == vehicle_id].empty:
-        print(f"Vehicle ID {vehicle_id} not found in the dataset.")
-        return None, None
-
-    date, location_id, flight_session = dataset_filepath.stem.split('_')[0:3]
     folder = folder_name or DEFAULT_OUTPUT['folder']
-    search_space = f"{date}/D*/{flight_session}/{folder}/{location_id}*.csv"
-    csv_files = list(processed_folder.rglob(search_space))
-    if not csv_files:
-        print(f"No CSV files found in '{processed_folder}'.")
+    source_results, source_id = trace_dataset_vehicle(processed_folder, dataset_filepath.stem, vehicle_id, folder, logger)
+    if source_results is None:
         return None, None
-
-    files = []
-    for source_results in csv_files:
-        try:
-            drone_id = source_results.parents[2].name
-            files.append((source_results, drone_id))
-        except Exception as e:
-            print(f"Skipping invalid file path: {source_results} ({str(e)})")
-    files = sorted(files, key=lambda x: (int(x[1][1:]), x[0]))
-
-    source_id, source_video = None, None
-    vehicle_id_offset = 0
-    for source_results, _drone_id in files:
-        try:
-            df = pd.read_csv(source_results)
-            df['Vehicle_ID'] = df['Vehicle_ID'] + vehicle_id_offset
-            if vehicle_id in df['Vehicle_ID'].values:
-                source_id = vehicle_id - vehicle_id_offset
-                source_video = source_results.parents[1] / (source_results.stem + '.MP4')
-                break
-            vehicle_id_offset = df['Vehicle_ID'].max()
-        except Exception as e:
-            print(f"Error processing file {source_results}: {str(e)}")
-
-    return source_id, source_video
+    return source_id, source_results.parents[1] / (source_results.stem + '.MP4')
 
 
 def get_processed_folder(source: Path, processed_folder: Union[Path, None]) -> Path:
@@ -162,11 +131,11 @@ def check_for_excessive_values(csv_files: list, args: argparse.Namespace, logger
 
         speed_violations = df[df['Vehicle_Speed'] > args.speed_threshold][columns]
         speed_violations = speed_violations.loc[speed_violations.groupby('Vehicle_ID')['Vehicle_Speed'].idxmax()]
-        speed_violations_df = pd.concat([speed_violations_df, speed_violations])
+        speed_violations_df = pd.concat([speed_violations_df, speed_violations], ignore_index=True)
 
         acc_violations = df[df['Vehicle_Acceleration'].abs() > args.acceleration_threshold][columns]
-        acc_violations = acc_violations.loc[acc_violations.groupby('Vehicle_ID')['Vehicle_Acceleration'].abs().idxmax()]
-        acceleration_violations_df = pd.concat([acceleration_violations_df, acc_violations])
+        acc_violations = acc_violations.loc[acc_violations['Vehicle_Acceleration'].abs().groupby(acc_violations['Vehicle_ID']).idxmax()]
+        acceleration_violations_df = pd.concat([acceleration_violations_df, acc_violations], ignore_index=True)
 
     logger.notice(f"Checking for excessive speed values above {args.speed_threshold} km/h in the dataset...")
     report_violations(speed_violations_df, 'speed', logger, folder_name=folder_name)
@@ -190,7 +159,7 @@ def report_violations(violations_df: pd.DataFrame, violation_type: str, logger: 
         violations_df = violations_df.sort_values(by='Vehicle_Speed', ascending=False)
 
     for index, row in violations_df.iterrows():
-        source_id, source_video = find_source_id(Path(row['Dataset']), row['Vehicle_ID'], folder_name=folder_name)
+        source_id, source_video = find_source_id(Path(row['Dataset']), row['Vehicle_ID'], logger, folder_name=folder_name)
         violations_df.at[index, 'Dataset'] = row['Dataset'].name
         if source_id is None:
             continue

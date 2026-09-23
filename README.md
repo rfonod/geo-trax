@@ -238,7 +238,7 @@ The default detector is **YOLOv8s** (HBB, 1920 × 1920 px, ~11 M parameters), tr
 
 > Pedestrian and bicycle classes exist in the weights but are underrepresented, unevaluated, and filtered by default. See the [model card](https://huggingface.co/rfonod/geo-trax) for full details.
 
-To use a different model, point `--model` (CLI) or `extraction.model` (config) to a local `.pt` path or `hf://<org>/<repo>/<file>.pt`; any [Ultralytics](https://github.com/ultralytics/ultralytics)-compatible model works.
+To use a different model, point `--model` (CLI) or `extraction.model` (config) to a local `.pt` path or `hf://<org>/<repo>/<file>.pt`; any [Ultralytics](https://github.com/ultralytics/ultralytics)-compatible model works. An `hf://` reference follows the repo's current `main`; to pin an exact version, add a revision (commit SHA, tag or branch) after the repo name: `hf://<org>/<repo>@<revision>/<file>.pt`.
 
 ### Small-Object Detection with SAHI
 
@@ -604,7 +604,7 @@ Suppose the input video is `video_file.mp4`. By default, outputs are written to 
 - **video_file_mode_X.mp4** (`<stem><visualization_postfix>_mode_<X>.mp4`): Annotated video in five rendering modes (X = 0 / 1 / 2 / 3 / 4):
   - **Mode 0**: overlaid on the original (unstabilized) video
   - **Mode 1**: overlaid on the stabilized video
-  - **Mode 2**: plotted on the static reference frame
+  - **Mode 2**: plotted on the static reference frame (the stabilization anchor recorded in the run-metadata YAML, so the background matches the stabilized coordinates even if `visualize` runs with a different `cut_frame_left`)
   - **Mode 3**: rotated bounding boxes on the original video, where each box is sized to the vehicle's estimated physical dimensions and rotated to its per-frame heading (derived from the camera-motion-free stabilized trajectory and projected back onto the original frame). Requires stabilization to have been run.
   - **Mode 4**: the same rotated bounding boxes as Mode 3, but drawn directly on the stabilized video (no back-projection). Requires stabilization to have been run.
 
@@ -731,7 +731,7 @@ Because only the leading letters matter, the same context can instead be packed 
 | `U2.mp4` | `U` | `ORTHOPHOTOS/U.png`, … |
 | `U_D10_2022-10-07_PM5_60s.mp4` | `U` | `ORTHOPHOTOS/U.png`, … |
 
-`geotrax aggregate` groups results by location (and date/session), merging clips from different drones that cover the same place into a unified dataset.
+`geotrax aggregate` groups results by location (and date/session), merging clips from different drones that cover the same place into a unified dataset. It reads the grouping from the `<date>/D<n>/<session>/<output folder>/` layout, so drone folders must be named `D` plus a number (results elsewhere are skipped with a warning) and the output folder must be a relative name, not an absolute path. Rows whose timestamp is undefined (frames missing from the flight log) are dropped with a warning; the rest of the clip is kept.
 
 </details>
 
@@ -784,7 +784,7 @@ If you use **Geo-trax** in your research or software, please cite:
   title = {Geo-trax: A Comprehensive Framework for Georeferenced Vehicle Trajectory Extraction from Drone Imagery},
   year = {2026},
   month = sep,
-  version = {1.4.3},
+  version = {1.4.4},
   license = {MIT},
   doi = {10.5281/zenodo.12119542},
   url = {https://github.com/rfonod/geo-trax}

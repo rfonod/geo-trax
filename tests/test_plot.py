@@ -6,7 +6,7 @@
 import pandas as pd
 import pytest
 
-from geotrax.plot import filter_classes, get_xlabel, get_ylabel
+from geotrax.plot import AGG_STEM_MAX_LEN, aggregated_stem, filter_classes, get_xlabel, get_ylabel, merge_coordinates
 
 
 @pytest.mark.parametrize(
@@ -51,3 +51,28 @@ def test_filter_classes_empty_filter_is_noop():
     df = pd.DataFrame({'Vehicle_Class': [0, 1, 2]})
     result = filter_classes(df, [])
     assert len(result) == 3
+
+
+# --- aggregation helpers -----------------------------------------------------
+
+def test_aggregated_stem_joins_stems():
+    assert aggregated_stem('A', ['2022-10-07_A_AM1', '2022-10-07_A_PM1']) == 'agg_2022-10-07_A_AM1_2022-10-07_A_PM1'
+
+
+def test_aggregated_stem_falls_back_when_too_long():
+    stems = [f'2022-10-04_A_AM{i}_D3' for i in range(20)]
+    stem = aggregated_stem('A', stems)
+    assert stem == 'agg_A_20_files'
+    assert len(stem) <= AGG_STEM_MAX_LEN
+
+
+def test_merge_coordinates_first_file_without_results():
+    img = {'Unstabilized image coordinates': ['X_unstabilized', 'Y_unstabilized']}
+    assert merge_coordinates(None, img) == img
+    assert merge_coordinates(img, None) == img
+
+
+def test_merge_coordinates_keeps_only_shared_systems():
+    unstab = {'Unstabilized image coordinates': ['X_unstabilized', 'Y_unstabilized']}
+    both = {**unstab, 'Stabilized image coordinates': ['X_stabilized', 'Y_stabilized']}
+    assert merge_coordinates(both, unstab) == unstab

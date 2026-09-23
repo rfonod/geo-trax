@@ -128,6 +128,7 @@ from geotrax.utils.file_utils import (
     determine_suffix_and_fourcc,
     get_output_dir,
     get_video_dimensions,
+    read_recorded_stab_anchor,
 )
 from geotrax.utils.logging_utils import setup_logger
 
@@ -147,25 +148,29 @@ def visualize_results(args: argparse.Namespace, logger: logging.Logger) -> None:
     viz_config = config['visualization']
 
     viz_modes = normalize_viz_modes(args.viz_mode, logger)
+    stab_anchor = resolve_stab_anchor(args, out_cfg, logger)
     for viz_mode in viz_modes:
         args.viz_mode = viz_mode
         tracks_txt_filepath, transforms_filepath, tracks_csv_filepath = get_and_verify_filepaths(args, logger, out_cfg)
         tracks, tracks_plotting = read_tracks(tracks_txt_filepath, class_names, args, logger)
         transforms = read_transforms(transforms_filepath, logger)
         speed_lane_data = read_georeferenced_results(tracks_csv_filepath, tracks, logger)
-        vid_reader, vid_writer, pbar = initialize_streams(args, logger, out_cfg)
+        vid_reader, vid_writer, vid_path, pbar = initialize_streams(args, logger, out_cfg)
 
         frame_num = 0
+        status = 'interrupted'
         try:
-            for frame_num, annotated_frame in process_frames(tracks, tracks_plotting, transforms, speed_lane_data, vid_reader, pbar, class_names, viz_config, args, logger):
+            for frame_num, annotated_frame in process_frames(tracks, tracks_plotting, transforms, speed_lane_data, vid_reader, pbar, class_names, viz_config, stab_anchor, args, logger):
                 if args.show:
                     display_frame(annotated_frame, frame_num, logger)
                 if args.save:
                     save_frame(vid_writer, annotated_frame, logger)
+            status = 'done'
         except Exception as e:
+            status = 'failed'
             logger.error(f"An error occurred: {e}")
         finally:
-            finalize_video(vid_reader, vid_writer, pbar, frame_num, args.show, logger)
+            finalize_video(vid_reader, vid_writer, vid_path, pbar, frame_num, args.show, status, logger)
 
     args.viz_mode = viz_modes
 
@@ -203,9 +208,48 @@ def normalize_viz_modes(viz_mode, logger: logging.Logger) -> list:
     return valid_modes
 
 
-def process_frames(tracks: pd.DataFrame, tracks_plotting: pd.DataFrame, transforms: dict, speed_lane_data: pd.DataFrame, cap: cv2.VideoCapture, pbar: tqdm, class_names: dict, viz_config: dict, args: argparse.Namespace, logger: logging.Logger):
+def resolve_stab_anchor(args: argparse.Namespace, out_cfg: dict, logger: logging.Logger) -> int:
+    """
+    Return the stabilization reference frame the tracks file was produced with.
+
+    The stabilized coordinates are anchored to the ``cut_frame_left`` that ``extract`` ran with,
+    which the run-metadata YAML records under ``processing``. When visualize runs separately with
+    a different ``cut_frame_left``, the recorded anchor wins (with a warning), so the mode 2 and
+    trajectory-preview backgrounds match the coordinates drawn on them. Without a readable
+    metadata file (e.g. results from before v1.4.0) this run's ``cut_frame_left`` is used.
+    """
+    anchor = read_recorded_stab_anchor(args.source, out_cfg)
+    if anchor is None:
+        return args.cut_frame_left
+    if anchor != args.cut_frame_left:
+        metadata_path = build_result_path(args.source, 'metadata', out_cfg)
+        logger.warning(
+            f"The tracks were stabilized against frame {anchor} (cut_frame_left recorded in '{metadata_path.name}'), "
+            f"but this run uses cut_frame_left={args.cut_frame_left}. Using frame {anchor} as the reference frame "
+            f"for stabilized coordinates."
+        )
+    return anchor
+
+
+def read_frame_at(cap: cv2.VideoCapture, frame_num: int, logger: logging.Logger) -> np.ndarray:
+    """
+    Read one frame by index, then rewind the capture to the start of the video.
+    """
+    cap.set(cv2.CAP_PROP_POS_FRAMES, frame_num)
+    success, frame = cap.read()
+    cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+    if not success:
+        logger.error(f"Failed to read the reference frame {frame_num}.")
+        sys.exit(1)
+    return frame
+
+
+def process_frames(tracks: pd.DataFrame, tracks_plotting: pd.DataFrame, transforms: dict, speed_lane_data: pd.DataFrame, cap: cv2.VideoCapture, pbar: tqdm, class_names: dict, viz_config: dict, stab_anchor: int, args: argparse.Namespace, logger: logging.Logger):
     """
     Process the video frames and annotate them with tracking results.
+
+    Mode 2 and the trajectory preview draw stabilized coordinates, so their background is the
+    stabilization reference frame ``stab_anchor`` (see ``resolve_stab_anchor``).
     """
     track_history = defaultdict(list)
     frame_num = 0
@@ -224,8 +268,10 @@ def process_frames(tracks: pd.DataFrame, tracks_plotting: pd.DataFrame, transfor
         speed_lane_by_frame = None
     empty_tracks_frame = tracks.iloc[0:0]
 
+    if args.viz_mode == 2 or (viz_phase and tracks_plotting is not None):
+        ref_frame = read_frame_at(cap, stab_anchor, logger)
     if viz_phase and tracks_plotting is not None:
-        trajectory_frame = plot_trajectories(cap, tracks_plotting, args.cut_frame_left, args.cut_frame_right, viz_config, logger)
+        trajectory_frame = plot_trajectories(ref_frame.copy(), tracks_plotting, args.cut_frame_left, args.cut_frame_right, viz_config)
 
     while True:
         if viz_phase:
@@ -249,9 +295,7 @@ def process_frames(tracks: pd.DataFrame, tracks_plotting: pd.DataFrame, transfor
             frame_num += 1
             pbar.update()
             continue
-        elif frame_num == args.cut_frame_left:
-            ref_frame = frame.copy()
-        elif args.cut_frame_right is not None and frame_num >= args.cut_frame_right:
+        elif args.cut_frame_right is not None and frame_num > args.cut_frame_right:
             break
 
         tracks_frame = tracks_by_frame.get(frame_num, empty_tracks_frame)
@@ -264,8 +308,7 @@ def process_frames(tracks: pd.DataFrame, tracks_plotting: pd.DataFrame, transfor
             h, w = frame.shape[:2]
             frame = cv2.warpPerspective(frame, transforms[frame_num], (w, h))
         elif args.viz_mode == 2:
-            if ref_frame is not None:
-                frame = ref_frame.copy()
+            frame = ref_frame.copy()
         elif args.viz_mode == 3:
             # Oriented boxes are built in stabilized space and projected back onto the original
             # frame; the reference frame (and any missing frame) maps with the identity.
@@ -606,24 +649,26 @@ def initialize_streams(args: argparse.Namespace, logger: logging.Logger, output_
         vid_file = str(out_path)
 
         vid_writer = cv2.VideoWriter(vid_file, cv2.VideoWriter_fourcc(*fourcc), fps, (frame_width, frame_height))
+        if not vid_writer.isOpened():
+            logger.error(f"Failed to open the video writer for '{vid_file}' (codec '{fourcc}', {fps} fps). "
+                         f"The OpenCV build may lack this codec, or the source video reports no frame rate.")
+            vid_reader.release()
+            sys.exit(1)
     else:
+        out_path = None
         vid_writer = None
 
     _bar_w = max(10, shutil.get_terminal_size().columns - 88)
     pbar = tqdm(total=frame_count, unit='f', leave=True, colour='green',
                 desc=f'{args.source.name} - visualizing @ mode {args.viz_mode}',
                 bar_format=f'{{l_bar}}{{bar:{_bar_w}}}{{r_bar}}')
-    return vid_reader, vid_writer, pbar
+    return vid_reader, vid_writer, out_path, pbar
 
 
-def plot_trajectories(cap: cv2.VideoCapture, tracks: pd.DataFrame, cut_frame_left: int, cut_frame_right: int, viz_config: dict, logger: logging.Logger) -> np.ndarray:
+def plot_trajectories(ref_frame: np.ndarray, tracks: pd.DataFrame, cut_frame_left: int, cut_frame_right: int, viz_config: dict) -> np.ndarray:
     """
     Plot the trajectories on the reference frame with an alpha channel.
     """
-    success, ref_frame = cap.read()
-    if not success:
-        logger.error("Failed to read the reference frame.")
-        sys.exit(1)
     tracks_plot = tracks[tracks[0] >= cut_frame_left]
     if cut_frame_right is not None:
         tracks_plot = tracks_plot[tracks_plot[0] <= cut_frame_right]
@@ -926,7 +971,10 @@ def draw_oriented_box(frame: np.ndarray, cx: float, cy: float, length: float, wi
 def display_frame(annotated_frame: np.ndarray, frame_num: int, logger: logging.Logger) -> None:
     """
     Display the annotated frame.
+
+    The frame counter and key hint are drawn on a copy, so they never reach the saved video.
     """
+    annotated_frame = annotated_frame.copy()
     cv2.putText(annotated_frame, f'Frame {frame_num:05d}', org=(20, 50),
                     fontFace=cv2.FONT_HERSHEY_SIMPLEX, fontScale=1.5, thickness=2, color=(0, 255, 100))
     cv2.putText(annotated_frame, '(Press <q> to stop)', org=(375, 50),
@@ -949,14 +997,24 @@ def save_frame(vid_writer: cv2.VideoWriter, annotated_frame: np.ndarray, logger:
         sys.exit(1)
 
 
-def finalize_video(vid_reader: cv2.VideoCapture, vid_writer: cv2.VideoWriter, pbar: tqdm, frame_num: int, show: bool, logger: logging.Logger) -> None:
+def finalize_video(vid_reader: cv2.VideoCapture, vid_writer: cv2.VideoWriter, vid_path: Path, pbar: tqdm, frame_num: int, show: bool, status: str, logger: logging.Logger) -> None:
     """
     Finalize the video processing.
+
+    ``status`` is 'done', 'failed' (an error stopped rendering) or 'interrupted' (the user
+    pressed q). A failed render's partial video is deleted, since batch's skip-if-exists check
+    would otherwise treat it as complete and never re-render it; an interrupted one is kept.
     """
     vid_reader.release()
     if vid_writer is not None:
         vid_writer.release()
-        logger.info('Visualization video saved successfully')
+        if status == 'done':
+            logger.info(f"Visualization video saved to '{vid_path}'")
+        elif status == 'failed':
+            vid_path.unlink(missing_ok=True)
+            logger.error(f"Visualization failed; removed the incomplete video '{vid_path}'.")
+        else:
+            logger.warning(f"Visualization stopped early; the saved video '{vid_path}' is partial.")
     if show:
         cv2.destroyAllWindows()
     pbar.total = frame_num + 1

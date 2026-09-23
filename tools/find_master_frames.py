@@ -240,12 +240,15 @@ def extract_and_save_master_frames(df_best: pd.DataFrame, args: argparse.Namespa
 def get_objects_and_area_covered(flight_log: Path, args: argparse.Namespace) -> tuple:
     """
     Get the number of objects and the area covered by the objects in the reference frame.
+
+    Both are NaN when the clip has no tracks file yet, so the columns stay numeric (a string marker
+    would make nsmallest refuse the column) and the selection falls back to the location distance.
     """
     output_cfg = getattr(args, 'output_cfg', DEFAULT_OUTPUT)
     tracks_postfix = output_cfg.get('tracks_postfix', DEFAULT_OUTPUT['tracks_postfix'])
     detection_file = get_output_dir(flight_log, output_cfg) / f"{flight_log.stem}{tracks_postfix}.txt"
     if not detection_file.exists():
-        return 'N/A', 'N/A'
+        return np.nan, np.nan
 
     delimiter = detect_delimiter(detection_file)
     detections = np.loadtxt(detection_file, delimiter=delimiter, usecols=(0, *args.bbox_cols))
@@ -285,7 +288,7 @@ def find_best_master_frames(df: pd.DataFrame, N: int) -> pd.DataFrame:
         if top_n_master_frames['covered_area_by_objects'].isna().all():
             best_master_frame = top_n_master_frames.nsmallest(1, 'distance_to_mean_location')
         else:
-            best_master_frame = top_n_master_frames.loc[top_n_master_frames['covered_area_by_objects'] != 'N/A']
+            best_master_frame = top_n_master_frames.dropna(subset=['covered_area_by_objects'])
             best_master_frame = best_master_frame.nsmallest(1, 'covered_area_by_objects')
 
         best_master_frames.append(best_master_frame.to_dict(orient='records')[0])
@@ -369,12 +372,12 @@ def visualize_best_master_frames(df_best: pd.DataFrame, df_all: pd.DataFrame, ou
     for i in range(n_location_ids, n_rows * n_cols):
         fig.delaxes(axs[i])
 
-    if visualize:
-        plt.show()
     if save_viz:
         filepath = output_folder / 'best_master_frames.pdf'
         plt.savefig(filepath, transparent=False, bbox_inches='tight')
         logger.info(f"Best master frames visualization saved to {filepath}")
+    if visualize:
+        plt.show()
     plt.close()
 
 

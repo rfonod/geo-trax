@@ -73,6 +73,7 @@ from scipy.signal import savgol_filter
 from stabilo import Stabilizer
 
 try:
+    from geotrax.georeference import interpolate_missing_points
     from geotrax.utils.cli_utils import DEFAULT_CFG
     from geotrax.utils.config_utils import load_config
     from geotrax.utils.file_utils import DEFAULT_OUTPUT, detect_delimiter
@@ -246,9 +247,11 @@ def get_extracted_av_data(results_folder, logger, out_cfg=None) -> Union[pd.Data
         video_name = base_stem.split('.')[0]
         id_av = video2id[video_name]
         df_geo = df_geo[(df_geo['Vehicle_ID'] == id_av) & (df_geo['Visibility'] == 1)]
+        if 'Is_Interpolated' in df_geo.columns:
+            df_geo = df_geo[df_geo['Is_Interpolated'] == 0]
 
         # drop unnecessary columns and convert the time to a datetime object
-        df_geo = df_geo[['Timestamp', 'Longitude', 'Latitude', 'Vehicle_Speed', 'Vehicle_Acceleration']]
+        df_geo = df_geo[['Timestamp', 'Frame_Number', 'Longitude', 'Latitude', 'Vehicle_Speed', 'Vehicle_Acceleration']]
         df_geo['Timestamp'] = pd.to_datetime(df_geo['Timestamp'])
 
         # add the video name and elapsed time to the dataframe
@@ -295,6 +298,13 @@ def global_to_local_coords(df_av) -> pd.DataFrame:
 
 
 def compute_kinematics(df_extracted, video, sigma, filter_name):
+    """Recompute the AV speed and acceleration of one video with the given smoothing parameter.
+
+    Mirrors georeference.compute_kinematics: the visible, real detections are first linearly
+    interpolated over missing frames (interpolate_missing_points), so consecutive samples are always
+    1/FPS apart, and the results are read back at the detected frames only. Differencing the rows
+    directly would make the speed k times too large across a gap of k frames.
+    """
     def calculate_speed(Vehicle_Local_X_Interpolated, Vehicle_Local_Y_Interpolated, fps):
         Del_X = np.array(Vehicle_Local_X_Interpolated)[1:] - np.array(Vehicle_Local_X_Interpolated)[:-1]
         Del_Y = np.array(Vehicle_Local_Y_Interpolated)[1:] - np.array(Vehicle_Local_Y_Interpolated)[:-1]
@@ -314,9 +324,11 @@ def compute_kinematics(df_extracted, video, sigma, filter_name):
         else:
             raise ValueError(f"Unknown filter '{filter_name}'.")
 
-    # get the vehicle local coordinates
-    Vehicle_Local_X = df_extracted[df_extracted['Video'] == video]['Local_X'].values
-    Vehicle_Local_Y = df_extracted[df_extracted['Video'] == video]['Local_Y'].values
+    # get the vehicle local coordinates, filling missing frames
+    df_video = df_extracted[df_extracted['Video'] == video]
+    Vehicle_Local_X, Vehicle_Local_Y, present_indices = interpolate_missing_points(
+        df_video['Frame_Number'].values, df_video['Local_X'].values, df_video['Local_Y'].values
+    )
 
     # compute speed and acceleration
     Speed = calculate_speed(Vehicle_Local_X, Vehicle_Local_Y, FPS)
@@ -328,7 +340,7 @@ def compute_kinematics(df_extracted, video, sigma, filter_name):
     Speed = np.insert(Speed * 3.6, 0, np.nan)
     Acceleration = np.insert(Acceleration, 0, [np.nan] * 2)
 
-    return Speed, Acceleration
+    return Speed[present_indices], Acceleration[present_indices]
 
 
 def tune_smoothing_parameters(df_stanford, df_extracted, args, logger):

@@ -87,6 +87,11 @@ def resolve_model_path(model_ref: Union[str, Path], logger: logging.Logger) -> P
         re-download. The cache location is identical for every install mode (PyPI, source, editable).
       * A local path (absolute or relative), which keeps the historical behaviour via
         :func:`resolve_asset_path` and is never downloaded.
+
+    A Hugging Face reference may pin a revision (commit SHA, tag or branch) after the repo name:
+    ``hf://<org>/<repo>@<revision>/<path/to/file>``. Without one, the repo's current ``main`` is
+    used and revalidated on every run. The weights are unpickled by Ultralytics when loaded, so
+    pinning a commit SHA ties them to a known file instead of whatever ``main`` holds at run time.
     """
     model_str = str(model_ref).strip()
     if model_str.startswith('hf download '):
@@ -98,7 +103,7 @@ def resolve_model_path(model_ref: Union[str, Path], logger: logging.Logger) -> P
         logger.critical(
             f"Model '{model_str}' is a Hugging Face reference but 'huggingface_hub' is not installed. "
             "Install it (it is a core dependency: `python -m pip install -e .`) or point the config "
-            "`ultralytics -> model` (or --model) at a local weights file."
+            "`extraction -> model` (or --model) at a local weights file."
         )
         sys.exit(1)
 
@@ -110,9 +115,13 @@ def resolve_model_path(model_ref: Union[str, Path], logger: logging.Logger) -> P
         )
         sys.exit(1)
 
-    repo_id = '/'.join(parts[:2])
+    repo_name, _, revision = parts[1].partition('@')
+    repo_id = f'{parts[0]}/{repo_name}'
+    revision = revision or None
     filename = '/'.join(parts[2:])
-    cached = try_to_load_from_cache(repo_id=repo_id, filename=filename) if try_to_load_from_cache else None
+    cached = (
+        try_to_load_from_cache(repo_id=repo_id, filename=filename, revision=revision) if try_to_load_from_cache else None
+    )
     is_cached = isinstance(cached, str)
     if not is_cached:
         cache_hint = str(_HF_HUB_CACHE) if _HF_HUB_CACHE else '~/.cache/huggingface/hub'
@@ -121,7 +130,7 @@ def resolve_model_path(model_ref: Union[str, Path], logger: logging.Logger) -> P
             f"cache: '{cache_hint}' (override via HF_HOME or HF_HUB_CACHE) ..."
         )
     try:
-        local_path = hf_hub_download(repo_id=repo_id, filename=filename)
+        local_path = hf_hub_download(repo_id=repo_id, filename=filename, revision=revision)
     except Exception as e:
         logger.critical(f"Failed to download model '{filename}' from Hugging Face repo '{repo_id}': {e}")
         sys.exit(1)
@@ -146,6 +155,9 @@ def load_config_all(args: argparse.Namespace, logger: logging.Logger, needs_mode
     Both override mechanisms are resolved here, before the config is split into sections, so that
     every consumer downstream (and the saved run metadata) sees the effective configuration:
     ``--set`` first, then the dedicated CLI flags via :func:`sync_args_with_config`.
+
+    ``ultralytics.classes`` is documented as ``int | list[int]`` and may be null (no filter); a
+    single int is wrapped in a list here, so every consumer can iterate it (or test it for None).
     """
     full = load_config(args.cfg, logger, args)
     sync_args_with_config(args, full, logger)
@@ -153,6 +165,11 @@ def load_config_all(args: argparse.Namespace, logger: logging.Logger, needs_mode
     kwargs_tracker     = full.get('tracker', {})
     kwargs_stabilo     = full.get('stabilo', {})
     kwargs_ultralytics = dict(full.get('ultralytics', {}))
+    classes = kwargs_ultralytics.get('classes')
+    if isinstance(classes, int) and not isinstance(classes, bool):
+        kwargs_ultralytics['classes'] = [classes]
+    elif isinstance(classes, tuple):
+        kwargs_ultralytics['classes'] = list(classes)
     kwargs_georef      = full.get('georef', {})
     kwargs_main        = {k: v for k, v in full.items()
                           if k not in ('tracker', 'stabilo', 'ultralytics', 'georef')}

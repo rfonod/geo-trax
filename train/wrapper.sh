@@ -37,7 +37,7 @@ echo "Job run at: $(hostname)"
 #-------------------------------------------------------------------------------
 echo -e "\nActivating Python environment..."
 # Option A (default): venv / uv — activate the environment created with `python -m venv` or `uv venv`
-source .venv/bin/activate
+source .venv/bin/activate || { echo "Failed to activate .venv in $(pwd); check --chdir and the environment option below."; exit 1; }
 # Option B: conda — uncomment and set your environment name
 # eval "$(conda shell.bash hook)"
 # conda activate geo-trax
@@ -55,5 +55,8 @@ else
     echo "bash ${@:1}"
     bash "${@:1}"
 fi
+rc=$?
 
-echo FINISHED AT $(date)
+echo FINISHED AT $(date) "(exit code $rc)"
+# Report the wrapped command's status, so SLURM marks a failed job as FAILED rather than COMPLETED
+exit $rc
