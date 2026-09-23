@@ -61,8 +61,8 @@ Plotting Options (the --plot-* names are shared with 'geotrax batch'):
                                        alongside the standard plain-orthophoto plot. Overlay PNGs
                                        must be pre-generated with tools/viz_segmentations.py.
                                        Defaults to cfg -> plotting -> use_segmentations.
-  --id, -i                           : Vehicle ID to print/plot in detail (single-file input only)
-                                       [default: 0].
+  --id, -i                           : Vehicle ID to print/plot in detail (single-file input only;
+                                       the kinematics plot needs georeferenced results) [default: 0].
   --plot-class-filter, -pcf <int> [<int> ...] : Vehicle class IDs to exclude from plots.
                                        Defaults to cfg -> plotting -> class_filter.
 
@@ -115,6 +115,7 @@ from geotrax.utils.file_utils import (
 from geotrax.utils.logging_utils import setup_logger
 
 colors = PlotColors()
+AGG_STEM_MAX_LEN = 120
 
 def generate_plots(args: argparse.Namespace, logger: logging.Logger) -> None:
     """
@@ -169,20 +170,55 @@ def aggregate_data(file: Path, df_img: pd.DataFrame, df_geo: pd.DataFrame, locat
         data_at_location_id[location_id] = {
             'df_img_list': [],
             'df_geo_list': [],
-            'filepath_img_base': filepath_img.parent if filepath_img else '',
-            'filepath_geo_base': filepath_geo.parent if filepath_geo else '',
-            'filepath_img_file': 'agg',
-            'filepath_geo_file': 'agg',
-            'coordinates': coordinates,
-            'filepath_ortho': filepath_ortho,
-            'filepath_seg': filepath_seg,
+            'filepath_img_base': None,
+            'filepath_geo_base': None,
+            'img_stems': [],
+            'geo_stems': [],
+            'coordinates': (None, None),
+            'filepath_ortho': None,
+            'filepath_seg': None,
         }
     data_at_location_id[location_id]['df_img_list'].append(df_img)
     data_at_location_id[location_id]['df_geo_list'].append(df_geo)
+    data = data_at_location_id[location_id]
+    data['coordinates'] = tuple(merge_coordinates(seen, new) for seen, new in zip(data['coordinates'], coordinates))
+    data['filepath_ortho'] = data['filepath_ortho'] or filepath_ortho
+    data['filepath_seg'] = data['filepath_seg'] or filepath_seg
     if filepath_img:
-        data_at_location_id[location_id]['filepath_img_file'] += '_' + filepath_img.stem
+        data['filepath_img_base'] = data['filepath_img_base'] or filepath_img.parent
+        data['img_stems'].append(filepath_img.stem)
     if filepath_geo:
-        data_at_location_id[location_id]['filepath_geo_file'] += '_' + filepath_geo.stem
+        data['filepath_geo_base'] = data['filepath_geo_base'] or filepath_geo.parent
+        data['geo_stems'].append(filepath_geo.stem)
+
+
+def merge_coordinates(seen: Union[dict, None], new: Union[dict, None]) -> Union[dict, None]:
+    """
+    Merge the coordinate systems of one more file into those of a location's earlier files.
+
+    A file without results of this kind (None) leaves the merge unchanged; otherwise only the
+    coordinate systems every contributing file provides are kept, e.g. stabilized image
+    coordinates are dropped if one file was extracted without stabilization.
+    """
+    if seen is None:
+        return new
+    if new is None:
+        return seen
+    return {name: keys for name, keys in seen.items() if name in new}
+
+
+def aggregated_stem(location_id: str, stems: list) -> str:
+    """
+    Name the pseudo-file of an aggregated location: 'agg' followed by every source stem.
+
+    Past AGG_STEM_MAX_LEN characters it falls back to 'agg_<location_id>_<n>_files', so that the
+    plot filenames built from it (stem plus a plot-name suffix) stay under the 255-byte filename
+    limit of common filesystems when a location has many videos.
+    """
+    stem = '_'.join(['agg', *stems])
+    if len(stem) > AGG_STEM_MAX_LEN:
+        stem = f"agg_{location_id}_{len(stems)}_files"
+    return stem
 
 
 def handle_aggregation(data_at_location_id: dict, config: dict, logger: logging.Logger) -> None:
@@ -198,8 +234,8 @@ def handle_aggregation(data_at_location_id: dict, config: dict, logger: logging.
         df_img = pd.concat(valid_img, ignore_index=True) if valid_img else None
         valid_geo = [df for df in data['df_geo_list'] if df is not None]
         df_geo = pd.concat(valid_geo, ignore_index=True) if valid_geo else None
-        filepath_img = data['filepath_img_base'] / f"{data['filepath_img_file']}.txt" if df_img is not None else None
-        filepath_geo = data['filepath_geo_base'] / f"{data['filepath_geo_file']}.csv" if df_geo is not None else None
+        filepath_img = data['filepath_img_base'] / f"{aggregated_stem(location_id, data['img_stems'])}.txt" if df_img is not None else None
+        filepath_geo = data['filepath_geo_base'] / f"{aggregated_stem(location_id, data['geo_stems'])}.csv" if df_geo is not None else None
         plot_data((df_img, df_geo), (filepath_img, filepath_geo, data['filepath_ortho'], data['filepath_seg']), data['coordinates'], config, logger)
 
 
@@ -229,7 +265,10 @@ def plot_data(dfs: tuple, filepaths: tuple, coordinates: tuple, config: dict, lo
     plot_trajectories((df_img, df_geo), coordinates, filepaths, config, logger)
     pbar.update()
 
-    if args.id > 0:
+    if args.id > 0 and df_geo is None:
+        logger.warning(f"Vehicle kinematics for --id {args.id} need georeferenced results; none found for {name}.")
+
+    if args.id > 0 and df_geo is not None:
         pbar.set_postfix_str('kinematics for vehicle')
         plot_kinematics_for_vehicle_id(df_geo, filepath_geo, config, logger)
         pbar.update()
@@ -446,7 +485,7 @@ def plot_trajectories_in_given_coordinates(df: pd.DataFrame, coordinates: str, x
                     if args.points:
                         plt.scatter(x_i, y_i, color='black', s=0.5)
                 else:
-                    label = vehicle_id.split('_')[0]
+                    label = vehicle_id.rsplit('_', 1)[0]
                     label_legend = label if label not in source_label_mapping else None
                     source_label_mapping.setdefault(label, len(source_label_mapping))
                     i = source_label_mapping[label]
@@ -676,6 +715,9 @@ def plot_kinematics_for_vehicle_id(df: pd.DataFrame, filepath: Path, config: dic
     args = config['args']
     df = df.copy()
     vehicle = df[df['Vehicle_ID'] == args.id]
+    if vehicle.empty:
+        logger.warning(f"Vehicle ID={args.id} not found in {filepath.stem} (after class filtering, if any).")
+        return
     logger.info(f"Vehicle ID={args.id} in {filepath.stem}:\n{vehicle.describe()}")
 
     x_label = 'Elapsed time [s]'
@@ -848,7 +890,7 @@ def _build_parser() -> tuple:
 
     plotting = parser.add_argument_group('Plotting arguments')
     cfg_paths |= add_plotting_args(plotting)
-    plotting.add_argument("--id", "-i", type=int, default=0, help="Vehicle ID to print/plot in detail (only for non-folder input) [default: 0]")
+    plotting.add_argument("--id", "-i", type=int, default=0, help="Vehicle ID to print/plot in detail (only for non-folder input; the kinematics plot needs georeferenced results) [default: 0]")
 
     return parser, cfg_paths
 
