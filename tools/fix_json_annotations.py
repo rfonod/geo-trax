@@ -86,6 +86,7 @@ Notes:
 import argparse
 import json
 import logging
+import os
 from pathlib import Path
 
 from geotrax.utils.logging_utils import setup_logger
@@ -134,11 +135,14 @@ def process_input(args: argparse.Namespace, logger: logging.Logger) -> None:
     path_modified_count = 0
     path_normalized_count = 0
 
+    skipped_count = 0
+
     # Loop through all the label files
     for label_path in label_paths:
-        # Load the COCO annotations
-        with open(label_path, "r") as file:
-            coco_annotations = json.load(file)
+        coco_annotations = load_labelme_annotations(label_path, logger)
+        if coco_annotations is None:
+            skipped_count += 1
+            continue
 
         had_image_data = coco_annotations.get("imageData") is not None
 
@@ -217,14 +221,15 @@ def process_input(args: argparse.Namespace, logger: logging.Logger) -> None:
 
         # Save the COCO annotations
         if not args.debug:
-            with open(label_path, "w") as file:
-                json.dump(coco_annotations, file, indent=2)
+            write_json_atomically(label_path, coco_annotations)
 
         logger.info(f"Processed '{label_path.name}'")
 
         processed_count += 1
 
     summary = [f"Total files processed: {processed_count}"]
+    if skipped_count:
+        summary.append(f"Files skipped (unreadable or not LabelMe annotations): {skipped_count}")
     if args.remove_image_data:
         summary.append(f"Files with image data removed: {image_data_removed_count}")
     if args.normalize_to_unix or args.normalize_to_windows:
@@ -237,6 +242,45 @@ def process_input(args: argparse.Namespace, logger: logging.Logger) -> None:
         summary.append(f"Files with OBB to HBB conversions: {hbb_converted_count}")
     summary.append("Note: No files were modified (debug mode)" if args.debug else "All changes saved successfully.")
     logger.notice("Summary:\n  %s", "\n  ".join(summary))
+
+
+def load_labelme_annotations(label_path: Path, logger: logging.Logger):
+    """Load a LabelMe annotation file, or return None (with a warning) if it is unreadable or not one.
+
+    The input folder is scanned for every .json, which can include a COCO export or a class map. Such
+    files are skipped instead of aborting the batch halfway, which would leave the dataset partly
+    converted.
+    """
+    try:
+        with open(label_path, "r") as file:
+            annotations = json.load(file)
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as e:
+        logger.warning(f"Skipping '{label_path}': cannot be read as JSON ({e}).")
+        return None
+    if (
+        not isinstance(annotations, dict)
+        or not isinstance(annotations.get("imagePath"), str)
+        or not isinstance(annotations.get("shapes"), list)
+        or not all(isinstance(shape, dict) and "shape_type" in shape and "points" in shape for shape in annotations["shapes"])
+    ):
+        logger.warning(f"Skipping '{label_path}': not a LabelMe annotation file ('imagePath' and 'shapes' expected).")
+        return None
+    return annotations
+
+
+def write_json_atomically(path: Path, data: dict) -> None:
+    """Write JSON to a temporary sibling file, then atomically replace the original.
+
+    An interruption or a full disk during the dump then leaves the original annotation intact
+    instead of a truncated file.
+    """
+    tmp_path = path.with_name(path.name + ".tmp")
+    try:
+        with open(tmp_path, "w") as file:
+            json.dump(data, file, indent=2)
+        os.replace(tmp_path, path)
+    finally:
+        tmp_path.unlink(missing_ok=True)
 
 
 def parse_cli_args() -> argparse.Namespace:

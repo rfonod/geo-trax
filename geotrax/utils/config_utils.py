@@ -98,7 +98,7 @@ def resolve_model_path(model_ref: Union[str, Path], logger: logging.Logger) -> P
         logger.critical(
             f"Model '{model_str}' is a Hugging Face reference but 'huggingface_hub' is not installed. "
             "Install it (it is a core dependency: `python -m pip install -e .`) or point the config "
-            "`ultralytics -> model` (or --model) at a local weights file."
+            "`extraction -> model` (or --model) at a local weights file."
         )
         sys.exit(1)
 

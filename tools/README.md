@@ -210,7 +210,9 @@ python tools/annotate_frames.py path/to/images/ --save-masked --margin 0.2 -z pa
 
 🟢 **General** — Converts a directory of YOLO `.txt` labels (normalized) to COCO JSON with
 absolute pixel coordinates. The class map comes inline (`-cm 0=Car ...`), from a YAML/JSON file
-(`-mf`), or — by default — is extracted from the pipeline's configured YOLO model.
+(`-mf`), or by default from the config (`extraction -> class_rename`, else the names of the
+`extraction -> model` weights). Label and JSON paths mirror the image's sub-folder, and existing
+JSON files are kept unless `--overwrite` is given.
 
 ```bash
 python tools/yolo_to_coco.py path/to/labels/                       # class map from model (config)
@@ -221,7 +223,8 @@ python tools/yolo_to_coco.py path/to/labels/ -cm 0=Car 1=Bus 2=Truck 3=Motorcycl
 
 🟢 **General** — Batch-cleans COCO-like JSON annotation files: strip embedded image data
 (`--remove-image-data`), normalize paths (`--normalize-to-unix`/`-windows`), and convert
-between horizontal and oriented boxes (`--to-obb`/`--to-hbb`).
+between horizontal and oriented boxes (`--to-obb`/`--to-hbb`). Files that are not LabelMe
+annotations are skipped, and each file is rewritten atomically.
 
 ```bash
 python tools/fix_json_annotations.py path/to/annotations/ --remove-image-data
