@@ -117,7 +117,12 @@ def analyze_bb_ratios(args: argparse.Namespace, logger: logging.Logger) -> None:
 
 
 def build_context(args, logger):
-    """Resolve everything the scan needs from the pipeline config, once."""
+    """Resolve everything the scan needs from the pipeline config, once.
+
+    output.folder may be nested ('out/results') or absolute (a shared root), so directories are
+    compared by its leaf name; a relative one is also kept whole ('folder_parts') to rebase a YAML
+    out of every level of a nested output folder.
+    """
     cfg = load_config(args.cfg, logger)
     output_cfg = cfg.get('output', DEFAULT_OUTPUT)
     dim_cfg = dict(cfg.get('extraction', {}).get('dimension_estimation', {}))
@@ -126,11 +131,13 @@ def build_context(args, logger):
         sys.exit(1)
     dim_cfg['tau_c'] = TAU_C_RESTRICTIVE
     dim_cfg['theta_bar'] = THETA_BAR_RESTRICTIVE
-    # output.folder may be nested ('out/results') or absolute (a shared root), so compare its leaf
+    folder = Path(output_cfg.get('folder', DEFAULT_OUTPUT['folder']))
     return {
         'output': output_cfg,
-        'folder_name': Path(output_cfg.get('folder', DEFAULT_OUTPUT['folder'])).name,
+        'folder_name': folder.name,
+        'folder_parts': (folder.name,) if folder.is_absolute() else folder.parts,
         'dim': dim_cfg,
+        'seen_tracks': set(),
     }
 
 
@@ -156,6 +163,11 @@ def process_dir(directory, args, logger, cfg):
 
 
 def process_file(file, args, logger, cfg):
+    """Return the per-class ratios of one video or run-metadata YAML, or None if it is skipped.
+
+    Every tracks file is counted once (cfg['seen_tracks']), since a pre-v1.4.0 metadata YAML still
+    sitting next to its video names the same tracks file as the video itself.
+    """
     # Check if the input is a valid video file or a YAML file
     if file.suffix.lower() not in {'.yaml'} | VIDEO_FORMATS:
         return None
@@ -163,8 +175,9 @@ def process_file(file, args, logger, cfg):
     # The run-metadata YAML is written inside the output folder, so a '<results>/<stem>.yaml'
     # argument names a video one level up. Rebase it before the output folder is derived from
     # the path; a YAML still sitting next to its video (pre-v1.4.0 layout) needs no rebasing.
-    if file.suffix.lower() == '.yaml' and file.parent.name == folder_name:
-        file = file.parent.parent / file.name
+    folder_parts = cfg['folder_parts']
+    if file.suffix.lower() == '.yaml' and file.parent.parts[-len(folder_parts):] == folder_parts:
+        file = file.parents[len(folder_parts)] / file.name
     # Skip files that live inside the output folder itself
     elif file.parent.name == folder_name:
         return None
@@ -175,6 +188,10 @@ def process_file(file, args, logger, cfg):
     tracks_txt_file = out_dir / f"{file.stem}{tracks_postfix}.txt"
     if not tracks_txt_file.exists():
         return None
+    if tracks_txt_file.resolve() in cfg['seen_tracks']:
+        logger.info(f"'{file.name}' names the already analyzed '{tracks_txt_file}'; skipping the duplicate.")
+        return None
+    cfg['seen_tracks'].add(tracks_txt_file.resolve())
 
     # Detect delimiter
     delimiter = detect_delimiter(tracks_txt_file)

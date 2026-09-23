@@ -367,14 +367,14 @@ def plot_trajectory_length_distributions(lengths_by_tracker, trackers, args, log
     plt.tight_layout()
     plt.subplots_adjust(top=0.92, bottom=0.12)
 
-    if args.show:
-        plt.show()
-
     if args.save:
         save_path = args.input / "plots" / "trajectory_length_distribution_comparison.png"
         save_path.parent.mkdir(parents=True, exist_ok=True)
         plt.savefig(save_path, dpi=300, bbox_inches='tight')
         logger.notice(f"Plot saved to: {save_path}")
+
+    if args.show:
+        plt.show()
 
 
 def parse_cli_args() -> argparse.Namespace:

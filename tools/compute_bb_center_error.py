@@ -78,7 +78,8 @@ Notes:
 - Requires corresponding .jpg and .txt files with matching names
 - Supports both class-specific and class-agnostic analysis modes
 - Generates professional publication-quality plots with statistical overlays
-- Handles missing annotations gracefully with warning messages
+- A missing label file counts as an image without boxes (Ultralytics save_txt writes no file for a
+  frame without detections), so its ground-truth boxes are reported as missed (NaN errors)
 - Uses spatial containment for prediction-to-ground-truth matching
 """
 
@@ -151,10 +152,15 @@ def compute_bb_center_error(args: argparse.Namespace, logger: logging.Logger) ->
 
 
 def load_annotations(image_id, annotation_path, logger):
+    """Load the YOLO boxes of one image; a missing label file means the image has no boxes.
+
+    Ultralytics save_txt writes no file for a frame without detections, so a missing prediction file
+    must count every ground-truth box of that image as missed (NaN), not drop the image or crash.
+    """
     annotation_file = annotation_path / f"{image_id}.txt"
     if not annotation_file.exists():
-        logger.warning(f"{annotation_file} does not exist.")
-        return None
+        logger.info(f"{annotation_file} does not exist; treating the image as having no boxes.")
+        return []
     with open(annotation_file, "r") as f:
         lines = f.readlines()
     annotations = []
@@ -198,9 +204,6 @@ def compute_error(human_annotations, predicted_annotations, image_width, image_h
 def compute_error_by_class(human_annotations, predicted_annotations, image_width, image_height):
     """Compute error for each bounding box, organized by class ID."""
     errors_by_class = defaultdict(list)
-
-    if human_annotations is None or predicted_annotations is None:
-        return errors_by_class
 
     for human_annotation in human_annotations:
         human_class_id, human_x, human_y, human_width, human_height = human_annotation

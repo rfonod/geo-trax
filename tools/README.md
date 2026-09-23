@@ -87,7 +87,7 @@ These chains show how the tools compose around the `geotrax` stages:
 | [`compare_tracking.py`](#compare_trackingpy) | Compare trackers via track-length distributions and KL divergence | 🟢 |
 | [`compute_bb_center_error.py`](#compute_bb_center_errorpy) | Bounding-box center error between human labels and model predictions | 🟢 |
 | [`analyze_bb_ratios.py`](#analyze_bb_ratiospy) | Length/width aspect-ratio statistics and histograms per vehicle class | 🧪 |
-| [`viz_dimension_estimation.py`](#viz_dimension_estimationpy) | Step-by-step visualization of the azimuth-based dimension estimator | 🔵 |
+| [`viz_dimension_estimation.py`](#viz_dimension_estimationpy) | Step-by-step visualization of the azimuth-based dimension estimator | 🟢 |
 | [`compare_av_detections_and_tune_filters.py`](#compare_av_detections_and_tune_filterspy) | Compare extracted vs. RTK-GNSS AV trajectories; tune smoothing filters | 🧪 |
 
 ### 5. Dataset QA & traceability
@@ -359,9 +359,10 @@ step-by-step visualization of that estimator on one vehicle ID, use `viz_dimensi
 
 ### `viz_dimension_estimation.py`
 
-🔵 **Songdo** — Renders step-by-step visualizations of the azimuth-based dimension estimator for
+🟢 **General** — Renders step-by-step visualizations of the azimuth-based dimension estimator for
 one vehicle ID: a trajectory plot with colour-coded boxes and a dimension-distribution histogram.
-Constants are tuned to the Songdo DJI Mavic 3 setup (140–150 m, 4K, EPSG:5186).
+The estimator parameters come from `extraction -> dimension_estimation` of the `-c` config, the same
+values `extract` uses, and rows added by `--interpolate` are left out, as they are in `extract`.
 
 ```bash
 python tools/viz_dimension_estimation.py path/to/video.mp4 --id 42 --show
