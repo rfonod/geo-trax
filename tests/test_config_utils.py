@@ -190,8 +190,16 @@ def test_resolve_model_path_hf_downloads_and_parses(tmp_path):
     cached.touch()
     with patch('geotrax.utils.config_utils.hf_hub_download', return_value=str(cached)) as mock_dl:
         result = resolve_model_path('hf://rfonod/geo-trax/geotrax_hbb_yolov8s_1920_v1.pt', logger)
-    mock_dl.assert_called_once_with(repo_id='rfonod/geo-trax', filename='geotrax_hbb_yolov8s_1920_v1.pt')
+    mock_dl.assert_called_once_with(repo_id='rfonod/geo-trax', filename='geotrax_hbb_yolov8s_1920_v1.pt', revision=None)
     assert result == cached
+
+
+def test_resolve_model_path_hf_pins_a_revision(tmp_path):
+    cached = tmp_path / 'cached.pt'
+    cached.touch()
+    with patch('geotrax.utils.config_utils.hf_hub_download', return_value=str(cached)) as mock_dl:
+        resolve_model_path('hf://rfonod/geo-trax@0123abc/sub/model.pt', logger)
+    mock_dl.assert_called_once_with(repo_id='rfonod/geo-trax', filename='sub/model.pt', revision='0123abc')
 
 
 def test_resolve_model_path_hf_malformed_exits():

@@ -238,7 +238,7 @@ The default detector is **YOLOv8s** (HBB, 1920 × 1920 px, ~11 M parameters), tr
 
 > Pedestrian and bicycle classes exist in the weights but are underrepresented, unevaluated, and filtered by default. See the [model card](https://huggingface.co/rfonod/geo-trax) for full details.
 
-To use a different model, point `--model` (CLI) or `extraction.model` (config) to a local `.pt` path or `hf://<org>/<repo>/<file>.pt`; any [Ultralytics](https://github.com/ultralytics/ultralytics)-compatible model works.
+To use a different model, point `--model` (CLI) or `extraction.model` (config) to a local `.pt` path or `hf://<org>/<repo>/<file>.pt`; any [Ultralytics](https://github.com/ultralytics/ultralytics)-compatible model works. An `hf://` reference follows the repo's current `main`; to pin an exact version, add a revision (commit SHA, tag or branch) after the repo name: `hf://<org>/<repo>@<revision>/<file>.pt`.
 
 ### Small-Object Detection with SAHI
 
