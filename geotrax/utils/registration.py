@@ -32,6 +32,7 @@ DEFAULT_STABILIZER_KWARGS = {
     'filter_ratio': 0.55,
     'ransac_method': cv2.USAC_MAGSAC,
     'ransac_epipolar_threshold': 3.0,
+    'ransac_threshold_space': 'full',
     'ransac_max_iter': 10000,
     'ransac_confidence': 0.999999,
     'clahe': False,
