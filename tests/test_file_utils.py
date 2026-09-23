@@ -147,3 +147,18 @@ def test_build_result_path_metadata_falls_back_when_the_postfix_key_is_absent():
     """A custom config predating 'metadata_postfix' must still resolve, via DEFAULT_OUTPUT."""
     path = build_result_path(Path('/data/A1.mp4'), 'metadata', {'folder': 'results'})
     assert path.name == 'A1.yaml'
+
+
+def test_atomic_output_keeps_the_original_when_the_write_fails(tmp_path):
+    from geotrax.utils.file_utils import atomic_output
+    target = tmp_path / 'result.txt'
+    target.write_text('complete')
+    with pytest.raises(RuntimeError):
+        with atomic_output(target) as tmp:
+            tmp.write_text('part')
+            raise RuntimeError('interrupted')
+    assert target.read_text() == 'complete'
+    assert list(tmp_path.iterdir()) == [target]
+    with atomic_output(target) as tmp:
+        tmp.write_text('new')
+    assert target.read_text() == 'new'

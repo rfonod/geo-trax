@@ -127,6 +127,7 @@ from geotrax.utils.cli_utils import add_cfg_arg, add_common_args, finalize_cli_a
 from geotrax.utils.config_utils import load_config_all, merge_bundled_defaults
 from geotrax.utils.constants import DEFAULT_TRACK_BUFFER
 from geotrax.utils.file_utils import (
+    atomic_output,
     build_result_path,
     check_if_results_exist,
     convert_to_serializable,
@@ -157,6 +158,14 @@ def to_homography(matrix: np.ndarray) -> np.ndarray:
     if matrix.shape == (2, 3):
         return np.vstack((matrix, np.array([0.0, 0.0, 1.0])))
     return matrix
+
+
+class ExtractionError(RuntimeError):
+    """Detection, tracking or saving failed for a video.
+
+    Raised instead of returning empty results, so that standalone ``extract`` exits 1 and ``batch``
+    counts the video as failed and skips its later stages, rather than reporting success.
+    """
 
 
 def detect_track_stabilize(args: argparse.Namespace, logger: logging.Logger) -> None:
@@ -213,7 +222,7 @@ def track_with_model(model: Any, config: Dict, logger: logging.Logger) -> Tuple[
                 boxes, speed = detect_frame(frame)
                 yolo_time.append(sum(speed.values()))
 
-                class_freq = {c: 0 for c in config['ultralytics']['classes']}
+                class_freq = {c: 0 for c in config['ultralytics'].get('classes') or []}
                 if len(boxes) > 0:
                     frame_arr.append(np.full((len(boxes), 1), frame_num, dtype=np.uint32))
                     if boxes.id is not None:
@@ -254,8 +263,7 @@ def track_with_model(model: Any, config: Dict, logger: logging.Logger) -> Tuple[
             frame_num += 1
             pbar.update()
     except Exception as e:
-        logger.error(f"Error processing: '{config['main']['args'].source}' due to: {e}")
-        return np.empty((0, 12), dtype=np.float32), np.empty((0, 10))
+        raise ExtractionError(f"Error processing: '{config['main']['args'].source}' due to: {e}") from e
     else:
         pbar.total = frame_num
         pbar.refresh()
@@ -482,9 +490,7 @@ def aggregate_results(frame_arr: list, track_id: list, bbox: list, bbox_stab: li
             tracks = tracks[tracks[:, 1] != -1]
         transforms = np.concatenate(transforms, axis=0) if transforms else np.empty((0, 10))
     except Exception as e:
-        logger.error(f'Error aggregating results: {e}')
-        tracks = np.empty((0, 12))
-        transforms = np.empty((0, 10))
+        raise ExtractionError(f'Error aggregating results: {e}') from e
     return tracks, transforms
 
 
@@ -688,6 +694,13 @@ def estimate_vehicle_dimensions(tracks: np.ndarray, config: Dict) -> np.ndarray:
 def save_results(tracks: np.ndarray, transforms: np.ndarray, config: Dict, logger: logging.Logger, out_cfg: Dict) -> None:
     """
     Save the detection, tracking, and stabilization results to files.
+
+    batch treats an existing tracks file as a finished extraction, so the tracks file of an earlier
+    run is removed first and the new one is written last, after the transforms and the metadata. An
+    interrupted or failed save therefore never leaves a tracks file that later stages would pair
+    with the new metadata. Every file is written atomically (atomic_output). A transforms file this
+    run does not write (stabilization or save_stab off) is removed, since visualize would otherwise
+    warp the new tracks with the old matrices. With no tracks, no tracks file is left at all.
     """
     source = config['main']['args'].source
     save_dir = increment_path(get_output_dir(source, out_cfg), exist_ok=True, mkdir=True)
@@ -697,31 +710,43 @@ def save_results(tracks: np.ndarray, transforms: np.ndarray, config: Dict, logge
     transf_txt_file = save_dir / f'{source.stem}{stab_postfix}.txt'
     info_yaml_file = build_result_path(source, 'metadata', out_cfg)
 
-    try:
-        if tracks.size != 0:
-            np.savetxt(tracks_txt_file, tracks, fmt='%g', delimiter=',')
-            logger.info(f"Tracking results saved to: '{tracks_txt_file.resolve()}'")
-    except Exception as e:
-        logger.error(f"Failed to save the tracking results to: '{tracks_txt_file.resolve()}' due to: {e}")
+    tracks_txt_file.unlink(missing_ok=True)
 
-    try:
-        if transforms.size != 0 and config['main']['extraction']['save_stab']:
-            frame_nums = transforms[:, 0].astype(int)
-            matrices = transforms[:, 1:].reshape((-1, 3, 3))
-            if not np.all(np.diff(frame_nums) == 1):
-                logger.warning(f"Missing frame ids found in: '{transf_txt_file}'.")
-            if not np.all(np.linalg.det(matrices) > 0):
-                logger.warning(f"Invalid transforms found in: '{transf_txt_file}'.")
-            np.savetxt(transf_txt_file, transforms, fmt='%.16g', delimiter=',')
-    except Exception as e:
-        logger.error(f"Failed to save the video stabilization results to: '{transf_txt_file.resolve()}' due to: {e}")
-    else:
-        logger.info(f"Video stabilization results saved to: '{transf_txt_file.resolve()}'")
+    if transforms.size != 0 and config['main']['extraction']['save_stab']:
+        frame_nums = transforms[:, 0].astype(int)
+        matrices = transforms[:, 1:].reshape((-1, 3, 3))
+        if not np.all(np.diff(frame_nums) == 1):
+            logger.warning(f"Missing frame ids found in: '{transf_txt_file}'.")
+        if not np.all(np.linalg.det(matrices) > 0):
+            logger.warning(f"Invalid transforms found in: '{transf_txt_file}'.")
+        try:
+            with atomic_output(transf_txt_file) as tmp_file:
+                np.savetxt(tmp_file, transforms, fmt='%.16g', delimiter=',')
+        except Exception as e:
+            logger.error(f"Failed to save the video stabilization results to: '{transf_txt_file.resolve()}' due to: {e}")
+        else:
+            logger.info(f"Video stabilization results saved to: '{transf_txt_file.resolve()}'")
+    elif transf_txt_file.exists():
+        transf_txt_file.unlink()
+        logger.warning(
+            f"Removed '{transf_txt_file.name}' left by an earlier run: this run saved no stabilization transforms "
+            f"(stabilization or save_stab disabled, or none computed), so it no longer matches the tracks."
+        )
 
     metadata = convert_to_serializable(_build_run_metadata(config, save_dir))
-    with open(info_yaml_file, 'w') as f:
+    with atomic_output(info_yaml_file) as tmp_file, open(tmp_file, 'w') as f:
         yaml.dump(metadata, f, default_flow_style=False, sort_keys=False)
     logger.info(f"Video info and configs saved to: '{info_yaml_file.resolve()}'")
+
+    if tracks.size == 0:
+        logger.warning(f"No tracks to save for '{source}'; no tracking results file was written.")
+        return
+    try:
+        with atomic_output(tracks_txt_file) as tmp_file:
+            np.savetxt(tmp_file, tracks, fmt='%g', delimiter=',')
+    except Exception as e:
+        raise ExtractionError(f"Failed to save the tracking results to: '{tracks_txt_file.resolve()}' due to: {e}") from e
+    logger.info(f"Tracking results saved to: '{tracks_txt_file.resolve()}'")
 
 
 def _build_run_metadata(config: Dict, save_dir: Path) -> Dict:
@@ -734,7 +759,7 @@ def _build_run_metadata(config: Dict, save_dir: Path) -> Dict:
     main = config['main']
     ul = config['ultralytics']
     args = main['args']
-    active_classes = ul.get('classes') or []
+    active_classes = ul.get('classes') or list(main.get('class_names', {}))
     class_mapping = main.get('class_names', {})
 
     return {
@@ -837,7 +862,11 @@ def main() -> None:
     args = parse_cli_args()
     logger = setup_logger(__name__, args.verbose, args.log_path)
 
-    detect_track_stabilize(args, logger)
+    try:
+        detect_track_stabilize(args, logger)
+    except ExtractionError as e:
+        logger.error(str(e))
+        sys.exit(1)
 
 
 if __name__ == '__main__':

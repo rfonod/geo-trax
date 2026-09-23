@@ -116,12 +116,14 @@ from tqdm import tqdm
 from geotrax.utils.cli_utils import add_cfg_arg, add_common_args, finalize_cli_args
 from geotrax.utils.config_utils import load_config_all
 from geotrax.utils.file_utils import (
+    atomic_output,
     build_result_path,
     check_if_results_exist,
     detect_delimiter,
     determine_location_id,
     get_ortho_folder,
     get_output_dir,
+    read_recorded_stab_anchor,
 )
 from geotrax.utils.logging_utils import setup_logger
 from geotrax.utils.registration import DETECTOR_CHOICES, DEVICE_CHOICES, estimate_homography
@@ -205,8 +207,8 @@ def georeference(args: argparse.Namespace, logger: logging.Logger) -> None:
                                                       latitude, longitude, veh_dim_real, class_id, veh_speed, veh_acceleration,
                                                       road_section, lane_number, visibility, config['filtering']['min_traj_length'],
                                                       is_interpolated, logger=logger)
-    save_georeferenced_data(args.source, georeferenced_df, logger, out_cfg)
     save_homography(args.source, homography_reference_to_ortho, logger, out_cfg)
+    save_georeferenced_data(args.source, georeferenced_df, logger, out_cfg)
     pbar.update()
 
     pbar.set_postfix_str('done')
@@ -292,15 +294,30 @@ def resolve_reference_frame(args: argparse.Namespace, full_config: dict, config:
     ``--cut-frame-left N`` without also passing ``--ref-frame N`` produced a whole dataset that
     was wrong by a constant offset, with no warning. Adopt ``cut_frame_left`` when ``--ref-frame``
     was not explicitly given, and warn loudly when the user asked for two different frames.
+
+    The stabilization anchor is the ``cut_frame_left`` recorded in the run-metadata YAML by the
+    ``extract`` run that produced the tracks, not this run's value: a separate ``georeference`` (or
+    ``batch --geo-only``, or a batch re-run that skips extraction) without ``--cut-frame-left`` would
+    otherwise register frame 0 against coordinates stabilized to frame N. This run's value is used
+    only when no readable metadata exists (results from before v1.4.0).
     """
-    stab_ref_frame = full_config.get('main', {}).get('processing', {}).get('cut_frame_left', 0)
+    main_cfg = full_config.get('main', {})
+    configured_anchor = main_cfg.get('processing', {}).get('cut_frame_left', 0)
+    recorded_anchor = read_recorded_stab_anchor(args.source, main_cfg.get('output', {}))
+    stab_ref_frame = configured_anchor if recorded_anchor is None else recorded_anchor
+    if recorded_anchor is not None and configured_anchor is not None and recorded_anchor != configured_anchor:
+        logger.warning(
+            f"The tracks were stabilized against frame {recorded_anchor} (cut_frame_left recorded in the run "
+            f"metadata), but this run uses cut_frame_left={configured_anchor}. Using frame {recorded_anchor} "
+            f"as the stabilization reference frame."
+        )
     if stab_ref_frame is None or args.ref_frame == stab_ref_frame:
         return
 
     if 'ref_frame' in getattr(args, '_cli_provided', frozenset()):
         logger.warning(
             f"Reference frame ({args.ref_frame}) differs from the stabilization reference frame "
-            f"cfg -> processing -> cut_frame_left ({stab_ref_frame}). The stabilized track coordinates "
+            f"({stab_ref_frame}, cut_frame_left of the extraction run). The stabilized track coordinates "
             f"are expressed relative to frame {stab_ref_frame}, so every georeferenced coordinate will be "
             f"offset by the drone drift between the two frames. Pass '--ref-frame {stab_ref_frame}' "
             f"(or drop '--ref-frame') unless you know exactly why they should differ."
@@ -308,8 +325,8 @@ def resolve_reference_frame(args: argparse.Namespace, full_config: dict, config:
         return
 
     logger.notice(
-        f"Using reference frame {stab_ref_frame} to match cfg -> processing -> cut_frame_left "
-        f"(cfg -> georef -> processing -> ref_frame is {args.ref_frame})."
+        f"Using reference frame {stab_ref_frame} to match the stabilization reference frame "
+        f"(cut_frame_left of the extraction run; cfg -> georef -> processing -> ref_frame is {args.ref_frame})."
     )
     args.ref_frame = stab_ref_frame
     config.setdefault('processing', {})['ref_frame'] = stab_ref_frame
@@ -570,6 +587,10 @@ def get_reference_to_master_homography(reference_frame: np.ndarray, master_frame
 def get_master_to_ortho_homography(master_frame: np.ndarray, ortho_folder: Path, master_folder: Union[Path, None], location_id: str, recompute: bool, config:dict, logger: logging.Logger) -> np.ndarray:
     """
     Get the homography matrix between the master frame and the orthophoto.
+
+    The result is cached per location in '<master folder>/<location_id>.txt', shared by every video
+    of that location. An unreadable cache (empty or torn by an interrupted write) is recomputed
+    rather than fatal, and the cache is written atomically so readers never see a partial file.
     """
     if master_folder is None:
         homography_filepath = ortho_folder / 'master_frames' / (location_id + '.txt')
@@ -605,12 +626,13 @@ def get_master_to_ortho_homography(master_frame: np.ndarray, ortho_folder: Path,
                 logger.info(f"Loaded 'master -> orthophoto' homography from: '{homography_filepath}'.")
                 return homography_master_to_ortho
         except Exception as e:
-            logger.error(f"Failed to load 'master -> orthophoto' homography from '{homography_filepath}' due to: {e}")
-            sys.exit(1)
+            logger.warning(
+                f"Cannot read the cached 'master -> orthophoto' homography '{homography_filepath}' ({e}); recomputing it."
+            )
 
     homography_master_to_ortho, stats_txt = compute_homography(master_frame, get_orthophoto(ortho_folder, location_id, logger), ('master', 'ortho'), logger, **config)
     try:
-        with open(homography_filepath, 'w') as file:
+        with atomic_output(homography_filepath) as tmp_filepath, open(tmp_filepath, 'w') as file:
             np.savetxt(file, homography_master_to_ortho.reshape(1, -1), fmt='%.20g', delimiter=',')
             file.write('\n# Hash of the master frame\n')
             file.write(f'Hash: {current_master_hash}\n')
@@ -983,10 +1005,14 @@ def create_and_format_georeferenced_df(track_id, timestamps, frame_num, x_stab_o
 def save_georeferenced_data(source: Path, georeferenced_df: pd.DataFrame, logger: logging.Logger, output_cfg: dict = None) -> None:
     """
     Save the georeferenced data to a CSV file.
+
+    Written atomically and after the homography: batch treats an existing CSV as a finished
+    georeferencing, so it must only appear once it is complete.
     """
     georeferenced_results_filepath = build_result_path(source, 'georeferenced', output_cfg)
     get_output_dir(source, output_cfg).mkdir(parents=True, exist_ok=True)
-    georeferenced_df.to_csv(georeferenced_results_filepath, index=False)
+    with atomic_output(georeferenced_results_filepath) as tmp_filepath:
+        georeferenced_df.to_csv(tmp_filepath, index=False)
     logger.info(f"Georeferenced data saved to: '{georeferenced_results_filepath}'.")
 
 
@@ -995,8 +1021,10 @@ def save_homography(source: Path, homography: np.ndarray, logger: logging.Logger
     Save the computed homography to a .txt file.
     """
     geo_transf_filepath = build_result_path(source, 'geo_transformations', output_cfg)
+    get_output_dir(source, output_cfg).mkdir(parents=True, exist_ok=True)
     try:
-        np.savetxt(geo_transf_filepath, homography.reshape(1, -1), fmt='%.20g', delimiter=',')
+        with atomic_output(geo_transf_filepath) as tmp_filepath:
+            np.savetxt(tmp_filepath, homography.reshape(1, -1), fmt='%.20g', delimiter=',')
     except Exception as e:
         logger.error(f"Failed to save 'reference -> orthophoto' homography '{geo_transf_filepath}' due to: {e}")
         sys.exit(1)

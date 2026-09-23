@@ -115,7 +115,6 @@ from pathlib import Path
 import cv2
 import numpy as np
 import pandas as pd
-import yaml
 from scipy.ndimage import gaussian_filter1d
 from tqdm import tqdm
 
@@ -129,6 +128,7 @@ from geotrax.utils.file_utils import (
     determine_suffix_and_fourcc,
     get_output_dir,
     get_video_dimensions,
+    read_recorded_stab_anchor,
 )
 from geotrax.utils.logging_utils import setup_logger
 
@@ -218,16 +218,11 @@ def resolve_stab_anchor(args: argparse.Namespace, out_cfg: dict, logger: logging
     trajectory-preview backgrounds match the coordinates drawn on them. Without a readable
     metadata file (e.g. results from before v1.4.0) this run's ``cut_frame_left`` is used.
     """
-    metadata_path = build_result_path(args.source, 'metadata', out_cfg)
-    try:
-        with open(metadata_path) as f:
-            metadata = yaml.safe_load(f) or {}
-    except (OSError, yaml.YAMLError):
-        return args.cut_frame_left
-    anchor = (metadata.get('processing') or {}).get('cut_frame_left')
-    if not isinstance(anchor, int) or isinstance(anchor, bool):
+    anchor = read_recorded_stab_anchor(args.source, out_cfg)
+    if anchor is None:
         return args.cut_frame_left
     if anchor != args.cut_frame_left:
+        metadata_path = build_result_path(args.source, 'metadata', out_cfg)
         logger.warning(
             f"The tracks were stabilized against frame {anchor} (cut_frame_left recorded in '{metadata_path.name}'), "
             f"but this run uses cut_frame_left={args.cut_frame_left}. Using frame {anchor} as the reference frame "

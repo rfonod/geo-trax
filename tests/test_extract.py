@@ -510,3 +510,34 @@ def test_run_metadata_records_the_effective_configuration(tmp_path):
     assert written['processing'] == {'cut_frame_left': 10, 'cut_frame_right': 90}
     assert written['extraction']['interpolate'] is True
     assert written['output']['folder'] == 'results'
+
+
+def test_save_results_removes_stale_outputs_of_an_earlier_run(tmp_path):
+    """With no new tracks or transforms, older files must not be left for later stages to read."""
+    (tmp_path / 'results').mkdir()
+    stale_tracks = tmp_path / 'results' / 'A1.txt'
+    stale_transforms = tmp_path / 'results' / 'A1_vid_transf.txt'
+    stale_tracks.write_text('0,1,2\n')
+    stale_transforms.write_text('1,1,0,0,0,1,0,0,0,1\n')
+    _run_save_results(tmp_path, {'folder': 'results'})
+    assert not stale_tracks.exists()
+    assert not stale_transforms.exists()
+    assert (tmp_path / 'results' / 'A1.yaml').is_file()
+
+
+def test_save_results_writes_the_tracks_file_without_leftovers(tmp_path):
+    from geotrax.extract import save_results
+    source = tmp_path / 'A1.mp4'
+    source.touch()
+    output_cfg = {'folder': 'results'}
+    tracks = np.array([[0, 1, 10, 20, 4, 2, 10, 20, 4, 2, 0, 0.9, 4.5, 1.8]], dtype=np.float32)
+    save_results(tracks, np.zeros((0, 10)), _metadata_config(source, output_cfg), logger, output_cfg)
+    assert np.loadtxt(tmp_path / 'results' / 'A1.txt', delimiter=',').shape == (14,)
+    assert sorted(p.name for p in (tmp_path / 'results').iterdir()) == ['A1.txt', 'A1.yaml']
+
+
+def test_aggregate_results_raises_instead_of_returning_empty_tracks():
+    from geotrax.extract import ExtractionError
+    with pytest.raises(ExtractionError):
+        aggregate_results([np.zeros((2, 1))], [np.zeros((3, 1))], [np.zeros((2, 4))], [], [np.zeros((2, 1))],
+                          [np.zeros((2, 1))], [], logger)
