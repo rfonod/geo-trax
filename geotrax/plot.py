@@ -772,10 +772,11 @@ def get_ylabel(key: str) -> str:
 
 def save_or_show_plot(name: str, filepath: Path, args: argparse.Namespace, logger: logging.Logger, contains_raster: bool = False) -> None:
     """
-    Save or show the plot.
+    Save and/or show the plot.
+
+    The plot is saved before it is shown: with an interactive backend plt.show() blocks until the
+    window is closed and then discards the figure, so a later savefig would write a blank page.
     """
-    if args.show:
-        plt.show()
     if args.save:
         img_dir = filepath.parent / 'plots'
         img_dir.mkdir(parents=True, exist_ok=True)
@@ -785,6 +786,8 @@ def save_or_show_plot(name: str, filepath: Path, args: argparse.Namespace, logge
         else:
             plt.savefig(img_filepath, bbox_inches='tight', pad_inches=0, transparent=False)
         logger.info(f"Plot saved as {img_filepath}")
+    if args.show:
+        plt.show()
     plt.close()
 
 
