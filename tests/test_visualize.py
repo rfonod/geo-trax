@@ -3,6 +3,7 @@
 
 """Tests for visualization helpers."""
 
+import argparse
 import logging
 
 import numpy as np
@@ -18,6 +19,7 @@ from geotrax.visualize import (
     read_tracks,
     read_tracks_oriented,
     read_transforms,
+    resolve_stab_anchor,
 )
 
 logger = logging.getLogger(__name__)
@@ -347,3 +349,36 @@ def test_read_tracks_no_stab_interp_flag_at_col_10(tmp_path):
                                    err_msg="col 6 should still be class_id (0), not is_interpolated")
     np.testing.assert_array_equal(tracks[10].tolist(), [0, 1, 0],
                                    err_msg="col 10 should carry the is_interpolated flag")
+
+
+# --- resolve_stab_anchor -----------------------------------------------------
+
+def _anchor_args(tmp_path, cut_frame_left):
+    return argparse.Namespace(source=tmp_path / 'video.mp4', cut_frame_left=cut_frame_left)
+
+
+def _write_metadata(tmp_path, text):
+    (tmp_path / 'results').mkdir()
+    (tmp_path / 'results' / 'video.yaml').write_text(text)
+
+
+def test_resolve_stab_anchor_without_metadata_uses_args(tmp_path):
+    assert resolve_stab_anchor(_anchor_args(tmp_path, 7), {'folder': 'results'}, logger) == 7
+
+
+def test_resolve_stab_anchor_matching_metadata(tmp_path, caplog):
+    _write_metadata(tmp_path, 'processing:\n  cut_frame_left: 7\n')
+    assert resolve_stab_anchor(_anchor_args(tmp_path, 7), {'folder': 'results'}, logger) == 7
+    assert not caplog.records
+
+
+def test_resolve_stab_anchor_prefers_recorded_anchor(tmp_path, caplog):
+    _write_metadata(tmp_path, 'processing:\n  cut_frame_left: 150\n')
+    with caplog.at_level(logging.WARNING):
+        assert resolve_stab_anchor(_anchor_args(tmp_path, 0), {'folder': 'results'}, logger) == 150
+    assert 'stabilized against frame 150' in caplog.text
+
+
+def test_resolve_stab_anchor_ignores_malformed_metadata(tmp_path):
+    _write_metadata(tmp_path, 'processing: [unclosed\n')
+    assert resolve_stab_anchor(_anchor_args(tmp_path, 3), {'folder': 'results'}, logger) == 3

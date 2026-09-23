@@ -604,7 +604,7 @@ Suppose the input video is `video_file.mp4`. By default, outputs are written to 
 - **video_file_mode_X.mp4** (`<stem><visualization_postfix>_mode_<X>.mp4`): Annotated video in five rendering modes (X = 0 / 1 / 2 / 3 / 4):
   - **Mode 0**: overlaid on the original (unstabilized) video
   - **Mode 1**: overlaid on the stabilized video
-  - **Mode 2**: plotted on the static reference frame
+  - **Mode 2**: plotted on the static reference frame (the stabilization anchor recorded in the run-metadata YAML, so the background matches the stabilized coordinates even if `visualize` runs with a different `cut_frame_left`)
   - **Mode 3**: rotated bounding boxes on the original video, where each box is sized to the vehicle's estimated physical dimensions and rotated to its per-frame heading (derived from the camera-motion-free stabilized trajectory and projected back onto the original frame). Requires stabilization to have been run.
   - **Mode 4**: the same rotated bounding boxes as Mode 3, but drawn directly on the stabilized video (no back-projection). Requires stabilization to have been run.
 
