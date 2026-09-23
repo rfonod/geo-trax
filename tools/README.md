@@ -404,8 +404,9 @@ python tools/check_dataset.py dataset/ --speed-threshold 100 --acceleration-thre
 ### `find_source_id.py`
 
 🔵 **Songdo** — Given a `Vehicle_ID` in an aggregated dataset CSV, traces it back to the original
-source video and per-video ID using the `PROCESSED/` structure and the ID-offset logic from
-`geotrax aggregate`. Useful for verifying or debugging specific trajectories.
+source video and per-video ID using the `PROCESSED/` structure. The ID offsets are replayed with
+`geotrax aggregate`'s own code, so files and rows it skipped are accounted for. Useful for verifying
+or debugging specific trajectories.
 
 ```bash
 python tools/find_source_id.py 2022-10-04_A/2022-10-04_A_AM1.csv 5 \
