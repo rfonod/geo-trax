@@ -731,7 +731,7 @@ Because only the leading letters matter, the same context can instead be packed 
 | `U2.mp4` | `U` | `ORTHOPHOTOS/U.png`, … |
 | `U_D10_2022-10-07_PM5_60s.mp4` | `U` | `ORTHOPHOTOS/U.png`, … |
 
-`geotrax aggregate` groups results by location (and date/session), merging clips from different drones that cover the same place into a unified dataset.
+`geotrax aggregate` groups results by location (and date/session), merging clips from different drones that cover the same place into a unified dataset. It reads the grouping from the `<date>/D<n>/<session>/<output folder>/` layout, so drone folders must be named `D` plus a number (results elsewhere are skipped with a warning) and the output folder must be a relative name, not an absolute path. Rows whose timestamp is undefined (frames missing from the flight log) are dropped with a warning; the rest of the clip is kept.
 
 </details>
 

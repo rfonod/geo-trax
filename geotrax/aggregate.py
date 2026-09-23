@@ -58,6 +58,11 @@ Notes:
 - The script expects CSV files to be located in a specific directory structure: date/drone_id/flight_session/results/
 - Vehicle IDs are automatically offset to ensure uniqueness across different drone data
 - Timestamps are converted to local time format (HH:MM:SS.fff)
+- Rows whose timestamp is undefined (frames missing from the drone flight log, written as
+  '0000-00-00 00:00:00.000' by georeferencing) are dropped with a warning; the rest of the file is kept
+- Drone folders must be named 'D<number>'; results in other folders are skipped with a warning
+- An absolute output folder (cfg -> output -> folder) is not supported, since grouping relies on the
+  per-video folder layout
 - Results without a 'Timestamp' column (georeferenced without the drone flight log) are skipped,
   since their rows cannot be time-aligned with the other drones of the group
 - Empty (header-only) result files are skipped so they cannot disturb the vehicle ID offset
@@ -70,6 +75,7 @@ Notes:
 
 import argparse
 import logging
+import re
 import sys
 import zipfile
 from pathlib import Path
@@ -97,6 +103,13 @@ def aggregate_results(args: argparse.Namespace, logger: logging.Logger) -> None:
 
     output_cfg = load_config(args.cfg, logger, args).get('output', DEFAULT_OUTPUT)
     folder_name = output_cfg.get('folder', DEFAULT_OUTPUT['folder'])
+    if Path(folder_name).is_absolute():
+        logger.critical(
+            f"cfg -> output -> folder is an absolute path ('{folder_name}'). Aggregation needs the per-video "
+            f"'<date>/<drone>/<session>/<output folder>/' layout to group results, so it only supports a relative "
+            f"output folder name."
+        )
+        sys.exit(1)
     csv_files = list(input_path.rglob(f'**/{folder_name}/*.csv'))
     if not csv_files:
         logger.critical(f"No CSV files found in '{input_path}'")
@@ -107,6 +120,11 @@ def aggregate_results(args: argparse.Namespace, logger: logging.Logger) -> None:
         try:
             date = file_path.parents[3].name
             drone_id = file_path.parents[2].name
+            if not re.fullmatch(r'D\d+', drone_id):
+                raise ValueError(
+                    f"drone folder '{drone_id}' is not named 'D<number>'; expected <date>/<drone>/<session>/"
+                    f"{folder_name}/<file>.csv"
+                )
             flight_session = file_path.parents[1].name
             location_id = determine_location_id(file_path, logger)
 
@@ -149,7 +167,22 @@ def aggregate_results(args: argparse.Namespace, logger: logging.Logger) -> None:
                             f"re-run 'geotrax georeference'."
                         )
                         continue
-                    df['Local_Time'] = pd.to_datetime(df['Timestamp']).dt.strftime('%H:%M:%S.%f').str[:-3]
+                    timestamps = pd.to_datetime(df['Timestamp'], errors='coerce', format='mixed')
+                    n_undefined = int(timestamps.isna().sum())
+                    if n_undefined == len(df):
+                        logger.warning(
+                            f"Skipping '{file_path}': none of its timestamps are valid, so its rows cannot be "
+                            f"time-aligned with the other drones of this group."
+                        )
+                        continue
+                    if n_undefined:
+                        logger.warning(
+                            f"Dropping {n_undefined} of {len(df)} rows from '{file_path}' with an undefined "
+                            f"timestamp (frames missing from the drone flight log)."
+                        )
+                        df = df[timestamps.notna()].copy()
+                        timestamps = timestamps[timestamps.notna()]
+                    df['Local_Time'] = timestamps.dt.strftime('%H:%M:%S.%f').str[:-3]
 
                     df['Drone_ID'] = int(drone_id[1:])
                     df['Vehicle_ID'] = df['Vehicle_ID'] + vehicle_id_offset
