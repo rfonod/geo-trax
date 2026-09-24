@@ -102,15 +102,19 @@ def read_recorded_stab_anchor(source: Path, output_cfg: Optional[dict] = None) -
 
 
 @contextmanager
-def atomic_output(path: Path) -> Iterator[Path]:
+def atomic_output(path: Path, keep_suffix: bool = False) -> Iterator[Path]:
     """Yield a temporary path next to *path* that replaces *path* only if the block completes.
 
     Result files are written in place otherwise, and ``batch`` treats any existing result as complete,
     so an interrupted or failed write (Ctrl+C, a SLURM kill, a full disk) would leave a truncated file
     that later runs skip and downstream stages read as valid. With this, *path* holds either its
     previous content or the complete new one, and the temporary file is always removed.
+
+    The temporary name ends in '.tmp' by default, so that no '*.csv'/'*.txt' result scan can pick it
+    up. ``keep_suffix=True`` keeps the real suffix last ('.name.tmp.gpkg') for writers such as GDAL
+    that check the extension of the file they write; use it only for formats no result scan globs.
     """
-    tmp_path = path.with_name(f'.{path.name}.tmp')
+    tmp_path = path.with_name(f'.{path.stem}.tmp{path.suffix}' if keep_suffix else f'.{path.name}.tmp')
     try:
         yield tmp_path
         os.replace(tmp_path, path)

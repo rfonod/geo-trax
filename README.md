@@ -123,7 +123,7 @@ Run `geotrax -h` or `geotrax batch -h` for all options. The scale-up commands ab
 - **Stabilization**: homography-based trajectory correction via [Stabilo](https://github.com/rfonod/stabilo) ⚖️, tuned with [Stabilo-Optimize](https://github.com/rfonod/stabilo-optimize) 🎯; optional CUDA acceleration (`--stab-gpu`).
 - **Georeferencing**: frame-to-orthophoto registration; outputs lat/lon, local CRS, speed, acceleration, and lane assignment per vehicle; optional CUDA acceleration (`--geo-gpu`).
 - **Visualization**: track overlays on original, stabilized, or static-reference video, in five rendering modes (incl. oriented bounding boxes).
-- **Analysis**: trajectory maps, kinematic distributions, and class/dimension charts, per-video or aggregated across drones and sessions.
+- **Analysis**: trajectory maps, kinematic distributions, and class/dimension charts, per-video or aggregated across drones and sessions; GIS export (GeoPackage/GeoJSON) of trajectories for QGIS, ArcGIS, or kepler.gl (`geotrax export`).
 - **Scaling & tooling**: batch-processes directory trees and aggregates multi-drone data; includes standalone utilities for end-to-end data preparation, training, evaluation, and validation.
 
 </details>
@@ -136,7 +136,7 @@ Run `geotrax -h` or `geotrax batch -h` for all options. The scale-up commands ab
 - Simulation and scenario export: `geotrax export --format sumo` (and/or OpenDRIVE, CommonRoad) to turn an extracted dataset into a drop-in scenario for traffic simulators and digital twins, reusing the lane and road-section geometry already carried by the orthophoto segmentations.
 - Live/online mode: ingest RTMP-style drone feeds for real-time georeferenced output, for live monitoring and incident detection rather than offline batches.
 - Batch inference and multi-thread processing, plus distributed fan-out (Ray, Dask, or Slurm) so `geotrax batch` scales across a cluster for multi-drone, multi-intersection campaigns.
-- Real-world map visualization (e.g., MovingPandas, contextily) and an interactive web viewer with map-based playback and filtering by class, lane, speed, and time, so datasets can be explored without writing plotting code.
+- Real-world map visualization (e.g., MovingPandas, contextily) and an interactive web viewer with map-based playback and filtering by class, lane, speed, and time, so datasets can be explored without writing plotting code. (`geotrax export` already produces GeoPackage/GeoJSON layers that open directly in QGIS or kepler.gl.)
 
 </details>
 
@@ -503,7 +503,7 @@ Example on an **NVIDIA RTX 4090** (5-second sample clip, 150 frames; hyperfine m
 
 ## Usage
 
-The `geotrax` CLI provides one subcommand per stage: `batch` (primary entry point), `extract`, `georeference`, `visualize`, `plot`, `aggregate`, and `config`. Run `geotrax -h` or `geotrax <subcommand> -h` for the full reference (`python -m geotrax` works identically).
+The `geotrax` CLI provides one subcommand per stage: `batch` (primary entry point), `extract`, `georeference`, `visualize`, `plot`, `aggregate`, `export`, and `config`. Run `geotrax -h` or `geotrax <subcommand> -h` for the full reference (`python -m geotrax` works identically).
 
 ```bash
 # Recursively process a directory (or a single video) without georeferencing
@@ -513,6 +513,7 @@ geotrax batch path/to/videos/ --no-geo
 geotrax extract video.mp4                  # detect, track, and stabilize
 geotrax visualize video.mp4 --save         # render an annotated video from existing results
 geotrax plot video.mp4                     # trajectory and distribution plots
+geotrax export video.mp4                   # georeferenced trajectories to a GeoPackage for QGIS & co.
 ```
 
 > [!TIP]
@@ -546,6 +547,13 @@ geotrax batch path/to/PROCESSED/ --plot-only --plot-aggregate --plot-class-filte
 
 # Merge multi-drone results for the same locations into a unified dataset
 geotrax aggregate path/to/PROCESSED/
+
+# Export georeferenced trajectories to GIS formats: one LineString per vehicle (default) or one Point per row,
+# as GeoPackage (default) or GeoJSON, in WGS84 (default) or the local projected CRS; works on single CSVs,
+# videos, whole PROCESSED/ trees, and aggregated DATASET/ folders
+geotrax export path/to/results/video.csv
+geotrax export path/to/DATASET/ --format geojson --geometry points -of path/to/GIS/
+geotrax export video.mp4 --crs local
 
 # Rotated box modes (3/4): boxes oriented to vehicle heading, on original (3) or stabilized (4) frame
 geotrax visualize video.mp4 --save --viz-mode 3 4
@@ -640,6 +648,8 @@ Suppose the input video is `video_file.mp4`. By default, outputs are written to 
   - `Lane_Number`: Identifier for the lane the vehicle is in.
   - `Visibility`: Boolean indicating if the vehicle's bounding box is fully visible within the frame.
   - `Is_Interpolated` *(optional)*: Present only when extraction was run with `--interpolate` (`extraction.interpolate: true`). `0` = real detection, `1` = row synthesized by linear interpolation at the extraction stage to fill a frame gap; propagated from the `.txt` tracks file.
+
+- **video_file_lines.gpkg** / **video_file_points.geojson** (`<stem>_<lines|points>[_local].<gpkg|geojson>`): Written on demand by `geotrax export` next to the georeferenced CSV (or under `--output-folder`), for use in QGIS, ArcGIS, kepler.gl, or any GDAL-based tool. `lines` holds one LineString per vehicle, time-ordered, with the attributes `Vehicle_ID`, `Vehicle_Class`, `Num_Points`, `Start_Time`/`End_Time`, `Start_Frame`/`End_Frame`, `Mean_Speed`/`Max_Speed` (km/h), and the median `Vehicle_Length`/`Vehicle_Width` (m); aggregated datasets add `Drone_ID` and order by `Local_Time` instead of `Frame_Number`. `points` holds one Point per CSV row with every CSV column. Coordinates are WGS84 (EPSG:4326) by default, or `Local_X`/`Local_Y` in `georef.transformation.target_crs` with `--crs local` (marked by the `_local` suffix).
 
 - **video_file_geo_transf.txt** (`<stem><geo_transform_postfix>.txt`): Contains the 3x3 georeferencing transformation matrix (homography) that maps points from the video's reference frame to the orthomap. The format is a comma-separated list of the 9 matrix elements:
 
