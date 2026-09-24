@@ -118,7 +118,7 @@ Run `geotrax -h` or `geotrax batch -h` for all options. The scale-up commands ab
 <details>
 <summary><b>📋 Full Feature Overview</b></summary>
 
-- **Detection**: YOLOv8s on aerial BEV imagery; detects car (incl. vans), bus, truck, and motorcycle; optional [SAHI](https://github.com/obss/sahi) sliced inference for improved small-object recall (`--sahi`).
+- **Detection**: YOLOv8s on aerial BEV imagery; detects car (incl. vans), bus, truck, and motorcycle; optional per-class confidence thresholds (`extraction.class_conf`) and [SAHI](https://github.com/obss/sahi) sliced inference for improved small-object recall (`--sahi`).
 - **Tracking**: six multi-object trackers (BoT-SORT default); see [Tracking](#tracking) for a comparison; optional per-track frame-gap interpolation.
 - **Stabilization**: homography-based trajectory correction via [Stabilo](https://github.com/rfonod/stabilo) ⚖️, tuned with [Stabilo-Optimize](https://github.com/rfonod/stabilo-optimize) 🎯; optional CUDA acceleration (`--stab-gpu`).
 - **Georeferencing**: frame-to-orthophoto registration; outputs lat/lon, local CRS, speed, acceleration, and lane assignment per vehicle; optional CUDA acceleration (`--geo-gpu`).
@@ -133,7 +133,6 @@ Run `geotrax -h` or `geotrax batch -h` for all options. The scale-up commands ab
 
 - Comprehensive documentation in a dedicated `docs/` folder. A [`tools/README.md`](tools/README.md) index already covers the auxiliary scripts.
 - Modularized, OOP-based pipeline with custom reference frame support and georeferencing leveraging Stabilo's image-matching backend.
-- Per-class confidence thresholds.
 - Simulation and scenario export: `geotrax export --format sumo` (and/or OpenDRIVE, CommonRoad) to turn an extracted dataset into a drop-in scenario for traffic simulators and digital twins, reusing the lane and road-section geometry already carried by the orthophoto segmentations.
 - Live/online mode: ingest RTMP-style drone feeds for real-time georeferenced output, for live monitoring and incident detection rather than offline batches.
 - Batch inference and multi-thread processing, plus distributed fan-out (Ray, Dask, or Slurm) so `geotrax batch` scales across a cluster for multi-drone, multi-intersection campaigns.
@@ -240,6 +239,16 @@ The default detector is **YOLOv8s** (HBB, 1920 × 1920 px, ~11 M parameters), tr
 
 To use a different model, point `--model` (CLI) or `extraction.model` (config) to a local `.pt` path or `hf://<org>/<repo>/<file>.pt`; any [Ultralytics](https://github.com/ultralytics/ultralytics)-compatible model works. An `hf://` reference follows the repo's current `main`; to pin an exact version, add a revision (commit SHA, tag or branch) after the repo name: `hf://<org>/<repo>@<revision>/<file>.pt`.
 
+### Per-Class Confidence Thresholds
+
+A single `ultralytics.conf` threshold rarely suits every class: rare or harder classes (buses, trucks) often deserve a lower bar than abundant cars. `extraction.class_conf` sets a threshold per class ID; classes it does not list keep the global `conf`:
+
+```bash
+geotrax extract video.mp4 --set 'class_conf={1: 0.15, 2: 0.4}'   # or set extraction.class_conf in a copied config
+```
+
+The detector runs at the lowest of these thresholds, and each detection is then held to the threshold of its own class *before* it reaches the tracker, so rejected boxes never start or extend a track. With `class_conf: null` (the default) extraction is unchanged. The thresholds also apply in SAHI mode. Lowering a threshold lets more boxes compete for `ultralytics.max_det`, so raise it if a dense scene hits the cap.
+
 ### Small-Object Detection with SAHI
 
 For footage where vehicles are near the detection floor (higher altitudes, sub-4K sensors), the extraction stage can optionally run [SAHI](https://github.com/obss/sahi) sliced inference: each frame is split into overlapping slices, the detector runs on every slice (plus one full-frame pass), and the results are merged before tracking. This substantially improves tiny-object recall at roughly 5x the per-frame detection cost with the default 1920 x 1080 slices.
@@ -250,7 +259,7 @@ geotrax extract video.mp4 --sahi     # also available on 'geotrax batch'
 
 SAHI is an optional extra. If it is not installed, the run stops immediately with the exact install command for your setup.
 
-Slice size, overlap, and merge settings live in `cfg -> extraction -> sahi` (run `geotrax config copy` to edit them). SAHI mode honors the `ultralytics` config keys `conf`, `device`, `imgsz` (applied per slice), and `classes`; the NMS-related keys (`iou`, `max_det`, `agnostic_nms`, etc.) are superseded by the SAHI merge settings. It supports YOLO models only and cannot be combined with the `tracktrack` tracker or with ReID model `auto` (both need a live Ultralytics predictor).
+Slice size, overlap, and merge settings live in `cfg -> extraction -> sahi` (run `geotrax config copy` to edit them). SAHI mode honors the `ultralytics` config keys `conf`, `device`, `imgsz` (applied per slice), and `classes`, as well as `extraction.class_conf`; the NMS-related keys (`iou`, `max_det`, `agnostic_nms`, etc.) are superseded by the SAHI merge settings. It supports YOLO models only and cannot be combined with the `tracktrack` tracker or with ReID model `auto` (both need a live Ultralytics predictor).
 
 ### Custom Model Training
 
