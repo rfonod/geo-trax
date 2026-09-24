@@ -110,8 +110,9 @@ import logging
 import shutil
 import sys
 import time
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable, Dict, NamedTuple, Tuple, Union
+from typing import Any, NamedTuple
 
 import cv2
 import numpy as np
@@ -194,8 +195,8 @@ def detect_track_stabilize(args: argparse.Namespace, logger: logging.Logger) -> 
 
 
 def track_with_model(
-    model: Any, config: Dict, logger: logging.Logger, class_conf: Union['ClassConf', None] = None
-) -> Tuple[np.ndarray, np.ndarray]:
+    model: Any, config: dict, logger: logging.Logger, class_conf: 'ClassConf | None' = None
+) -> tuple[np.ndarray, np.ndarray]:
     """
     Track vehicles in the video using the provided model.
 
@@ -217,7 +218,7 @@ def track_with_model(
     if sahi_cfg.get('enable', False):
         tracker = create_manual_tracker(config['main'])
 
-        def detect_frame(frame: np.ndarray) -> Tuple[Boxes, Dict]:
+        def detect_frame(frame: np.ndarray) -> tuple[Boxes, dict]:
             return detect_frame_sahi(
                 model, tracker, frame, sahi_cfg, config['ultralytics'].get('classes'), class_conf=per_class
             )
@@ -227,7 +228,7 @@ def track_with_model(
             track_cfg = {**track_cfg, 'conf': per_class.predict_conf}
             model.add_callback('on_predict_postprocess_end', make_class_conf_callback(per_class))
 
-        def detect_frame(frame: np.ndarray) -> Tuple[Boxes, Dict]:
+        def detect_frame(frame: np.ndarray) -> tuple[Boxes, dict]:
             return detect_frame_ultralytics(model, frame, track_cfg)
 
     frame_num, yolo_time, stab_time = 0, [], []
@@ -303,7 +304,7 @@ def track_with_model(
     return tracks, transforms
 
 
-def load_detector(config: Dict, logger: logging.Logger) -> Union[YOLO, RTDETR]:
+def load_detector(config: dict, logger: logging.Logger) -> YOLO | RTDETR:
     """
     Load the detection model based on configuration.
     """
@@ -325,7 +326,7 @@ def load_detector(config: Dict, logger: logging.Logger) -> Union[YOLO, RTDETR]:
     return model
 
 
-def load_sahi_detector(config: Dict, logger: logging.Logger, conf: Union[float, None] = None) -> Any:
+def load_sahi_detector(config: dict, logger: logging.Logger, conf: float | None = None) -> Any:
     """
     Load the detection model wrapped in a SAHI AutoDetectionModel for sliced inference.
 
@@ -369,7 +370,7 @@ def load_sahi_detector(config: Dict, logger: logging.Logger, conf: Union[float, 
     return model
 
 
-def validate_sahi_tracker(main_cfg: Dict) -> None:
+def validate_sahi_tracker(main_cfg: dict) -> None:
     """
     Check that the active tracker can be fed detections manually (required in SAHI mode).
     """
@@ -399,10 +400,10 @@ class ClassConf(NamedTuple):
 
     predict_conf: float
     default: float
-    thresholds: Union[Dict[int, float], None]
+    thresholds: dict[int, float] | None
 
 
-def resolve_class_conf(ultra_cfg: Dict, extraction_cfg: Dict, logger: logging.Logger) -> ClassConf:
+def resolve_class_conf(ultra_cfg: dict, extraction_cfg: dict, logger: logging.Logger) -> ClassConf:
     """Resolve cfg -> extraction -> class_conf against the global cfg -> ultralytics -> conf.
 
     A null global conf falls back to 0.1, the value Ultralytics' ``Model.track`` substitutes. Keys
@@ -485,7 +486,7 @@ def make_class_conf_callback(class_conf: ClassConf) -> Callable[[Any], None]:
     return filter_results
 
 
-def create_manual_tracker(main_cfg: Dict) -> Any:
+def create_manual_tracker(main_cfg: dict) -> Any:
     """
     Instantiate the active tracker directly; SAHI mode feeds it detections manually.
     """
@@ -494,9 +495,9 @@ def create_manual_tracker(main_cfg: Dict) -> Any:
 
 def sahi_predictions_to_boxes(
     object_predictions: list,
-    orig_shape: Tuple[int, int],
-    classes: Union[list, None],
-    class_conf: Union[ClassConf, None] = None,
+    orig_shape: tuple[int, int],
+    classes: list | None,
+    class_conf: ClassConf | None = None,
 ) -> Boxes:
     """
     Convert SAHI object predictions to an Ultralytics Boxes object, applying the class-ID filter
@@ -516,7 +517,7 @@ def sahi_predictions_to_boxes(
     return Boxes(data, orig_shape)
 
 
-def detect_frame_ultralytics(model: Union[YOLO, RTDETR], frame: np.ndarray, config: Dict) -> Tuple[Boxes, Dict]:
+def detect_frame_ultralytics(model: YOLO | RTDETR, frame: np.ndarray, config: dict) -> tuple[Boxes, dict]:
     """
     Detect and track objects in a single frame via the Ultralytics pipeline.
     """
@@ -528,10 +529,10 @@ def detect_frame_sahi(
     model: Any,
     tracker: Any,
     frame: np.ndarray,
-    sahi_cfg: Dict,
-    classes: Union[list, None],
-    class_conf: Union[ClassConf, None] = None,
-) -> Tuple[Boxes, Dict]:
+    sahi_cfg: dict,
+    classes: list | None,
+    class_conf: ClassConf | None = None,
+) -> tuple[Boxes, dict]:
     """
     Detect objects in a single frame via SAHI sliced inference and update the tracker manually.
 
@@ -572,7 +573,7 @@ def detect_frame_sahi(
     return boxes, speed
 
 
-def initialize_streams(config: Dict, imgsz: int, logger: logging.Logger) -> Tuple[cv2.VideoCapture, tqdm]:
+def initialize_streams(config: dict, imgsz: int, logger: logging.Logger) -> tuple[cv2.VideoCapture, tqdm]:
     """
     Initialize video reader and progress bar.
     """
@@ -593,7 +594,7 @@ def initialize_streams(config: Dict, imgsz: int, logger: logging.Logger) -> Tupl
     return reader, pbar
 
 
-def update_progress_bar(pbar: tqdm, class_freq: Dict, speed: Dict, stab_time: list, config: Dict) -> None:
+def update_progress_bar(pbar: tqdm, class_freq: dict, speed: dict, stab_time: list, config: dict) -> None:
     """
     Update the progress bar with additional information.
     """
@@ -606,7 +607,7 @@ def update_progress_bar(pbar: tqdm, class_freq: Dict, speed: Dict, stab_time: li
         pbar.set_postfix(postfix_txt)
 
 
-def aggregate_results(frame_arr: list, track_id: list, bbox: list, bbox_stab: list, class_id: list, conf: list, transforms: list, logger: logging.Logger) -> Tuple[np.ndarray, np.ndarray]:
+def aggregate_results(frame_arr: list, track_id: list, bbox: list, bbox_stab: list, class_id: list, conf: list, transforms: list, logger: logging.Logger) -> tuple[np.ndarray, np.ndarray]:
     """
     Aggregate the results from all frames.
     """
@@ -631,7 +632,7 @@ def aggregate_results(frame_arr: list, track_id: list, bbox: list, bbox_stab: li
     return tracks, transforms
 
 
-def postprocess_tracks(tracks: np.ndarray, config: Dict, logger: logging.Logger) -> np.ndarray:
+def postprocess_tracks(tracks: np.ndarray, config: dict, logger: logging.Logger) -> np.ndarray:
     """
     Postprocess the extracted tracks.
     """
@@ -745,7 +746,7 @@ def calculate_unique_classes(tracks: np.ndarray) -> np.ndarray:
     return tracks
 
 
-def estimate_vehicle_dimensions(tracks: np.ndarray, config: Dict) -> np.ndarray:
+def estimate_vehicle_dimensions(tracks: np.ndarray, config: dict) -> np.ndarray:
     """
     Estimate vehicle dimensions based on bounding boxes and azimuths.
     """
@@ -828,7 +829,7 @@ def estimate_vehicle_dimensions(tracks: np.ndarray, config: Dict) -> np.ndarray:
     return tracks
 
 
-def save_results(tracks: np.ndarray, transforms: np.ndarray, config: Dict, logger: logging.Logger, out_cfg: Dict) -> None:
+def save_results(tracks: np.ndarray, transforms: np.ndarray, config: dict, logger: logging.Logger, out_cfg: dict) -> None:
     """
     Save the detection, tracking, and stabilization results to files.
 
@@ -886,7 +887,7 @@ def save_results(tracks: np.ndarray, transforms: np.ndarray, config: Dict, logge
     logger.info(f"Tracking results saved to: '{tracks_txt_file.resolve()}'")
 
 
-def _build_run_metadata(config: Dict, save_dir: Path) -> Dict:
+def _build_run_metadata(config: dict, save_dir: Path) -> dict:
     """Build a structured, human-readable record of the configuration this run actually used.
 
     Reads the config dict, which ``sync_args_with_config`` has already reconciled with the CLI

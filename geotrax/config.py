@@ -44,7 +44,6 @@ import argparse
 import shutil
 import sys
 from pathlib import Path
-from typing import Optional
 
 from geotrax import CFG_DIR
 
@@ -111,7 +110,7 @@ def _error(message: str) -> None:
     sys.exit(1)
 
 
-def _run_show(preset: Optional[str]) -> None:
+def _run_show(preset: str | None) -> None:
     if preset is not None:
         src = CFG_DIR / f'{preset}.yaml'
         if not src.is_file():

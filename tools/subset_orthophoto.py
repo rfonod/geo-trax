@@ -65,7 +65,7 @@ def process_ortho(orthophoto_filepath, ortho_cutout_folder, location_dict_filepa
     """
     Subset the orthophoto for each location in location_path and save the down-scaled one.
     """
-    with open(location_dict_filepath, 'r') as f:
+    with open(location_dict_filepath) as f:
         location_dict = json.load(f)
 
     with TiffFile(orthophoto_filepath) as tif:

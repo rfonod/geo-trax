@@ -75,7 +75,6 @@ import json
 import logging
 import os
 from pathlib import Path
-from typing import Dict, List
 
 import cv2
 import yaml
@@ -88,7 +87,7 @@ from geotrax.utils.logging_utils import setup_logger
 IMAGE_FORMATS = {".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff"}
 
 
-def parse_class_map(pairs: List[str], logger: logging.Logger) -> Dict[int, str]:
+def parse_class_map(pairs: list[str], logger: logging.Logger) -> dict[int, str]:
     """Parse ID=Name pairs (e.g. ['0=Car', '1=Bus']) into a {class_id: label} dict."""
     class_map = {}
     for pair in pairs:
@@ -100,7 +99,7 @@ def parse_class_map(pairs: List[str], logger: logging.Logger) -> Dict[int, str]:
     return class_map
 
 
-def load_class_map_from_file(filepath: Path, logger: logging.Logger) -> Dict[int, str]:
+def load_class_map_from_file(filepath: Path, logger: logging.Logger) -> dict[int, str]:
     """Load a class ID to label mapping from a YAML or JSON file."""
     try:
         with open(filepath) as f:
@@ -113,7 +112,7 @@ def load_class_map_from_file(filepath: Path, logger: logging.Logger) -> Dict[int
         return {}
 
 
-def resolve_class_map(args: argparse.Namespace, logger: logging.Logger) -> Dict[int, str]:
+def resolve_class_map(args: argparse.Namespace, logger: logging.Logger) -> dict[int, str]:
     """Resolve class ID-to-label mapping from the highest-priority available source."""
     if args.class_map:
         return parse_class_map(args.class_map, logger)
@@ -203,7 +202,7 @@ def convert_annotations(args: argparse.Namespace, logger: logging.Logger) -> Non
             "imageWidth": width,
         }
 
-        with open(label_path, "r") as label_file:
+        with open(label_path) as label_file:
             for annotation_line in label_file:
                 parts = annotation_line.strip().split(" ")
                 if len(parts) < 5:

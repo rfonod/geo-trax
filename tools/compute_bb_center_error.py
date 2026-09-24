@@ -161,7 +161,7 @@ def load_annotations(image_id, annotation_path, logger):
     if not annotation_file.exists():
         logger.info(f"{annotation_file} does not exist; treating the image as having no boxes.")
         return []
-    with open(annotation_file, "r") as f:
+    with open(annotation_file) as f:
         lines = f.readlines()
     annotations = []
     for line in lines:

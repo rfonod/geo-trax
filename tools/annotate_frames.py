@@ -117,7 +117,6 @@ Notes:
 import argparse
 import logging
 from pathlib import Path
-from typing import Dict, List
 
 import cv2
 from ultralytics import YOLO
@@ -128,9 +127,9 @@ from geotrax.utils.config_utils import load_config, resolve_class_names, resolve
 from geotrax.utils.logging_utils import setup_logger
 
 
-def parse_class_conf(pairs: List[str]) -> Dict[int, float]:
+def parse_class_conf(pairs: list[str]) -> dict[int, float]:
     """Parse CLASS_ID=THRESHOLD pairs (e.g. ['0=0.3', '1=0.5']) into a {class_id: threshold} dict."""
-    class_conf: Dict[int, float] = {}
+    class_conf: dict[int, float] = {}
     for pair in pairs:
         try:
             class_id_str, threshold_str = pair.split('=')
@@ -275,7 +274,7 @@ def run_annotator(args: argparse.Namespace, logger: logging.Logger) -> None:
         logger.notice(f"Masked images saved to '{masked_dir}'.")
 
 
-def load_detector(config: Dict, logger: logging.Logger) -> YOLO:
+def load_detector(config: dict, logger: logging.Logger) -> YOLO:
     """Load the detection model."""
     try:
         model = YOLO(model=config['model'], task=config['task'])

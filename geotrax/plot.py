@@ -88,7 +88,6 @@ import logging
 import shutil
 import sys
 from pathlib import Path
-from typing import Union
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -141,7 +140,7 @@ def generate_plots(args: argparse.Namespace, logger: logging.Logger) -> None:
         handle_aggregation(data_at_location_id, config, logger)
 
 
-def process_file(file: Path, ortho_folder: Union[Path, None], data_at_location_id: dict, config: dict, logger: logging.Logger) -> None:
+def process_file(file: Path, ortho_folder: Path | None, data_at_location_id: dict, config: dict, logger: logging.Logger) -> None:
     """
     Process an individual file and generate plots or aggregate data.
     """
@@ -192,7 +191,7 @@ def aggregate_data(file: Path, df_img: pd.DataFrame, df_geo: pd.DataFrame, locat
         data['geo_stems'].append(filepath_geo.stem)
 
 
-def merge_coordinates(seen: Union[dict, None], new: Union[dict, None]) -> Union[dict, None]:
+def merge_coordinates(seen: dict | None, new: dict | None) -> dict | None:
     """
     Merge the coordinate systems of one more file into those of a location's earlier files.
 
@@ -316,7 +315,7 @@ def determine_files_to_process(input_path: Path, skip_filenames_with: list, logg
     return files
 
 
-def get_filepaths(file: Path, ortho_folder: Union[Path, None], config: dict, logger: logging.Logger) -> tuple:
+def get_filepaths(file: Path, ortho_folder: Path | None, config: dict, logger: logging.Logger) -> tuple:
     """
     Get the file paths for the image, geo, orthophoto, and segmentation overlay files.
     """
@@ -446,7 +445,7 @@ def plot_trajectories(dfs: tuple, coordinates: tuple, filepaths: tuple, config: 
                         plot_trajectories_in_given_coordinates(df, coordinate, x_key, y_key, filepaths[i], filepath_seg, config, logger, is_seg=True)
 
 
-def plot_trajectories_in_given_coordinates(df: pd.DataFrame, coordinates: str, x_key: str, y_key: str, filepath: Path, filepath_ortho: Union[Path, None], config: dict, logger: logging.Logger, is_seg: bool = False) -> None:
+def plot_trajectories_in_given_coordinates(df: pd.DataFrame, coordinates: str, x_key: str, y_key: str, filepath: Path, filepath_ortho: Path | None, config: dict, logger: logging.Logger, is_seg: bool = False) -> None:
     """
     Plot the trajectories in the given coordinates.
     """

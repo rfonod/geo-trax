@@ -274,7 +274,7 @@ def cut_and_save_srt(
         return get_cut_filepath(session_dir, label, intersections, '.mp4')
 
     try:
-        with open(filepaths['merged_srt'], 'r') as f:
+        with open(filepaths['merged_srt']) as f:
             merged_srt = [line.rstrip() for line in f if line.strip()]
     except Exception as e:
         logger.error(f"Problem reading '{filepaths['merged_srt']}': {e}")
@@ -537,7 +537,7 @@ def parse_srt(timestamp_line: str, log_line: str) -> dict:
 
 def get_cuts(cuts_txt_path: Path, logger: logging.Logger) -> dict[int, tuple[int, int, int]]:
     try:
-        with open(cuts_txt_path, 'r') as f:
+        with open(cuts_txt_path) as f:
             lines = [line.rstrip().split(',') for line in f if line.strip()]
     except Exception as e:
         logger.error(f"Problem reading '{cuts_txt_path}': {e}")

@@ -8,9 +8,9 @@ import logging
 import os
 import subprocess
 import sys
+from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Iterator, Optional, Tuple, Union
 
 import cv2
 import numpy as np
@@ -34,7 +34,7 @@ DEFAULT_OUTPUT = {
 }
 
 
-def get_output_dir(source: Path, output_cfg: Optional[dict] = None) -> Path:
+def get_output_dir(source: Path, output_cfg: dict | None = None) -> Path:
     """Return the output directory for *source*.
 
     If ``output_cfg['folder']`` is an absolute path it is used as-is (shared
@@ -49,10 +49,10 @@ def get_output_dir(source: Path, output_cfg: Optional[dict] = None) -> Path:
 def build_result_path(
     source: Path,
     result_type: str,
-    output_cfg: Optional[dict] = None,
-    viz_mode: Optional[int] = None,
-    ext: Optional[str] = None,
-) -> Optional[Path]:
+    output_cfg: dict | None = None,
+    viz_mode: int | None = None,
+    ext: str | None = None,
+) -> Path | None:
     """Return the expected output path for *result_type* given *source*.
 
     result_type choices: 'video', 'processed', 'video_transformations',
@@ -79,7 +79,7 @@ def build_result_path(
     return None
 
 
-def read_recorded_stab_anchor(source: Path, output_cfg: Optional[dict] = None) -> Optional[int]:
+def read_recorded_stab_anchor(source: Path, output_cfg: dict | None = None) -> int | None:
     """Return the stabilization anchor frame recorded in the run-metadata YAML of *source*, or None.
 
     The stabilized track coordinates are expressed relative to the ``cut_frame_left`` that ``extract``
@@ -125,7 +125,7 @@ def atomic_output(path: Path, keep_suffix: bool = False) -> Iterator[Path]:
 def detect_delimiter(filepath: Path, lines_to_check: int = 5) -> str:
     """Detect the delimiter of a CSV file by reading a few lines."""
     delimiters = {',': 0, ' ': 0, '\t': 0}
-    with open(filepath, 'r') as file:
+    with open(filepath) as file:
         for _ in range(lines_to_check):
             line = file.readline()
             if not line:
@@ -181,7 +181,7 @@ def determine_location_id(source: Path, logger: logging.Logger = None) -> str:
     return location_id
 
 
-def get_ortho_folder(source: Path, ortho_folder: Union[Path, None], logger: logging.Logger, critical: bool = True) -> Path:
+def get_ortho_folder(source: Path, ortho_folder: Path | None, logger: logging.Logger, critical: bool = True) -> Path:
     """Get the orthophoto folder from the provided path or use the default folder structure."""
     if ortho_folder is None:
         ortho_folder = source.parent
@@ -224,14 +224,14 @@ def get_ortho_folder(source: Path, ortho_folder: Union[Path, None], logger: logg
     return ortho_folder
 
 
-def determine_suffix_and_fourcc() -> Tuple[str, str]:
+def determine_suffix_and_fourcc() -> tuple[str, str]:
     """Determine the suffix and fourcc for the output video format."""
     suffix = 'mp4' if MACOS else 'avi' if WINDOWS else 'mp4'
     fourcc = 'avc1' if MACOS else 'WMV2' if WINDOWS else 'mp4v'
     return suffix, fourcc
 
 
-def get_video_dimensions(video_path: Path) -> Tuple[int, int]:
+def get_video_dimensions(video_path: Path) -> tuple[int, int]:
     """Get the width and height of the video."""
     reader = cv2.VideoCapture(str(video_path))
     frame_w = int(reader.get(cv2.CAP_PROP_FRAME_WIDTH))
@@ -243,10 +243,10 @@ def get_video_dimensions(video_path: Path) -> Tuple[int, int]:
 def check_if_results_exist(
     file: Path,
     result_type: str,
-    viz_mode: Optional[int] = None,
-    ext: Optional[str] = None,
-    output_cfg: Optional[dict] = None,
-) -> Tuple[bool, Optional[Path]]:
+    viz_mode: int | None = None,
+    ext: str | None = None,
+    output_cfg: dict | None = None,
+) -> tuple[bool, Path | None]:
     """Check if the results already exist for *file*.
 
     *output_cfg* is the ``cfg -> output`` dict (or ``None`` to use the

@@ -7,7 +7,6 @@ import logging
 import os
 from datetime import datetime
 from pathlib import Path
-from typing import Union
 
 from geotrax.utils.constants import MACOS, WINDOWS
 from geotrax.utils.version_check import check_for_updates_once
@@ -74,7 +73,7 @@ def default_log_dir() -> Path:
     return base / 'geo-trax' / 'logs'
 
 
-def setup_logger(name: str, verbose: bool = False, log_path: Union[str, Path, None] = None, dry_run: bool = False) -> logging.Logger:
+def setup_logger(name: str, verbose: bool = False, log_path: str | Path | None = None, dry_run: bool = False) -> logging.Logger:
     """Set up a logger with a given name, verbosity level, and optional log path.
 
     ``log_path`` may be a directory (an auto-named ``<stage>_<timestamp>_<pid>.log`` file is

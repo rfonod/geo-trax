@@ -4,7 +4,6 @@
 """Color palettes for video visualization (VizColors) and trajectory plotting (PlotColors)."""
 
 import random
-from typing import Optional
 
 
 class VizColors:
@@ -37,7 +36,7 @@ class VizColors:
 
 class PlotColors:
     """Color palette for trajectory plotting."""
-    def __init__(self, colors: Optional[list] = None) -> None:
+    def __init__(self, colors: list | None = None) -> None:
         """Initialise with an optional list of hex colour strings."""
         self.colors = colors if colors else []
 
@@ -56,4 +55,4 @@ class PlotColors:
         """
         if index < len(self.colors):
             return self.colors[index]
-        return "#{:06x}".format(random.Random(index).randrange(0x1000000))
+        return f"#{random.Random(index).randrange(0x1000000):06x}"

@@ -3,8 +3,9 @@
 
 """Shared CLI argument helpers used by the pipeline entry points."""
 
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable, NamedTuple, Optional
+from typing import NamedTuple
 
 # Default pipeline config: the bundled 'default' preset. Resolved by resolve_config_path(),
 # which falls back to the package's bundled cfg/ dir, so this works from any working directory
@@ -31,12 +32,12 @@ class CfgArg(NamedTuple):
     path: str
     invert: bool = False
     no_sync: bool = False
-    coerce: Optional[Callable] = None
+    coerce: Callable | None = None
     flag: str = ''
 
 
 def add_cfg_arg(group, *flags, cfg: str, paths: dict, help: str, default_note: str = '',  # noqa: A002
-                invert: bool = False, no_sync: bool = False, coerce: Optional[Callable] = None,
+                invert: bool = False, no_sync: bool = False, coerce: Callable | None = None,
                 **kwargs):
     """Register a config-backed CLI argument and record its ``dest -> CfgArg`` mapping.
 
@@ -59,7 +60,7 @@ def add_cfg_arg(group, *flags, cfg: str, paths: dict, help: str, default_note: s
     return action
 
 
-def finalize_cli_args(parser, cfg_paths: dict, argv: Optional[list] = None):
+def finalize_cli_args(parser, cfg_paths: dict, argv: list | None = None):
     """Parse the command line and stash what the config plumbing needs on the namespace.
 
     ``_cfg_paths`` is the merged ``dest -> CfgArg`` map, and ``_cli_provided`` is the set of

@@ -65,7 +65,6 @@ import argparse
 import logging
 import sys
 from pathlib import Path
-from typing import List, Union
 
 import geopandas as gpd
 import numpy as np
@@ -93,7 +92,7 @@ def is_trajectory_csv(path: Path, crs_mode: str) -> bool:
     return {'Vehicle_ID', *COORDINATE_COLUMNS[crs_mode]}.issubset(header)
 
 
-def find_input_csvs(source: Path, crs_mode: str, out_cfg: dict, logger: logging.Logger) -> List[Path]:
+def find_input_csvs(source: Path, crs_mode: str, out_cfg: dict, logger: logging.Logger) -> list[Path]:
     """Resolve *source* (a .csv, a video, or a folder) to the trajectory CSVs to export.
 
     A video resolves to its georeferenced CSV in the output folder, never to the drone flight log
@@ -142,7 +141,7 @@ def drop_invalid_coordinates(df: pd.DataFrame, crs_mode: str, source: Path, logg
     return df
 
 
-def time_order_column(df: pd.DataFrame) -> Union[str, None]:
+def time_order_column(df: pd.DataFrame) -> str | None:
     """Return the column that orders a vehicle's points: Frame_Number, else Local_Time, else Timestamp."""
     return next((c for c in ('Frame_Number', 'Local_Time', 'Timestamp') if c in df.columns), None)
 
@@ -300,7 +299,7 @@ def export_trajectories(args: argparse.Namespace, logger: logging.Logger) -> Non
         sys.exit(1)
 
 
-def parse_cli_args(argv: Union[list, None] = None) -> argparse.Namespace:
+def parse_cli_args(argv: list | None = None) -> argparse.Namespace:
     """Parse command-line arguments."""
     parser = argparse.ArgumentParser(
         description='Export georeferenced trajectories to GIS formats (GeoPackage, GeoJSON)'

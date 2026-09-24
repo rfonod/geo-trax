@@ -79,7 +79,6 @@ import re
 import sys
 import zipfile
 from pathlib import Path
-from typing import Optional
 
 import pandas as pd
 from tqdm import tqdm
@@ -215,7 +214,7 @@ def group_result_files(csv_files: list, folder_name: str, logger: logging.Logger
     return {key: sorted(files, key=lambda x: (int(x[1][1:]), x[0])) for key, files in file_groups.items()}
 
 
-def load_source_rows(file_path: Path, drone_id: str, logger: logging.Logger) -> Optional[pd.DataFrame]:
+def load_source_rows(file_path: Path, drone_id: str, logger: logging.Logger) -> pd.DataFrame | None:
     """Return the rows of one georeferenced CSV as they enter the aggregated dataset, or None if skipped.
 
     Vehicle_ID is left as in the source file; the caller applies the group's running offset. Every
