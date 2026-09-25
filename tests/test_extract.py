@@ -13,20 +13,26 @@ from unittest.mock import patch
 
 import numpy as np
 import pytest
+import torch
 import yaml
+from ultralytics.engine.results import Results
 from ultralytics.trackers.bot_sort import BOTSORT
 
 from geotrax.extract import (
+    ClassConf,
     add_processing_args,
     aggregate_results,
     calculate_unique_classes,
+    class_conf_mask,
     create_manual_tracker,
     detect_frame_sahi,
     estimate_vehicle_dimensions,
     interpolate_tracks,
     load_sahi_detector,
+    make_class_conf_callback,
     postprocess_tracks,
     remove_short_tracks,
+    resolve_class_conf,
     sahi_predictions_to_boxes,
     validate_sahi_tracker,
 )
@@ -541,3 +547,188 @@ def test_aggregate_results_raises_instead_of_returning_empty_tracks():
     with pytest.raises(ExtractionError):
         aggregate_results([np.zeros((2, 1))], [np.zeros((3, 1))], [np.zeros((2, 4))], [], [np.zeros((2, 1))],
                           [np.zeros((2, 1))], [], logger)
+
+
+# --- Per-class confidence thresholds ------------------------------------------
+
+def test_resolve_class_conf_null_keeps_global_threshold():
+    cc = resolve_class_conf({'conf': 0.25, 'classes': [0, 1, 2, 3]}, {'class_conf': None}, logger)
+    assert cc == ClassConf(0.25, 0.25, None)
+
+
+def test_resolve_class_conf_missing_key_keeps_global_threshold():
+    assert resolve_class_conf({'conf': 0.3}, {}, logger).thresholds is None
+
+
+def test_resolve_class_conf_lowers_predict_conf_to_the_minimum():
+    cc = resolve_class_conf({'conf': 0.25, 'classes': None}, {'class_conf': {1: 0.1, 2: 0.6}}, logger)
+    assert cc.predict_conf == pytest.approx(0.1)
+    assert cc.default == pytest.approx(0.25)
+    assert cc.thresholds == {1: 0.1, 2: 0.6}
+
+
+def test_resolve_class_conf_higher_thresholds_keep_global_predict_conf():
+    cc = resolve_class_conf({'conf': 0.25, 'classes': None}, {'class_conf': {2: 0.6}}, logger)
+    assert cc.predict_conf == pytest.approx(0.25)
+
+
+def test_resolve_class_conf_null_global_conf_uses_track_fallback():
+    cc = resolve_class_conf({'conf': None, 'classes': None}, {'class_conf': {2: 0.6}}, logger)
+    assert cc.default == pytest.approx(0.1)
+
+
+def test_resolve_class_conf_accepts_string_keys():
+    cc = resolve_class_conf({'conf': 0.25, 'classes': None}, {'class_conf': {'2': 0.5}}, logger)
+    assert cc.thresholds == {2: 0.5}
+
+
+@pytest.mark.parametrize('class_conf', [
+    0.5,
+    [0.5],
+    {'car': 0.5},
+    {True: 0.5},
+    {2: 1.5},
+    {2: -0.1},
+    {2: 'high'},
+    {2: True},
+])
+def test_resolve_class_conf_rejects_invalid_values(class_conf):
+    with pytest.raises(ValueError, match='class_conf'):
+        resolve_class_conf({'conf': 0.25, 'classes': None}, {'class_conf': class_conf}, logger)
+
+
+def test_resolve_class_conf_warns_about_excluded_classes(caplog):
+    with caplog.at_level(logging.WARNING):
+        resolve_class_conf({'conf': 0.25, 'classes': [0, 1]}, {'class_conf': {3: 0.5}}, logger)
+    assert any('[3]' in r.message for r in caplog.records)
+
+
+def test_class_conf_mask_applies_per_class_and_default_thresholds():
+    cc = ClassConf(0.1, 0.25, {1: 0.1, 2: 0.6})
+    cls = np.array([0, 0, 1, 2, 2])
+    conf = np.array([0.2, 0.3, 0.15, 0.5, 0.7])
+    np.testing.assert_array_equal(class_conf_mask(cls, conf, cc), [False, True, True, False, True])
+
+
+def test_class_conf_mask_is_strict_like_ultralytics_nms():
+    cc = ClassConf(0.25, 0.25, {2: 0.6})
+    np.testing.assert_array_equal(class_conf_mask(np.array([2, 0]), np.array([0.6, 0.25]), cc), [False, False])
+
+
+def _fake_predictor(rows, feats=None):
+    result = Results(
+        orig_img=np.zeros((108, 192, 3), dtype=np.uint8),
+        path='frame.jpg',
+        names={0: 'car', 1: 'bus', 2: 'truck'},
+        boxes=torch.tensor(rows, dtype=torch.float32),
+    )
+    if feats is not None:
+        result.feats = feats
+    return SimpleNamespace(results=[result])
+
+
+def test_class_conf_callback_filters_boxes_before_the_tracker():
+    predictor = _fake_predictor([
+        [0, 0, 10, 10, 0.20, 0],
+        [0, 0, 10, 10, 0.30, 0],
+        [0, 0, 10, 10, 0.50, 2],
+        [0, 0, 10, 10, 0.70, 2],
+    ])
+    make_class_conf_callback(ClassConf(0.1, 0.25, {2: 0.6}))(predictor)
+    boxes = predictor.results[0].boxes
+    np.testing.assert_allclose(boxes.conf.numpy(force=True), [0.3, 0.7])
+    np.testing.assert_array_equal(boxes.cls.numpy(force=True), [0, 2])
+    assert predictor.results[0].path == 'frame.jpg'
+
+
+def test_class_conf_callback_slices_reid_features():
+    feats = torch.arange(3, dtype=torch.float32).reshape(3, 1)
+    predictor = _fake_predictor([
+        [0, 0, 10, 10, 0.9, 0],
+        [0, 0, 10, 10, 0.5, 2],
+        [0, 0, 10, 10, 0.8, 2],
+    ], feats=feats)
+    make_class_conf_callback(ClassConf(0.25, 0.25, {2: 0.6}))(predictor)
+    np.testing.assert_array_equal(predictor.results[0].feats.numpy(), [[0.0], [2.0]])
+
+
+def test_class_conf_callback_leaves_unaffected_results_untouched():
+    predictor = _fake_predictor([[0, 0, 10, 10, 0.9, 0]])
+    original = predictor.results[0]
+    make_class_conf_callback(ClassConf(0.25, 0.25, {2: 0.6}))(predictor)
+    assert predictor.results[0] is original
+
+
+def test_class_conf_callback_can_drop_every_box():
+    predictor = _fake_predictor([[0, 0, 10, 10, 0.5, 2]])
+    make_class_conf_callback(ClassConf(0.25, 0.25, {2: 0.6}))(predictor)
+    assert len(predictor.results[0].boxes) == 0
+
+
+def test_class_conf_callback_filters_the_tracktrack_loose_nms_pass():
+    predictor = _fake_predictor([[0, 0, 10, 10, 0.9, 0]])
+    loose = _fake_predictor([[0, 0, 10, 10, 0.9, 0], [50, 50, 60, 60, 0.5, 2]]).results
+    calls = []
+
+    def orig_postprocess(*args, **kwargs):
+        calls.append(kwargs)
+        return loose
+
+    predictor._orig_postprocess = orig_postprocess
+    callback = make_class_conf_callback(ClassConf(0.25, 0.25, {2: 0.6}))
+    callback(predictor)
+    callback(predictor)
+    results = predictor._orig_postprocess(None, None, None, iou=0.95)
+    assert calls == [{'iou': 0.95}]
+    np.testing.assert_array_equal(results[0].boxes.cls.numpy(force=True), [0])
+
+
+def test_sahi_predictions_to_boxes_applies_class_conf():
+    preds = [
+        _make_sahi_pred(0, 0, 10, 10, 0.3, 0),
+        _make_sahi_pred(0, 0, 10, 10, 0.5, 2),
+        _make_sahi_pred(0, 0, 10, 10, 0.7, 2),
+    ]
+    boxes = sahi_predictions_to_boxes(preds, (1080, 1920), classes=None, class_conf=ClassConf(0.25, 0.25, {2: 0.6}))
+    np.testing.assert_allclose(boxes.conf.numpy(force=True), [0.3, 0.7])
+
+
+def test_sahi_predictions_to_boxes_without_class_conf_is_unchanged():
+    preds = [_make_sahi_pred(0, 0, 10, 10, 0.5, 2)]
+    boxes = sahi_predictions_to_boxes(preds, (1080, 1920), classes=None, class_conf=ClassConf(0.25, 0.25, None))
+    assert len(boxes) == 1
+
+
+def test_detect_frame_sahi_filters_before_tracker_update():
+    prediction = SimpleNamespace(
+        object_prediction_list=[_make_sahi_pred(10, 20, 30, 60, 0.5, 2), _make_sahi_pred(10, 20, 30, 60, 0.9, 0)],
+        durations_in_seconds={},
+    )
+    seen = []
+
+    def update(det, img):
+        seen.append(len(det))
+        return np.empty((0, 8))
+
+    tracker = SimpleNamespace(update=update)
+    frame = np.zeros((108, 192, 3), dtype=np.uint8)
+    with patch.dict(sys.modules, _fake_sahi_modules(prediction)):
+        boxes, _ = detect_frame_sahi(None, tracker, frame, _default_sahi_cfg(), classes=None,
+                                     class_conf=ClassConf(0.25, 0.25, {2: 0.6}))
+    assert seen == [1]
+    assert boxes.cls.item() == 0
+
+
+def test_load_sahi_detector_uses_lowered_conf():
+    captured = {}
+    modules = _fake_sahi_modules(None)
+    modules['sahi'].AutoDetectionModel = SimpleNamespace(from_pretrained=lambda **kwargs: captured.update(kwargs))
+    config = {'model': 'no/such/model.pt', 'conf': 0.25, 'device': 'cpu', 'imgsz': 1920}
+    with patch.dict(sys.modules, modules), patch('geotrax.extract.check_yolo'):
+        load_sahi_detector(config, logger, conf=0.1)
+    assert captured['confidence_threshold'] == pytest.approx(0.1)
+
+
+@pytest.mark.parametrize('preset', ['default', 'confident', 'lenient', 'stable'])
+def test_presets_ship_class_conf_disabled(preset):
+    assert load_config(preset, logger)['extraction']['class_conf'] is None

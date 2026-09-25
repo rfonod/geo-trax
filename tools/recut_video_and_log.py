@@ -91,7 +91,6 @@ import shlex
 import subprocess
 import sys
 from pathlib import Path
-from typing import Dict, Tuple
 
 import cv2
 import numpy as np
@@ -101,7 +100,7 @@ from geotrax.utils.file_utils import get_keyframe_times
 from geotrax.utils.logging_utils import setup_logger
 
 
-def process_cutting(filepaths: Dict[str, Path], logger: logging.Logger, cuts: Tuple[int, int, int] = None, debug: bool = False, exact_cut: bool = False, bitrate: str = None) -> None:
+def process_cutting(filepaths: dict[str, Path], logger: logging.Logger, cuts: tuple[int, int, int] = None, debug: bool = False, exact_cut: bool = False, bitrate: str = None) -> None:
     if cuts is None:
         cuts = get_cuts(filepaths, logger)
     perform_sanity_checks(cuts, filepaths)
@@ -110,7 +109,7 @@ def process_cutting(filepaths: Dict[str, Path], logger: logging.Logger, cuts: Tu
     cut_and_save_csv(filepaths, cuts_adjusted, logger, debug)
 
 
-def cut_and_save_video(filepaths: Dict[str, Path], cuts: Tuple[int, int, int], logger: logging.Logger, debug: bool = False, exact_cut: bool = False, bitrate: str = None) -> None:
+def cut_and_save_video(filepaths: dict[str, Path], cuts: tuple[int, int, int], logger: logging.Logger, debug: bool = False, exact_cut: bool = False, bitrate: str = None) -> None:
     cut_start, cut_end, rotation = cuts
     input_video = str(filepaths["input_video"])
     output_video = str(filepaths["output_video"])
@@ -158,7 +157,7 @@ def cut_and_save_video(filepaths: Dict[str, Path], cuts: Tuple[int, int, int], l
         os.remove(temp_filepath)
 
 
-def cut_and_save_csv(filepaths: Dict[str, Path], cuts: Tuple[int, int, int], logger: logging.Logger, debug: bool = False) -> None:
+def cut_and_save_csv(filepaths: dict[str, Path], cuts: tuple[int, int, int], logger: logging.Logger, debug: bool = False) -> None:
     input_csv = filepaths["input_csv"]
     output_csv = filepaths["output_csv"]
 
@@ -189,7 +188,7 @@ def cut_and_save_csv(filepaths: Dict[str, Path], cuts: Tuple[int, int, int], log
 
 
 def verify_cut(
-    filepaths: Dict[str, Path], cut_start: int, cut_end: int, logger: logging.Logger, debug=False, verify_N_frames: int = 30
+    filepaths: dict[str, Path], cut_start: int, cut_end: int, logger: logging.Logger, debug=False, verify_N_frames: int = 30
 ) -> None:
     input_video = str(filepaths["input_video"])
     output_video = str(filepaths["output_video"])
@@ -259,8 +258,8 @@ def verify_cut(
 
 
 def get_adjusted_cuts(
-    cuts: Tuple[int, int, int], filepaths: Dict[str, Path], logger: logging.Logger, debug: bool = False, exact_cut: bool = False
-) -> Tuple[int, int, int]:
+    cuts: tuple[int, int, int], filepaths: dict[str, Path], logger: logging.Logger, debug: bool = False, exact_cut: bool = False
+) -> tuple[int, int, int]:
     cut_start = cuts[0]
     cut_end = cuts[1]
 
@@ -309,9 +308,9 @@ def get_adjusted_cuts(
     return (cut_start_adjusted, cut_end, cuts[2])
 
 
-def get_cuts(filepaths: Dict[str, Path], logger: logging.Logger) -> Tuple[int, int, int]:
+def get_cuts(filepaths: dict[str, Path], logger: logging.Logger) -> tuple[int, int, int]:
     try:
-        with open(filepaths['cuts_txt'], 'r') as f:
+        with open(filepaths['cuts_txt']) as f:
             cuts = [line.rstrip().split(',') for line in f if line.strip()]
     except FileNotFoundError:
         logger.critical(f"Problem with reading '{filepaths['cuts_txt']}'")
@@ -337,7 +336,7 @@ def get_cuts(filepaths: Dict[str, Path], logger: logging.Logger) -> Tuple[int, i
     return cuts
 
 
-def perform_sanity_checks(cuts: Tuple[int, int, int], filepaths: Dict[str, Path]) -> None:
+def perform_sanity_checks(cuts: tuple[int, int, int], filepaths: dict[str, Path]) -> None:
     cap = cv2.VideoCapture(str(filepaths["input_video"]))
     frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     cap.release()
@@ -404,7 +403,7 @@ def main() -> None:
     }
 
     # Determine cuts source: CLI args or cuts file
-    cuts: Tuple[int, int, int] = None
+    cuts: tuple[int, int, int] = None
     if args.start is not None or args.end is not None:
         # Require both start and end when using CLI-based cuts
         if args.start is None or args.end is None:

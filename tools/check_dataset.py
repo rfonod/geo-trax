@@ -52,7 +52,6 @@ import argparse
 import logging
 import sys
 from pathlib import Path
-from typing import Union
 
 import pandas as pd
 import tqdm
@@ -64,7 +63,7 @@ from geotrax.utils.file_utils import DEFAULT_OUTPUT
 from geotrax.utils.logging_utils import setup_logger
 
 
-def find_source_id(dataset_filepath: Path, vehicle_id: int, logger: logging.Logger, processed_folder: Union[Path, None] = None, folder_name: str = None) -> tuple:
+def find_source_id(dataset_filepath: Path, vehicle_id: int, logger: logging.Logger, processed_folder: Path | None = None, folder_name: str = None) -> tuple:
     """
     Trace an aggregated-dataset vehicle ID back to its original ID and source video, by
     reversing the per-drone ID offset applied during aggregation. The offsets are replayed by
@@ -82,7 +81,7 @@ def find_source_id(dataset_filepath: Path, vehicle_id: int, logger: logging.Logg
     return source_id, source_results.parents[1] / (source_results.stem + '.MP4')
 
 
-def get_processed_folder(source: Path, processed_folder: Union[Path, None]) -> Path:
+def get_processed_folder(source: Path, processed_folder: Path | None) -> Path:
     """
     Resolve the PROCESSED folder from the provided path or the default folder structure.
     """

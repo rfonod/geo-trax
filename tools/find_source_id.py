@@ -64,7 +64,6 @@ import argparse
 import logging
 import sys
 from pathlib import Path
-from typing import Union
 
 import pandas as pd
 
@@ -77,7 +76,7 @@ from geotrax.utils.logging_utils import setup_logger
 
 
 def find_source_id(dataset_filepath: Path, vehicle_id: int, logger: logging.Logger,
-                   processed_folder: Union[Path, None] = None, folder_name: str = None) -> tuple:
+                   processed_folder: Path | None = None, folder_name: str = None) -> tuple:
     """
     Find the original vehicle ID extracted from the source video from the dataset ID.
 
@@ -124,7 +123,7 @@ def find_source_id(dataset_filepath: Path, vehicle_id: int, logger: logging.Logg
 
 
 
-def get_processed_folder(source: Path, processed_folder: Union[Path, None], logger: logging.Logger) -> Path:
+def get_processed_folder(source: Path, processed_folder: Path | None, logger: logging.Logger) -> Path:
     """
     Get the processed folder from the provided path or use the default folder structure.
     """

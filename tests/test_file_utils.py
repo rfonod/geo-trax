@@ -162,3 +162,16 @@ def test_atomic_output_keeps_the_original_when_the_write_fails(tmp_path):
     with atomic_output(target) as tmp:
         tmp.write_text('new')
     assert target.read_text() == 'new'
+
+
+def test_atomic_output_keep_suffix_puts_the_real_extension_last(tmp_path):
+    from geotrax.utils.file_utils import atomic_output
+    target = tmp_path / 'layer.gpkg'
+    with atomic_output(target, keep_suffix=True) as tmp:
+        assert tmp.name == '.layer.tmp.gpkg'
+        tmp.write_text('data')
+    assert target.read_text() == 'data'
+    assert list(tmp_path.iterdir()) == [target]
+    with atomic_output(target) as tmp:
+        assert tmp.name == '.layer.gpkg.tmp'
+        tmp.write_text('default')

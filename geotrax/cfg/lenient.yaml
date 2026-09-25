@@ -106,6 +106,7 @@ extraction:
   save_stab: true       # Save per-frame stabilization homographies to results/video_vid_transf.txt
   min_track_length: 3   # Discard tracks shorter than this many frames; [1, inf)
   interpolate: false    # Fill per-track frame gaps with linear interpolation; adds is_interpolated column to output — CLI: --interpolate / --no-interpolate
+  class_conf: null      # Per-class confidence thresholds, e.g. {1: 0.15, 2: 0.4}; unlisted classes keep ultralytics -> conf; null = one global threshold — set via --set class_conf='{2: 0.4}'
   sahi:                 # Slicing Aided Hyper Inference: sliced detection for small objects (requires: pip install 'geo-trax[sahi]'); ~5x slower per frame with the defaults below
     enable: false                    # Run detection on overlapping frame slices and merge the results — CLI: --sahi / --no-sahi
     slice_height: 1080               # Slice height [px]; default = half of a 4K frame height; [1, inf)

@@ -17,6 +17,7 @@ Commands:
     extract      : Stage 1 - vehicle detection, tracking, and trajectory stabilization.
     georeference : Stage 2 - map stabilized trajectories to real-world coordinates.
     aggregate    : Stage 3 - merge georeferenced results across drones/flights.
+    export       : Export georeferenced trajectories to GIS formats (GeoPackage, GeoJSON).
     visualize    : Overlay extracted tracks on the video (original/stabilized/reference frame).
     plot         : Plot trajectories and kinematic/dimension distributions.
     config       : Pipeline config management: show bundled configs or copy them locally for editing.
@@ -35,7 +36,10 @@ Examples:
   3. Render annotated videos for multiple visualization modes:
         geotrax visualize path/to/video.mp4 --save --viz-mode 0 1 2
 
-  4. Copy the bundled pipeline config presets locally for editing:
+  4. Export georeferenced trajectories as a GeoPackage of per-vehicle LineStrings:
+        geotrax export path/to/results/video.csv
+
+  5. Copy the bundled pipeline config presets locally for editing:
         geotrax config copy
 """
 
@@ -51,6 +55,7 @@ COMMANDS = {
     'extract': ('geotrax.extract', 'Stage 1: vehicle detection, tracking, and stabilization'),
     'georeference': ('geotrax.georeference', 'Stage 2: map stabilized trajectories to real-world coordinates'),
     'aggregate': ('geotrax.aggregate', 'Stage 3: merge georeferenced results across drones/flights'),
+    'export': ('geotrax.export', 'Export georeferenced trajectories to GIS formats (GeoPackage, GeoJSON)'),
     'visualize': ('geotrax.visualize', 'Overlay extracted tracks on the video'),
     'plot': ('geotrax.plot', 'Plot trajectories and distributions'),
     'config': ('geotrax.config', 'Pipeline config management: show bundled configs or copy them locally for editing'),

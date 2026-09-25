@@ -118,12 +118,12 @@ Run `geotrax -h` or `geotrax batch -h` for all options. The scale-up commands ab
 <details>
 <summary><b>📋 Full Feature Overview</b></summary>
 
-- **Detection**: YOLOv8s on aerial BEV imagery; detects car (incl. vans), bus, truck, and motorcycle; optional [SAHI](https://github.com/obss/sahi) sliced inference for improved small-object recall (`--sahi`).
+- **Detection**: YOLOv8s on aerial BEV imagery; detects car (incl. vans), bus, truck, and motorcycle; optional per-class confidence thresholds (`extraction.class_conf`) and [SAHI](https://github.com/obss/sahi) sliced inference for improved small-object recall (`--sahi`).
 - **Tracking**: six multi-object trackers (BoT-SORT default); see [Tracking](#tracking) for a comparison; optional per-track frame-gap interpolation.
 - **Stabilization**: homography-based trajectory correction via [Stabilo](https://github.com/rfonod/stabilo) ⚖️, tuned with [Stabilo-Optimize](https://github.com/rfonod/stabilo-optimize) 🎯; optional CUDA acceleration (`--stab-gpu`).
 - **Georeferencing**: frame-to-orthophoto registration; outputs lat/lon, local CRS, speed, acceleration, and lane assignment per vehicle; optional CUDA acceleration (`--geo-gpu`).
 - **Visualization**: track overlays on original, stabilized, or static-reference video, in five rendering modes (incl. oriented bounding boxes).
-- **Analysis**: trajectory maps, kinematic distributions, and class/dimension charts, per-video or aggregated across drones and sessions.
+- **Analysis**: trajectory maps, kinematic distributions, and class/dimension charts, per-video or aggregated across drones and sessions; GIS export (GeoPackage/GeoJSON) of trajectories for QGIS, ArcGIS, or kepler.gl (`geotrax export`).
 - **Scaling & tooling**: batch-processes directory trees and aggregates multi-drone data; includes standalone utilities for end-to-end data preparation, training, evaluation, and validation.
 
 </details>
@@ -133,11 +133,10 @@ Run `geotrax -h` or `geotrax batch -h` for all options. The scale-up commands ab
 
 - Comprehensive documentation in a dedicated `docs/` folder. A [`tools/README.md`](tools/README.md) index already covers the auxiliary scripts.
 - Modularized, OOP-based pipeline with custom reference frame support and georeferencing leveraging Stabilo's image-matching backend.
-- Per-class confidence thresholds.
 - Simulation and scenario export: `geotrax export --format sumo` (and/or OpenDRIVE, CommonRoad) to turn an extracted dataset into a drop-in scenario for traffic simulators and digital twins, reusing the lane and road-section geometry already carried by the orthophoto segmentations.
 - Live/online mode: ingest RTMP-style drone feeds for real-time georeferenced output, for live monitoring and incident detection rather than offline batches.
 - Batch inference and multi-thread processing, plus distributed fan-out (Ray, Dask, or Slurm) so `geotrax batch` scales across a cluster for multi-drone, multi-intersection campaigns.
-- Real-world map visualization (e.g., MovingPandas, contextily) and an interactive web viewer with map-based playback and filtering by class, lane, speed, and time, so datasets can be explored without writing plotting code.
+- Real-world map visualization (e.g., MovingPandas, contextily) and an interactive web viewer with map-based playback and filtering by class, lane, speed, and time, so datasets can be explored without writing plotting code. (`geotrax export` already produces GeoPackage/GeoJSON layers that open directly in QGIS or kepler.gl.)
 
 </details>
 
@@ -240,6 +239,16 @@ The default detector is **YOLOv8s** (HBB, 1920 × 1920 px, ~11 M parameters), tr
 
 To use a different model, point `--model` (CLI) or `extraction.model` (config) to a local `.pt` path or `hf://<org>/<repo>/<file>.pt`; any [Ultralytics](https://github.com/ultralytics/ultralytics)-compatible model works. An `hf://` reference follows the repo's current `main`; to pin an exact version, add a revision (commit SHA, tag or branch) after the repo name: `hf://<org>/<repo>@<revision>/<file>.pt`.
 
+### Per-Class Confidence Thresholds
+
+A single `ultralytics.conf` threshold rarely suits every class: rare or harder classes (buses, trucks) often deserve a lower bar than abundant cars. `extraction.class_conf` sets a threshold per class ID; classes it does not list keep the global `conf`:
+
+```bash
+geotrax extract video.mp4 --set 'class_conf={1: 0.15, 2: 0.4}'   # or set extraction.class_conf in a copied config
+```
+
+The detector runs at the lowest of these thresholds, and each detection is then held to the threshold of its own class *before* it reaches the tracker, so rejected boxes never start or extend a track. Each track is later given a single class by a confidence-weighted vote, so the output can still hold rows of a class below its threshold: detections of another class on the same track, kept under that class's own threshold. With `class_conf: null` (the default) extraction is unchanged. The thresholds also apply in SAHI mode. Lowering a threshold lets more boxes compete for `ultralytics.max_det`, so raise it if a dense scene hits the cap.
+
 ### Small-Object Detection with SAHI
 
 For footage where vehicles are near the detection floor (higher altitudes, sub-4K sensors), the extraction stage can optionally run [SAHI](https://github.com/obss/sahi) sliced inference: each frame is split into overlapping slices, the detector runs on every slice (plus one full-frame pass), and the results are merged before tracking. This substantially improves tiny-object recall at roughly 5x the per-frame detection cost with the default 1920 x 1080 slices.
@@ -250,7 +259,7 @@ geotrax extract video.mp4 --sahi     # also available on 'geotrax batch'
 
 SAHI is an optional extra. If it is not installed, the run stops immediately with the exact install command for your setup.
 
-Slice size, overlap, and merge settings live in `cfg -> extraction -> sahi` (run `geotrax config copy` to edit them). SAHI mode honors the `ultralytics` config keys `conf`, `device`, `imgsz` (applied per slice), and `classes`; the NMS-related keys (`iou`, `max_det`, `agnostic_nms`, etc.) are superseded by the SAHI merge settings. It supports YOLO models only and cannot be combined with the `tracktrack` tracker or with ReID model `auto` (both need a live Ultralytics predictor).
+Slice size, overlap, and merge settings live in `cfg -> extraction -> sahi` (run `geotrax config copy` to edit them). SAHI mode honors the `ultralytics` config keys `conf`, `device`, `imgsz` (applied per slice), and `classes`, as well as `extraction.class_conf`; the NMS-related keys (`iou`, `max_det`, `agnostic_nms`, etc.) are superseded by the SAHI merge settings. It supports YOLO models only and cannot be combined with the `tracktrack` tracker or with ReID model `auto` (both need a live Ultralytics predictor).
 
 ### Custom Model Training
 
@@ -494,7 +503,7 @@ Example on an **NVIDIA RTX 4090** (5-second sample clip, 150 frames; hyperfine m
 
 ## Usage
 
-The `geotrax` CLI provides one subcommand per stage: `batch` (primary entry point), `extract`, `georeference`, `visualize`, `plot`, `aggregate`, and `config`. Run `geotrax -h` or `geotrax <subcommand> -h` for the full reference (`python -m geotrax` works identically).
+The `geotrax` CLI provides one subcommand per stage: `batch` (primary entry point), `extract`, `georeference`, `visualize`, `plot`, `aggregate`, `export`, and `config`. Run `geotrax -h` or `geotrax <subcommand> -h` for the full reference (`python -m geotrax` works identically).
 
 ```bash
 # Recursively process a directory (or a single video) without georeferencing
@@ -504,10 +513,11 @@ geotrax batch path/to/videos/ --no-geo
 geotrax extract video.mp4                  # detect, track, and stabilize
 geotrax visualize video.mp4 --save         # render an annotated video from existing results
 geotrax plot video.mp4                     # trajectory and distribution plots
+geotrax export video.mp4                   # georeferenced trajectories to a GeoPackage for QGIS & co.
 ```
 
 > [!TIP]
-> See [data/README.md](data/README.md) for sample data and testing examples.
+> See [data/README.md](data/README.md) for sample data and testing examples, including a [sample GIS export](data/README.md#gis-export) of the demo clip's trajectories ([view it as a map on GitHub](data/results-full/U_video_cut_lines.geojson)).
 
 <details>
 <summary><b>💡 More Examples & Advanced Usage</b></summary>
@@ -537,6 +547,13 @@ geotrax batch path/to/PROCESSED/ --plot-only --plot-aggregate --plot-class-filte
 
 # Merge multi-drone results for the same locations into a unified dataset
 geotrax aggregate path/to/PROCESSED/
+
+# Export georeferenced trajectories to GIS formats: one LineString per vehicle (default) or one Point per row,
+# as GeoPackage (default) or GeoJSON, in WGS84 (default) or the local projected CRS; works on single CSVs,
+# videos, whole PROCESSED/ trees, and aggregated DATASET/ folders
+geotrax export path/to/results/video.csv
+geotrax export path/to/DATASET/ --format geojson --geometry points -of path/to/GIS/
+geotrax export video.mp4 --crs local
 
 # Rotated box modes (3/4): boxes oriented to vehicle heading, on original (3) or stabilized (4) frame
 geotrax visualize video.mp4 --save --viz-mode 3 4
@@ -632,6 +649,8 @@ Suppose the input video is `video_file.mp4`. By default, outputs are written to 
   - `Visibility`: Boolean indicating if the vehicle's bounding box is fully visible within the frame.
   - `Is_Interpolated` *(optional)*: Present only when extraction was run with `--interpolate` (`extraction.interpolate: true`). `0` = real detection, `1` = row synthesized by linear interpolation at the extraction stage to fill a frame gap; propagated from the `.txt` tracks file.
 
+- **video_file_lines.gpkg** / **video_file_points.geojson** (`<stem>_<lines|points>[_local].<gpkg|geojson>`): Written on demand by `geotrax export` next to the georeferenced CSV (or under `--output-folder`), for use in QGIS, ArcGIS, kepler.gl, or any GDAL-based tool. `lines` holds one LineString per vehicle, time-ordered, with the attributes `Vehicle_ID`, `Vehicle_Class`, `Num_Points`, `Start_Time`/`End_Time`, `Start_Frame`/`End_Frame`, `Mean_Speed`/`Max_Speed` (km/h), and the median `Vehicle_Length`/`Vehicle_Width` (m); aggregated datasets add `Drone_ID` and order by `Local_Time` instead of `Frame_Number`. `points` holds one Point per CSV row with every CSV column. Coordinates are WGS84 (EPSG:4326) by default, or `Local_X`/`Local_Y` in `georef.transformation.target_crs` with `--crs local` (marked by the `_local` suffix). See *Viewing exported GIS files* below for how to open them.
+
 - **video_file_geo_transf.txt** (`<stem><geo_transform_postfix>.txt`): Contains the 3x3 georeferencing transformation matrix (homography) that maps points from the video's reference frame to the orthomap. The format is a comma-separated list of the 9 matrix elements:
 
   ```text
@@ -639,6 +658,60 @@ Suppose the input video is `video_file.mp4`. By default, outputs are written to 
   ```
 
 **Note:** *All output files are saved in the configured output folder (default: `results/` sub-folder next to the input video); nothing is written next to the input video, so the source dataset can stay read-only. Trajectory and distribution plots are always written to a `plots/` sub-folder inside the output folder.*
+
+</details>
+
+<details>
+<summary><b>🗺️ Viewing exported GIS files (GeoPackage / GeoJSON)</b></summary>
+
+`geotrax export` writes two open, widely supported vector formats:
+
+| Format | What it is | Best for |
+|---|---|---|
+| **GeoPackage** (`.gpkg`, default) | [OGC open standard](https://www.geopackage.org/): a single SQLite file that can hold large datasets in any coordinate system | Desktop GIS, large datasets, the local projected CRS (`--crs local`) |
+| **GeoJSON** (`.geojson`) | [RFC 7946](https://datatracker.ietf.org/doc/html/rfc7946) plain-text JSON in WGS84 | Web maps, quick sharing, small to medium datasets |
+
+Both open in QGIS, ArcGIS Pro, GDAL/OGR, Python (GeoPandas), R (`sf`), and DuckDB (spatial extension); GeoJSON also opens in most web map tools. The examples below use the sample export shipped in [`data/results-full/`](data/README.md#gis-export) (144 vehicle trajectories from the 5-second demo clip). Each LineString is one vehicle, with `Vehicle_ID`, `Vehicle_Class`, `Start_Time`/`End_Time`, `Mean_Speed`/`Max_Speed` (km/h), and `Vehicle_Length`/`Vehicle_Width` (m) as attributes.
+
+**In the browser (no install)**
+
+- **GitHub**: open [`U_video_cut_lines.geojson`](data/results-full/U_video_cut_lines.geojson) in the repository. GitHub renders any `.geojson` file as an interactive map; click a line to see its attributes.
+- **[geojson.io](https://geojson.io/)** (open source): drag and drop a `.geojson` file onto the map to view it on a basemap, inspect each feature's attributes, or edit it.
+- **[kepler.gl](https://kepler.gl/demo)** (open source, OpenJS Foundation): made for large movement datasets. Data is processed locally in your browser.
+  1. Open [kepler.gl/demo](https://kepler.gl/demo) and drag `U_video_cut_lines.geojson` into the **Add Data** dialog. A line layer appears on the basemap.
+  2. In the layer panel, open the layer and set **Stroke Color** to be based on `Mean_Speed` (speed heat map) or `Vehicle_Class`.
+  3. For playback, also add the georeferenced CSV (`data/results-full/U_video_cut.csv`). kepler.gl builds a point layer from its `Latitude`/`Longitude` columns; under **Filters**, add a filter on `Timestamp` to get a time slider with a play button that animates the vehicles.
+
+**On the desktop: [QGIS](https://qgis.org/)** (free and open source, Windows/macOS/Linux)
+
+1. Drag `U_video_cut_lines.gpkg` (or the `.geojson`) into the QGIS window.
+2. Add a basemap: in the **Browser** panel, expand **XYZ Tiles** and double-click **OpenStreetMap**, then drag it below the trajectory layer in the **Layers** panel.
+3. Color by attribute: right-click the layer, choose **Properties > Symbology**, select **Graduated** with value `Mean_Speed` (or **Categorized** with `Vehicle_Class`), and click **Classify**.
+4. Click any trajectory with the **Identify Features** tool to see its attributes. A `_local` export (EPSG:5186 here) is reprojected on the fly, so it overlays the same basemap.
+
+**In Python** (GeoPandas and Matplotlib are already installed with geo-trax)
+
+```python
+import geopandas as gpd
+import matplotlib.pyplot as plt
+
+lines = gpd.read_file("data/results-full/U_video_cut_lines.gpkg")  # the .geojson reads the same way
+print(lines.head())
+print(lines.groupby("Vehicle_Class")["Mean_Speed"].mean())  # mean speed per class [km/h]
+
+lines.plot(column="Mean_Speed", cmap="viridis", legend=True, figsize=(8, 8))  # static map colored by speed
+plt.show()
+
+# Interactive web map in a notebook (extra packages: python -m pip install folium mapclassify)
+lines.explore(column="Vehicle_Class", categorical=True, tooltip=["Vehicle_ID", "Mean_Speed", "Vehicle_Length"])
+```
+
+**Converting to other formats** with [GDAL's `ogr2ogr`](https://gdal.org/programs/ogr2ogr.html) (bundled with QGIS, or `conda install -c conda-forge gdal`), e.g. KML for Google Earth or a Shapefile for older GIS tools:
+
+```bash
+ogr2ogr -f KML U_video_cut_lines.kml data/results-full/U_video_cut_lines.gpkg
+ogr2ogr -f "ESRI Shapefile" U_video_cut_lines.shp data/results-full/U_video_cut_lines.gpkg
+```
 
 </details>
 
@@ -784,7 +857,7 @@ If you use **Geo-trax** in your research or software, please cite:
   title = {Geo-trax: A Comprehensive Framework for Georeferenced Vehicle Trajectory Extraction from Drone Imagery},
   year = {2026},
   month = sep,
-  version = {1.4.4},
+  version = {1.5.0},
   license = {MIT},
   doi = {10.5281/zenodo.12119542},
   url = {https://github.com/rfonod/geo-trax}

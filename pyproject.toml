@@ -118,7 +118,8 @@ line-length = 120
 target-version = "py311"
 
 [tool.ruff.lint]
-select = ['E', 'F', 'W', 'A', "B", 'PLC', 'PLE', 'PLW', 'I']
+select = ['E', 'F', 'W', 'A', "B", 'PLC', 'PLE', 'PLW', 'I', 'UP']
+ignore = ['UP009']  # keep the '# -*- coding: utf-8 -*-' line of the shared file header
 
 [tool.ruff.format]
 docstring-code-format = true

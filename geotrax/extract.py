@@ -89,9 +89,13 @@ Notes:
     supported tracker is kept in the config so you can switch by changing that one line.
   - Extraction-stage settings (stabilize/save_stab toggles, min_track_length, and the
     dimension_estimation block) are in cfg -> extraction; min_track_length has no CLI flag.
-  - SAHI mode honors cfg -> ultralytics conf, device, imgsz (applied per slice), and classes; iou, max_det,
-    augment, half, vid_stride, and agnostic_nms are not used (detection merging is controlled by
-    cfg -> extraction -> sahi instead). SAHI mode supports YOLO models only (no RTDETR) and cannot be
+  - Per-class confidence thresholds live in cfg -> extraction -> class_conf, e.g. {1: 0.15, 2: 0.4}
+    (set it for one run with --set 'class_conf={1: 0.15, 2: 0.4}'); classes it does not list keep
+    cfg -> ultralytics -> conf. The detector runs at the lowest threshold and every detection is held
+    to its own class threshold before tracking, so rejected boxes never reach the tracker.
+  - SAHI mode honors cfg -> ultralytics conf, device, imgsz (applied per slice), and classes, plus
+    cfg -> extraction -> class_conf; iou, max_det, augment, half, vid_stride, and agnostic_nms are
+    not used (detection merging is controlled by cfg -> extraction -> sahi instead). SAHI mode supports YOLO models only (no RTDETR) and cannot be
     combined with the tracktrack tracker or with ReID model 'auto' (both need a live Ultralytics predictor).
   - Output filename postfixes (e.g. _vid_transf suffix) are set in cfg -> output; use
     --output-folder / cfg -> output -> folder to redirect where outputs are written.
@@ -106,8 +110,9 @@ import logging
 import shutil
 import sys
 import time
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Dict, Tuple, Union
+from typing import Any, NamedTuple
 
 import cv2
 import numpy as np
@@ -143,6 +148,8 @@ _INFERENCE_KEYS = {
     'mode', 'task', 'stream_buffer',
 }
 
+TRACK_FALLBACK_CONF = 0.1
+
 
 def to_homography(matrix: np.ndarray) -> np.ndarray:
     """Return *matrix* as a 3x3 homography.
@@ -176,36 +183,53 @@ def detect_track_stabilize(args: argparse.Namespace, logger: logging.Logger) -> 
     # (see sync_args_with_config), so args and config agree and either can be read from here on.
     config = load_config_all(args, logger)
     out_cfg = config['main'].get('output', {})
+    class_conf = resolve_class_conf(config['ultralytics'], config['main']['extraction'], logger)
     if args.sahi:
         validate_sahi_tracker(config['main'])
-        model = load_sahi_detector(config['ultralytics'], logger)
+        model = load_sahi_detector(config['ultralytics'], logger, conf=class_conf.predict_conf)
     else:
         model = load_detector(config['ultralytics'], logger)
-    tracks, transforms = track_with_model(model, config, logger)
+    tracks, transforms = track_with_model(model, config, logger, class_conf)
     tracks = postprocess_tracks(tracks, config, logger)
     save_results(tracks, transforms, config, logger, out_cfg)
 
 
-def track_with_model(model: Any, config: Dict, logger: logging.Logger) -> Tuple[np.ndarray, np.ndarray]:
+def track_with_model(
+    model: Any, config: dict, logger: logging.Logger, class_conf: 'ClassConf | None' = None
+) -> tuple[np.ndarray, np.ndarray]:
     """
     Track vehicles in the video using the provided model.
 
     The model is either an Ultralytics YOLO/RTDETR model or, in SAHI mode, a SAHI AutoDetectionModel
     whose detections are fed to a manually created tracker.
+
+    With per-class confidence thresholds (``class_conf.thresholds`` set), the detector runs at the
+    lowered ``class_conf.predict_conf`` and each detection is then held to its own class threshold
+    before it reaches the tracker: through an ``on_predict_postprocess_end`` callback registered here,
+    ahead of the tracker callback Ultralytics adds on the first ``track()`` call, or directly in
+    :func:`detect_frame_sahi`. The run-metadata ``detection`` block keeps the configured ``conf``,
+    since the lowered value is an implementation detail of the per-class filter.
     """
     reader, pbar = initialize_streams(config['main'], config['ultralytics']['imgsz'], logger)
     stabilizer = Stabilizer(**config['stabilo'])
+    per_class = class_conf if class_conf is not None and class_conf.thresholds else None
 
     sahi_cfg = merge_bundled_defaults(config['main']['extraction'].get('sahi'), 'extraction.sahi')
     if sahi_cfg.get('enable', False):
         tracker = create_manual_tracker(config['main'])
 
-        def detect_frame(frame: np.ndarray) -> Tuple[Boxes, Dict]:
-            return detect_frame_sahi(model, tracker, frame, sahi_cfg, config['ultralytics'].get('classes'))
+        def detect_frame(frame: np.ndarray) -> tuple[Boxes, dict]:
+            return detect_frame_sahi(
+                model, tracker, frame, sahi_cfg, config['ultralytics'].get('classes'), class_conf=per_class
+            )
     else:
+        track_cfg = config['ultralytics']
+        if per_class is not None:
+            track_cfg = {**track_cfg, 'conf': per_class.predict_conf}
+            model.add_callback('on_predict_postprocess_end', make_class_conf_callback(per_class))
 
-        def detect_frame(frame: np.ndarray) -> Tuple[Boxes, Dict]:
-            return detect_frame_ultralytics(model, frame, config['ultralytics'])
+        def detect_frame(frame: np.ndarray) -> tuple[Boxes, dict]:
+            return detect_frame_ultralytics(model, frame, track_cfg)
 
     frame_num, yolo_time, stab_time = 0, [], []
     frame_arr, track_id, bbox, bbox_stab, class_id, conf, transforms = [], [], [], [], [], [], []
@@ -280,7 +304,7 @@ def track_with_model(model: Any, config: Dict, logger: logging.Logger) -> Tuple[
     return tracks, transforms
 
 
-def load_detector(config: Dict, logger: logging.Logger) -> Union[YOLO, RTDETR]:
+def load_detector(config: dict, logger: logging.Logger) -> YOLO | RTDETR:
     """
     Load the detection model based on configuration.
     """
@@ -302,9 +326,12 @@ def load_detector(config: Dict, logger: logging.Logger) -> Union[YOLO, RTDETR]:
     return model
 
 
-def load_sahi_detector(config: Dict, logger: logging.Logger) -> Any:
+def load_sahi_detector(config: dict, logger: logging.Logger, conf: float | None = None) -> Any:
     """
     Load the detection model wrapped in a SAHI AutoDetectionModel for sliced inference.
+
+    ``conf`` overrides ``config['conf']`` as SAHI's confidence threshold; it carries the lowered
+    threshold of :func:`resolve_class_conf` when per-class thresholds are configured.
     """
     try:
         from sahi import AutoDetectionModel
@@ -329,7 +356,7 @@ def load_sahi_detector(config: Dict, logger: logging.Logger) -> Any:
         model = AutoDetectionModel.from_pretrained(
             model_type='ultralytics',
             model_path=config['model'],
-            confidence_threshold=config['conf'],
+            confidence_threshold=config['conf'] if conf is None else conf,
             device=device,
             image_size=config['imgsz'],
         )
@@ -343,7 +370,7 @@ def load_sahi_detector(config: Dict, logger: logging.Logger) -> Any:
     return model
 
 
-def validate_sahi_tracker(main_cfg: Dict) -> None:
+def validate_sahi_tracker(main_cfg: dict) -> None:
     """
     Check that the active tracker can be fed detections manually (required in SAHI mode).
     """
@@ -361,7 +388,121 @@ def validate_sahi_tracker(main_cfg: Dict) -> None:
         )
 
 
-def create_manual_tracker(main_cfg: Dict) -> Any:
+class ClassConf(NamedTuple):
+    """Per-class confidence thresholds resolved from cfg -> extraction -> class_conf.
+
+    ``default`` is the global cfg -> ultralytics -> conf and applies to every class absent from
+    ``thresholds``. ``predict_conf`` is the threshold handed to the detector: the lowest of
+    ``default`` and every per-class value, so that no class is cut before its own threshold is
+    applied. ``thresholds`` is None when no per-class threshold is configured; no filter is then
+    installed and extraction behaves exactly as with the global threshold alone.
+    """
+
+    predict_conf: float
+    default: float
+    thresholds: dict[int, float] | None
+
+
+def resolve_class_conf(ultra_cfg: dict, extraction_cfg: dict, logger: logging.Logger) -> ClassConf:
+    """Resolve cfg -> extraction -> class_conf against the global cfg -> ultralytics -> conf.
+
+    A null global conf falls back to 0.1, the value Ultralytics' ``Model.track`` substitutes. Keys
+    must be class IDs (ints, or strings of ints as a JSON mapping would give) and values numbers in
+    [0, 1]; anything else raises ValueError, since a silently ignored threshold is worse than a stop.
+    A class ID excluded by cfg -> ultralytics -> classes is accepted with a warning, because its
+    threshold can never apply.
+    """
+    default = float(ultra_cfg.get('conf') or TRACK_FALLBACK_CONF)
+    raw = extraction_cfg.get('class_conf')
+    if not raw:
+        return ClassConf(default, default, None)
+    if not isinstance(raw, dict):
+        raise ValueError(
+            f"cfg -> extraction -> class_conf must map class IDs to thresholds, e.g. {{2: 0.4}}; got {raw!r}."
+        )
+
+    thresholds = {}
+    for raw_key, value in raw.items():
+        key = int(raw_key) if isinstance(raw_key, str) and raw_key.strip().lstrip('-').isdigit() else raw_key
+        if not isinstance(key, int) or isinstance(key, bool):
+            raise ValueError(f"cfg -> extraction -> class_conf key {raw_key!r} is not an integer class ID.")
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or not 0.0 <= value <= 1.0:
+            raise ValueError(
+                f"cfg -> extraction -> class_conf value for class {key} must be a number in [0, 1]; got {value!r}."
+            )
+        thresholds[key] = float(value)
+
+    classes = ultra_cfg.get('classes')
+    unused = sorted(k for k in thresholds if classes is not None and k not in classes)
+    if unused:
+        logger.warning(
+            f"cfg -> extraction -> class_conf sets thresholds for class(es) {unused}, "
+            "which cfg -> ultralytics -> classes excludes."
+        )
+
+    predict_conf = min(default, *thresholds.values())
+    logger.info(
+        f"Per-class confidence thresholds: {thresholds} (other classes: {default}; detector runs at {predict_conf})."
+    )
+    return ClassConf(predict_conf, default, thresholds)
+
+
+def class_conf_mask(cls: np.ndarray, conf: np.ndarray, class_conf: ClassConf) -> np.ndarray:
+    """Return a boolean mask of the detections scoring above the threshold of their class.
+
+    The comparison is strict and in float32, matching the confidence filter Ultralytics applies in
+    NMS, so a class held at the global threshold keeps exactly the detections it kept before.
+    """
+    cls = np.asarray(cls).reshape(-1)
+    limits = np.array([class_conf.thresholds.get(int(c), class_conf.default) for c in cls], dtype=np.float32)
+    return np.asarray(conf, dtype=np.float32).reshape(-1) > limits
+
+
+def make_class_conf_callback(class_conf: ClassConf) -> Callable[[Any], None]:
+    """Build an Ultralytics ``on_predict_postprocess_end`` callback applying per-class thresholds.
+
+    Registered on the model before its first ``track()`` call, it runs ahead of the tracker callback
+    Ultralytics appends then, so rejected detections never reach the tracker. ``Results`` indexing
+    does not carry ``feats`` (the ReID embeddings of tracker ``model: auto``), so they are sliced
+    alongside the boxes; otherwise the tracker would receive the kept boxes without their features.
+
+    The ``tracktrack`` tracker also re-runs NMS on the raw predictions (through the predictor's
+    ``_orig_postprocess``, captured by its ``on_predict_start`` hook) to recover detections the tight
+    NMS suppressed, at the lowered detector threshold. That loose pass is wrapped with the same filter,
+    since a box below its class threshold would otherwise be fed back to the tracker as a recovered
+    detection.
+    """
+
+    def filter_result(result: Any) -> Any:
+        boxes = result.boxes
+        if boxes is None or len(boxes) == 0:
+            return result
+        cls = boxes.cls.detach().numpy(force=True)
+        keep = class_conf_mask(cls, boxes.conf.detach().numpy(force=True), class_conf)
+        if keep.all():
+            return result
+        idx = np.flatnonzero(keep)
+        filtered = result[idx]
+        feats = getattr(result, 'feats', None)
+        if feats is not None:
+            filtered.feats = feats[idx]
+        return filtered
+
+    def filter_results(predictor: Any) -> None:
+        predictor.results[:] = [filter_result(result) for result in predictor.results]
+        loose_postprocess = getattr(predictor, '_orig_postprocess', None)
+        if loose_postprocess is not None and not getattr(loose_postprocess, '_class_conf_filtered', False):
+
+            def filtered_postprocess(*args: Any, **kwargs: Any) -> list:
+                return [filter_result(result) for result in loose_postprocess(*args, **kwargs)]
+
+            filtered_postprocess._class_conf_filtered = True
+            predictor._orig_postprocess = filtered_postprocess
+
+    return filter_results
+
+
+def create_manual_tracker(main_cfg: dict) -> Any:
     """
     Instantiate the active tracker directly; SAHI mode feeds it detections manually.
     """
@@ -369,11 +510,15 @@ def create_manual_tracker(main_cfg: Dict) -> Any:
 
 
 def sahi_predictions_to_boxes(
-    object_predictions: list, orig_shape: Tuple[int, int], classes: Union[list, None]
+    object_predictions: list,
+    orig_shape: tuple[int, int],
+    classes: list | None,
+    class_conf: ClassConf | None = None,
 ) -> Boxes:
     """
     Convert SAHI object predictions to an Ultralytics Boxes object, applying the class-ID filter
-    (cfg -> ultralytics -> classes), which SAHI itself does not support.
+    (cfg -> ultralytics -> classes), which SAHI itself does not support, and the per-class
+    confidence thresholds of ``class_conf`` (cfg -> extraction -> class_conf) when given.
     """
     rows = []
     for pred in object_predictions:
@@ -383,10 +528,12 @@ def sahi_predictions_to_boxes(
         x1, y1, x2, y2 = pred.bbox.to_xyxy()
         rows.append([x1, y1, x2, y2, pred.score.value, cls])
     data = torch.tensor(rows, dtype=torch.float32) if rows else torch.zeros((0, 6), dtype=torch.float32)
+    if class_conf is not None and class_conf.thresholds and len(data):
+        data = data[torch.from_numpy(class_conf_mask(data[:, 5].numpy(), data[:, 4].numpy(), class_conf))]
     return Boxes(data, orig_shape)
 
 
-def detect_frame_ultralytics(model: Union[YOLO, RTDETR], frame: np.ndarray, config: Dict) -> Tuple[Boxes, Dict]:
+def detect_frame_ultralytics(model: YOLO | RTDETR, frame: np.ndarray, config: dict) -> tuple[Boxes, dict]:
     """
     Detect and track objects in a single frame via the Ultralytics pipeline.
     """
@@ -395,10 +542,17 @@ def detect_frame_ultralytics(model: Union[YOLO, RTDETR], frame: np.ndarray, conf
 
 
 def detect_frame_sahi(
-    model: Any, tracker: Any, frame: np.ndarray, sahi_cfg: Dict, classes: Union[list, None]
-) -> Tuple[Boxes, Dict]:
+    model: Any,
+    tracker: Any,
+    frame: np.ndarray,
+    sahi_cfg: dict,
+    classes: list | None,
+    class_conf: ClassConf | None = None,
+) -> tuple[Boxes, dict]:
     """
     Detect objects in a single frame via SAHI sliced inference and update the tracker manually.
+
+    Per-class confidence thresholds (``class_conf``) are applied before the tracker update.
 
     Mirrors ultralytics.trackers.track.on_predict_postprocess_end: when the tracker returns no tracks,
     the raw detections are kept (their IDs stay None, written as -1 downstream).
@@ -420,7 +574,7 @@ def detect_frame_sahi(
         postprocess_class_agnostic=sahi_cfg['class_agnostic'],
         verbose=0,
     )
-    boxes = sahi_predictions_to_boxes(result.object_prediction_list, frame.shape[:2], classes)
+    boxes = sahi_predictions_to_boxes(result.object_prediction_list, frame.shape[:2], classes, class_conf)
     tracks = tracker.update(boxes.cpu().numpy(), frame)
     if len(tracks):
         boxes = Boxes(torch.as_tensor(tracks[:, :-1]), frame.shape[:2])  # drop the detection-index column
@@ -435,7 +589,7 @@ def detect_frame_sahi(
     return boxes, speed
 
 
-def initialize_streams(config: Dict, imgsz: int, logger: logging.Logger) -> Tuple[cv2.VideoCapture, tqdm]:
+def initialize_streams(config: dict, imgsz: int, logger: logging.Logger) -> tuple[cv2.VideoCapture, tqdm]:
     """
     Initialize video reader and progress bar.
     """
@@ -456,7 +610,7 @@ def initialize_streams(config: Dict, imgsz: int, logger: logging.Logger) -> Tupl
     return reader, pbar
 
 
-def update_progress_bar(pbar: tqdm, class_freq: Dict, speed: Dict, stab_time: list, config: Dict) -> None:
+def update_progress_bar(pbar: tqdm, class_freq: dict, speed: dict, stab_time: list, config: dict) -> None:
     """
     Update the progress bar with additional information.
     """
@@ -469,7 +623,7 @@ def update_progress_bar(pbar: tqdm, class_freq: Dict, speed: Dict, stab_time: li
         pbar.set_postfix(postfix_txt)
 
 
-def aggregate_results(frame_arr: list, track_id: list, bbox: list, bbox_stab: list, class_id: list, conf: list, transforms: list, logger: logging.Logger) -> Tuple[np.ndarray, np.ndarray]:
+def aggregate_results(frame_arr: list, track_id: list, bbox: list, bbox_stab: list, class_id: list, conf: list, transforms: list, logger: logging.Logger) -> tuple[np.ndarray, np.ndarray]:
     """
     Aggregate the results from all frames.
     """
@@ -494,7 +648,7 @@ def aggregate_results(frame_arr: list, track_id: list, bbox: list, bbox_stab: li
     return tracks, transforms
 
 
-def postprocess_tracks(tracks: np.ndarray, config: Dict, logger: logging.Logger) -> np.ndarray:
+def postprocess_tracks(tracks: np.ndarray, config: dict, logger: logging.Logger) -> np.ndarray:
     """
     Postprocess the extracted tracks.
     """
@@ -608,7 +762,7 @@ def calculate_unique_classes(tracks: np.ndarray) -> np.ndarray:
     return tracks
 
 
-def estimate_vehicle_dimensions(tracks: np.ndarray, config: Dict) -> np.ndarray:
+def estimate_vehicle_dimensions(tracks: np.ndarray, config: dict) -> np.ndarray:
     """
     Estimate vehicle dimensions based on bounding boxes and azimuths.
     """
@@ -691,7 +845,7 @@ def estimate_vehicle_dimensions(tracks: np.ndarray, config: Dict) -> np.ndarray:
     return tracks
 
 
-def save_results(tracks: np.ndarray, transforms: np.ndarray, config: Dict, logger: logging.Logger, out_cfg: Dict) -> None:
+def save_results(tracks: np.ndarray, transforms: np.ndarray, config: dict, logger: logging.Logger, out_cfg: dict) -> None:
     """
     Save the detection, tracking, and stabilization results to files.
 
@@ -749,7 +903,7 @@ def save_results(tracks: np.ndarray, transforms: np.ndarray, config: Dict, logge
     logger.info(f"Tracking results saved to: '{tracks_txt_file.resolve()}'")
 
 
-def _build_run_metadata(config: Dict, save_dir: Path) -> Dict:
+def _build_run_metadata(config: dict, save_dir: Path) -> dict:
     """Build a structured, human-readable record of the configuration this run actually used.
 
     Reads the config dict, which ``sync_args_with_config`` has already reconciled with the CLI

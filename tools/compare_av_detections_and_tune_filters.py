@@ -60,7 +60,6 @@ import datetime
 import logging
 import sys
 from pathlib import Path
-from typing import Union
 
 import cv2
 import matplotlib.pyplot as plt
@@ -218,7 +217,7 @@ def get_on_board_av_data(av_trajectories_folder) -> pd.DataFrame:
     return df_av
 
 
-def get_extracted_av_data(results_folder, logger, out_cfg=None) -> Union[pd.DataFrame, pd.DataFrame]:
+def get_extracted_av_data(results_folder, logger, out_cfg=None) -> pd.DataFrame | pd.DataFrame:
     # check if data is a directory
     if not results_folder.is_dir():
         logger.critical(f"Data {results_folder} is not a directory.")
@@ -431,7 +430,7 @@ def tune_smoothing_parameters(df_stanford, df_extracted, args, logger):
     plot_kinematics(df_av_stanford_with_errors, df_av_extracted_smoothed, args, 'acceleration')
 
 
-def compute_positional_and_speed_errors(df_stanford, df_extracted, args, logger) -> Union[pd.DataFrame, dict]:
+def compute_positional_and_speed_errors(df_stanford, df_extracted, args, logger) -> pd.DataFrame | dict:
     # define helper function to compute the length of the trajectory
     def compute_trajectory_length(df):
         trajectory_length = 0

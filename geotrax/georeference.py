@@ -101,7 +101,6 @@ import shutil
 import sys
 import warnings
 from pathlib import Path
-from typing import Union
 
 import cv2
 import geopandas as gpd
@@ -379,7 +378,7 @@ def get_orthophoto(ortho_folder: Path, location_id: str, logger: logging.Logger)
     return orthophoto
 
 
-def get_ortho_parameters(ortho_folder: Path, location_id: str, geo_source: str, cutout_width_px: Union[int, None], logger: logging.Logger) -> tuple:
+def get_ortho_parameters(ortho_folder: Path, location_id: str, geo_source: str, cutout_width_px: int | None, logger: logging.Logger) -> tuple:
     """
     Get orthophoto parameters from .tif metadata or .txt files.
     """
@@ -437,7 +436,7 @@ def get_ortho_parameters(ortho_folder: Path, location_id: str, geo_source: str, 
     return lng0, lat0, dlng, dlat, skew_x, skew_y
 
 
-def get_geo_params_source(geo_source: Union[str, None], ortho_folder: Path, location_id: str, logger: logging.Logger) -> str:
+def get_geo_params_source(geo_source: str | None, ortho_folder: Path, location_id: str, logger: logging.Logger) -> str:
     """
     Detects the source of georeferencing parameters (either in .tif metadata or .txt files).
     Determines if an orthophoto cutout approach is used based on the presence of *_center.txt and ortho_parameters.txt.
@@ -490,7 +489,7 @@ def read_ortho_config_file(filepath: Path) -> np.ndarray:
     Load orthophoto parameters from a .txt file.
     """
     processed_lines = []
-    with open(filepath, 'r') as file:
+    with open(filepath) as file:
         for line in file:
             stripped_line = line.strip()
             if stripped_line and not stripped_line.startswith('#'):
@@ -500,7 +499,7 @@ def read_ortho_config_file(filepath: Path) -> np.ndarray:
     return ortho_params
 
 
-def get_road_section_lane_geometry(ortho_folder: Path, segmentation_folder: Union[Path, None], location_id: str, logger: logging.Logger) -> pd.DataFrame:
+def get_road_section_lane_geometry(ortho_folder: Path, segmentation_folder: Path | None, location_id: str, logger: logging.Logger) -> pd.DataFrame:
     """
     Load road section and lane number geometry from the orthophoto segmentation file.
     """
@@ -547,7 +546,7 @@ def assign_road_section_lane(ortho_x: np.ndarray, ortho_y: np.ndarray, ortho_seg
     return road_section, lane_number
 
 
-def get_master_frame(ortho_folder: Path, master_folder: Union[Path, None], location_id: str, logger: logging.Logger) -> np.ndarray:
+def get_master_frame(ortho_folder: Path, master_folder: Path | None, location_id: str, logger: logging.Logger) -> np.ndarray:
     """
     Get the master frame from the master frames folder.
     """
@@ -584,7 +583,7 @@ def get_reference_to_master_homography(reference_frame: np.ndarray, master_frame
     return homography_reference_to_master
 
 
-def get_master_to_ortho_homography(master_frame: np.ndarray, ortho_folder: Path, master_folder: Union[Path, None], location_id: str, recompute: bool, config:dict, logger: logging.Logger) -> np.ndarray:
+def get_master_to_ortho_homography(master_frame: np.ndarray, ortho_folder: Path, master_folder: Path | None, location_id: str, recompute: bool, config:dict, logger: logging.Logger) -> np.ndarray:
     """
     Get the homography matrix between the master frame and the orthophoto.
 
@@ -603,7 +602,7 @@ def get_master_to_ortho_homography(master_frame: np.ndarray, ortho_folder: Path,
 
     if homography_filepath.exists() and not recompute:
         try:
-            with open(homography_filepath, 'r') as file:
+            with open(homography_filepath) as file:
                 lines = file.readlines()
             homography_master_to_ortho = np.fromstring(lines[0], sep=',').reshape(3, 3)
             saved = parse_homography_cache_fields(lines[1:])

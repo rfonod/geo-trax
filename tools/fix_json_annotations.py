@@ -252,7 +252,7 @@ def load_labelme_annotations(label_path: Path, logger: logging.Logger):
     converted.
     """
     try:
-        with open(label_path, "r") as file:
+        with open(label_path) as file:
             annotations = json.load(file)
     except (OSError, UnicodeDecodeError, json.JSONDecodeError) as e:
         logger.warning(f"Skipping '{label_path}': cannot be read as JSON ({e}).")

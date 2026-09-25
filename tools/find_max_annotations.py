@@ -69,7 +69,7 @@ def show_top_annotations(args: argparse.Namespace, logger: logging.Logger) -> No
 
 def load_annotations(annotation_path):
     """Load annotations from the given path."""
-    with open(annotation_path, 'r') as f:
+    with open(annotation_path) as f:
         lines = f.readlines()
     return lines
 

@@ -54,7 +54,7 @@ def _cache_file() -> Path:
 
 def _read_cache():
     try:
-        with open(_cache_file(), "r") as f:
+        with open(_cache_file()) as f:
             return json.load(f)
     except Exception:
         return None

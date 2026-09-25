@@ -11,8 +11,9 @@ import json
 import logging
 import sys
 import tempfile
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Any, Iterator, Optional, Union
+from typing import Any
 
 import yaml
 
@@ -38,7 +39,7 @@ ROOT_DIR = PACKAGE_DIR.parent  # repository root (source checkout) or site-packa
 HF_PREFIX = 'hf://'
 
 
-def resolve_config_path(cfg_filepath: Union[str, Path]) -> Path:
+def resolve_config_path(cfg_filepath: str | Path) -> Path:
     """Resolve a configuration file path.
 
     Tries, in order: the path as given (absolute or relative to the current working directory),
@@ -65,7 +66,7 @@ def resolve_config_path(cfg_filepath: Union[str, Path]) -> Path:
     return Path(cfg_filepath)
 
 
-def resolve_asset_path(filepath: Union[str, Path]) -> Path:
+def resolve_asset_path(filepath: str | Path) -> Path:
     """Resolve a non-config asset path (e.g., model weights) against the cwd and the package parent.
 
     Returns the path unchanged if no candidate exists, leaving error reporting to the caller.
@@ -76,7 +77,7 @@ def resolve_asset_path(filepath: Union[str, Path]) -> Path:
     return path
 
 
-def resolve_model_path(model_ref: Union[str, Path], logger: logging.Logger) -> Path:
+def resolve_model_path(model_ref: str | Path, logger: logging.Logger) -> Path:
     """Resolve a model reference to a local file path, downloading from Hugging Face if needed.
 
     Two forms are supported via the same config/CLI entry:
@@ -216,7 +217,7 @@ def load_config_all(args: argparse.Namespace, logger: logging.Logger, needs_mode
     }
 
 
-def _write_tracker_yaml(tracker_section: dict, cfg_name: Union[str, Path], logger: logging.Logger) -> Path:
+def _write_tracker_yaml(tracker_section: dict, cfg_name: str | Path, logger: logging.Logger) -> Path:
     """Select the active tracker block and write it to a temporary YAML file; return its path.
 
     The pipeline config's ``tracker`` section holds an ``active`` selector plus one parameter
@@ -261,8 +262,8 @@ def _unlink_quietly(path: Path) -> None:
         pass
 
 
-def load_config(cfg_filepath: Union[str, Path], logger: logging.Logger,
-                args: Optional[argparse.Namespace] = None) -> dict:
+def load_config(cfg_filepath: str | Path, logger: logging.Logger,
+                args: argparse.Namespace | None = None) -> dict:
     """Load a configuration file and return the contents as a dictionary.
 
     When *args* is given, its ``--set KEY=VALUE`` overrides are applied to the loaded config
@@ -274,7 +275,7 @@ def load_config(cfg_filepath: Union[str, Path], logger: logging.Logger,
     """
     resolved_filepath = resolve_config_path(cfg_filepath)
     try:
-        with open(resolved_filepath, 'r') as f:
+        with open(resolved_filepath) as f:
             kwargs = yaml.safe_load(f)
     except FileNotFoundError:
         logger.critical(f"Configuration file '{cfg_filepath}' not found.")
@@ -364,7 +365,7 @@ def _bundled_defaults() -> dict:
         return yaml.safe_load(f)
 
 
-def merge_bundled_defaults(section: Optional[dict], path: str) -> dict:
+def merge_bundled_defaults(section: dict | None, path: str) -> dict:
     """Return *section* with every key missing from it filled in from the bundled default.yaml.
 
     ``sync_args_with_config`` already gives that fallback to each registered CLI flag, so a
@@ -439,7 +440,7 @@ def sync_args_with_config(args: argparse.Namespace, cfg: dict, logger: logging.L
                 logger.info(f"CLI argument applied to the configuration: {spec.path} = {value}.")
 
 
-def apply_cli_overrides(cfg: dict, overrides: Optional[list], args: Optional[argparse.Namespace],
+def apply_cli_overrides(cfg: dict, overrides: list | None, args: argparse.Namespace | None,
                         logger: logging.Logger) -> None:
     """Apply ``--set KEY=VALUE`` overrides to the loaded config, in place.
 
@@ -502,7 +503,7 @@ def apply_cli_overrides(cfg: dict, overrides: Optional[list], args: Optional[arg
         args._overrides_announced = True
 
 
-def _dedicated_flags_in_use(args: Optional[argparse.Namespace]) -> dict:
+def _dedicated_flags_in_use(args: argparse.Namespace | None) -> dict:
     """Map each config path to the dedicated flag that set it on this command line, if any.
 
     Driven by ``_cli_provided`` (recorded at parse time by ``cli_utils.finalize_cli_args``) rather
@@ -615,7 +616,7 @@ def _coerce_override_value(path: str, value: Any, current: Any, raw_value: str, 
     sys.exit(1)
 
 
-def load_class_names_from_model(model_path: Path, logger: logging.Logger) -> Optional[dict]:
+def load_class_names_from_model(model_path: Path, logger: logging.Logger) -> dict | None:
     """Load the class-id -> name mapping embedded in a YOLO model file.
 
     Returns ``None`` when the names cannot be obtained (ultralytics missing or the model fails to
@@ -633,7 +634,7 @@ def load_class_names_from_model(model_path: Path, logger: logging.Logger) -> Opt
         return None
 
 
-def _load_class_names_mapping(value: Union[str, Path, dict, list], logger: logging.Logger) -> Optional[dict]:
+def _load_class_names_mapping(value: str | Path | dict | list, logger: logging.Logger) -> dict | None:
     """Coerce a class-names override into a ``{int: str}`` mapping.
 
     Accepts an inline ``dict`` (from the config), a path to a ``.yaml``/``.json`` mapping file, or a
@@ -658,7 +659,7 @@ def _load_class_names_mapping(value: Union[str, Path, dict, list], logger: loggi
             logger.error(f"Class names file '{path}' not found.")
             return None
         try:
-            with open(path, 'r') as f:
+            with open(path) as f:
                 mapping = json.load(f) if path.suffix.lower() == '.json' else yaml.safe_load(f)
         except Exception as e:
             logger.error(f"Failed to read class names from '{path}': {e}.")
@@ -675,9 +676,9 @@ def _load_class_names_mapping(value: Union[str, Path, dict, list], logger: loggi
 
 def resolve_class_names(
     model_path: Path,
-    cli_value: Optional[Union[list, str]],
-    cfg_value: Optional[Union[dict, str]],
-    classes: Optional[list],
+    cli_value: list | str | None,
+    cfg_value: dict | str | None,
+    classes: list | None,
     logger: logging.Logger,
 ) -> tuple:
     """Resolve the class-id -> name mapping by precedence: CLI > config > model > integer fallback.
