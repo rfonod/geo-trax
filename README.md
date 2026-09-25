@@ -859,7 +859,7 @@ If you use **Geo-trax** in your research or software, please cite:
   title = {Geo-trax: A Comprehensive Framework for Georeferenced Vehicle Trajectory Extraction from Drone Imagery},
   year = {2026},
   month = sep,
-  version = {1.5.0},
+  version = {1.5.1},
   license = {MIT},
   doi = {10.5281/zenodo.12119542},
   url = {https://github.com/rfonod/geo-trax}
