@@ -9,6 +9,8 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+import pytest
+
 from geotrax.utils import logging_utils
 from geotrax.utils.logging_utils import ColoredFormatter, default_log_dir, setup_logger
 
@@ -224,3 +226,24 @@ def test_log_path_with_a_suffix_is_used_verbatim(tmp_path):
     target = tmp_path / 'pinned.log'
     setup_logger('geotrax.georeference', log_path=target)
     assert target.is_file()
+
+
+@pytest.mark.parametrize('name', ['logs.v2', '2026.09'])
+def test_log_path_with_a_dotted_directory_name_creates_a_directory(tmp_path, name):
+    """Only a log-file suffix pins a new path as a file; a dotted directory name has a suffix too."""
+    target = tmp_path / name
+    logger = setup_logger(f'geotrax.dotted_{name.replace(".", "_")}', log_path=target)
+    try:
+        assert target.is_dir()
+    finally:
+        _cleanup(logger)
+
+
+def test_log_path_to_an_existing_file_is_used_verbatim_whatever_its_suffix(tmp_path):
+    target = tmp_path / 'run.out'
+    target.touch()
+    logger = setup_logger('geotrax.existing_file', log_path=target)
+    try:
+        assert target.is_file()
+    finally:
+        _cleanup(logger)

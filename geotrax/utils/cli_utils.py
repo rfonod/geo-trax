@@ -108,7 +108,8 @@ def add_common_args(group, cfg: bool = True, output_folder: bool = True) -> dict
     group.add_argument('--log-path', '-lp', type=Path, default=None,
                        help="Where to write detailed logs: a directory (an auto-named "
                             "<stage>_<timestamp>_<pid>.log file is created inside it, so concurrent "
-                            "or later runs never share a file) or a full file path. "
+                            "or later runs never share a file) or a full file path ending in .log or .txt "
+                            "(any other new path is created as a directory). "
                             "Defaults to a platform-specific log directory.")
     group.add_argument('--verbose', '-v', action='store_true', help='Set print verbosity level to INFO (default: WARNING).')
     return paths
