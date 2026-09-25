@@ -34,7 +34,8 @@ Options:
                                               pattern (e.g. '??.csv' for short clip names like A1, B2) to limit the scan.
   -c, --cfg <path>                          : Pipeline config used to resolve the output folder and filename postfixes.
                                               Defaults to the bundled config (geotrax/cfg/default.yaml).
-  -fe, --folders-exclude <str> [<str> ...]  : Folders to exclude from the search (default: [output.folder from config]).
+  -fe, --folders-exclude <str> [<str> ...]  : Extra folder names to exclude from the search; the configured output
+                                              folder (cfg -> output -> folder) is always excluded on top of these.
   -b, --bounding-box-cols <int> [<int> ...] : Bounding-box columns in detection/tracking results (default: [2, 3, 4, 5]).
   -tcrs, --target-crs <str>                 : Target CRS for local coordinates (default: 'epsg:5186').
   -fw, --frame-width <int>                  : Video frame width in pixels (default: 3840).
@@ -88,7 +89,13 @@ from shapely.geometry import Point
 
 from geotrax.utils.cli_utils import DEFAULT_CFG
 from geotrax.utils.config_utils import load_config
-from geotrax.utils.file_utils import DEFAULT_OUTPUT, detect_delimiter, determine_location_id, get_output_dir
+from geotrax.utils.file_utils import (
+    DEFAULT_OUTPUT,
+    detect_delimiter,
+    determine_location_id,
+    get_output_dir,
+    output_folder_exclusion,
+)
 from geotrax.utils.logging_utils import setup_logger
 
 VIDEO_SUFFIX = '.MP4' # video file format to report in the output file
@@ -97,12 +104,21 @@ VIDEO_SUFFIX = '.MP4' # video file format to report in the output file
 def find_master_frames(args: argparse.Namespace, logger: logging.Logger) -> None:
     """
     Find the best master frame for georeferencing.
+
+    The configured output folder is always skipped by the flight-log scan, on top of any
+    --folders-exclude names: by name when it is relative, by resolved path when it is absolute
+    (output_folder_exclusion). The earlier rule detected an untouched --folders-exclude by
+    comparing it with ['results'] and then replaced it with the configured folder, so an explicit
+    '-fe results' was silently dropped under a non-default output folder, and an absolute folder
+    became a full path that never equals a directory name, so it was not skipped at all.
     """
     out_cfg = load_config(args.cfg, logger).get('output', DEFAULT_OUTPUT)
     args.output_cfg = out_cfg
-    folder_name = out_cfg.get('folder', DEFAULT_OUTPUT['folder'])
-    if args.folders_exclude == [DEFAULT_OUTPUT['folder']] and folder_name != DEFAULT_OUTPUT['folder']:
-        args.folders_exclude = [folder_name]
+    args.folders_exclude = list(args.folders_exclude or [])
+    output_folder_name, output_dir = output_folder_exclusion(out_cfg)
+    if output_folder_name and output_folder_name not in args.folders_exclude:
+        args.folders_exclude.append(output_folder_name)
+    excluded_dirs = {output_dir} if output_dir is not None else set()
 
     args.output_folder = args.output_folder or args.input_folder
 
@@ -112,7 +128,7 @@ def find_master_frames(args: argparse.Namespace, logger: logging.Logger) -> None
         logger.info(f"Reading existing reference frame data from {ref_frames_filepath}")
         df_ref_frames_all = pd.read_csv(ref_frames_filepath)
     else:
-        flight_logs = find_all_flight_logs(args.input_folder, args.match_pattern, args.folders_exclude, logger)
+        flight_logs = find_all_flight_logs(args.input_folder, args.match_pattern, args.folders_exclude, logger, excluded_dirs)
         df_ref_frames_all = extract_ref_frame_data(flight_logs, args, logger)
         if args.save:
             save_df(df_ref_frames_all, ref_frames_filepath)
@@ -134,14 +150,20 @@ def find_master_frames(args: argparse.Namespace, logger: logging.Logger) -> None
         visualize_best_master_frames(df_best_master_frames, df_ref_frames_all, args.output_folder, args.visualize, args.save_viz, logger)
 
 
-def find_all_flight_logs(input_folder: Path, match_pattern: str, folders_exclude: list, logger: logging.Logger) -> list:
+def find_all_flight_logs(
+    input_folder: Path, match_pattern: str, folders_exclude: list, logger: logging.Logger, excluded_dirs: set = frozenset()
+) -> list:
     """
     Find all the flight logs in the input folder.
+
+    A sub-folder is skipped when its name is in *folders_exclude* or its resolved path is in
+    *excluded_dirs* (an absolute output folder).
     """
     flight_logs = []
     for item in input_folder.iterdir():
-        if item.is_dir() and item.name not in folders_exclude:
-            flight_logs.extend(find_all_flight_logs(item, match_pattern, folders_exclude, logger))
+        if item.is_dir():
+            if item.name not in folders_exclude and item.resolve() not in excluded_dirs:
+                flight_logs.extend(find_all_flight_logs(item, match_pattern, folders_exclude, logger, excluded_dirs))
         elif item.is_file() and fnmatch.fnmatch(item.name.lower(), match_pattern.lower()):
             flight_logs.append(item)
 
@@ -401,7 +423,7 @@ def parse_cli_args() -> argparse.Namespace:
     parser.add_argument("--best-n", "-n", type=int, default=20, help="Number of reference frames to consider for the best master frame selection (default: 20).")
     parser.add_argument("--cfg", "-c", type=Path, default=DEFAULT_CFG, help="Pipeline config used to resolve the output folder and filename postfixes. Defaults to the bundled config.")
     parser.add_argument("--match-pattern", "-m", type=str, default='*.csv', help="Glob pattern (case-insensitive) for flight-log files. Default '*.csv' matches any naming; narrow it (e.g. '??.csv' for short clip names like A1, B2) to skip auxiliary CSVs.")
-    parser.add_argument("--folders-exclude", "-fe", type=str, nargs='+', default=[DEFAULT_OUTPUT['folder']], help="Folders to exclude from the search (default: [output.folder from config]).")
+    parser.add_argument("--folders-exclude", "-fe", type=str, nargs='+', default=None, help="Extra folder names to exclude from the search. The configured output folder (cfg -> output -> folder) is always excluded on top of these: by name when relative, by path when absolute.")
     parser.add_argument("--bounding-box-cols", "-b", type=int, nargs='+', default=[2, 3, 4, 5], dest="bbox_cols", help="Columns of the bounding box in the detection/tracking results.")
     parser.add_argument("--target-crs", "-tcrs", default='epsg:5186', help="Target CRS for local coordinates")
     parser.add_argument("--frame-width", "-fw", type=int, default=3840, help="Default width of the video frames.")

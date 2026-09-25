@@ -1,6 +1,6 @@
 # Geo-trax
 
-[![GitHub Release](https://img.shields.io/github/v/release/rfonod/geo-trax?include_prereleases)](https://github.com/rfonod/geo-trax/releases) [![PyPI - Version](https://img.shields.io/pypi/v/geo-trax)](https://pypi.org/project/geo-trax/) [![PyPI - Total Downloads](https://img.shields.io/pepy/dt/geo-trax?label=total%20downloads)](https://pepy.tech/project/geo-trax) [![CI](https://github.com/rfonod/geo-trax/actions/workflows/ci.yml/badge.svg)](https://github.com/rfonod/geo-trax/actions/workflows/ci.yml) [![Python](https://img.shields.io/badge/python-3.11--3.13-blue)](https://www.python.org/) [![License](https://img.shields.io/github/license/rfonod/geo-trax)](https://github.com/rfonod/geo-trax/blob/main/LICENSE) [![GitHub Issues](https://img.shields.io/github/issues/rfonod/geo-trax)](https://github.com/rfonod/geo-trax/issues) [![Open Access](https://img.shields.io/badge/Journal-10.1016%2Fj.trc.2025.105205-blue)](https://doi.org/10.1016/j.trc.2025.105205) [![arXiv](https://img.shields.io/badge/arXiv-2411.02136-b31b1b.svg)](https://arxiv.org/abs/2411.02136) [![Archived Code](https://img.shields.io/badge/Zenodo-Software%20Archive-blue)](https://zenodo.org/doi/10.5281/zenodo.12119542) [![Hugging Face](https://img.shields.io/badge/🤗%20Model-rfonod%2Fgeo--trax-yellow)](https://huggingface.co/rfonod/geo-trax) [![Hugging Face Space](https://img.shields.io/badge/🤗%20Space-Live%20Demo-yellow)](https://huggingface.co/spaces/rfonod/geo-trax) [![Project Website](https://img.shields.io/badge/REAL%20Lab-Geo--trax-informational)](https://www.real-lab.ch/geo-trax) [![YouTube](https://img.shields.io/badge/YouTube-Video-red?logo=youtube&logoColor=red)](https://youtu.be/gOGivL9FFLk)
+[![GitHub Release](https://img.shields.io/github/v/release/rfonod/geo-trax?include_prereleases)](https://github.com/rfonod/geo-trax/releases) [![PyPI - Version](https://img.shields.io/pypi/v/geo-trax)](https://pypi.org/project/geo-trax/) [![PyPI - Total Downloads](https://img.shields.io/pepy/dt/geo-trax?label=total%20downloads)](https://pepy.tech/project/geo-trax) [![CI](https://github.com/rfonod/geo-trax/actions/workflows/ci.yml/badge.svg)](https://github.com/rfonod/geo-trax/actions/workflows/ci.yml) [![Python](https://img.shields.io/badge/python-3.11--3.13-blue)](https://www.python.org/) [![License](https://img.shields.io/github/license/rfonod/geo-trax)](https://github.com/rfonod/geo-trax/blob/main/LICENSE) [![Open Access](https://img.shields.io/badge/Journal-10.1016%2Fj.trc.2025.105205-blue)](https://doi.org/10.1016/j.trc.2025.105205) [![Archived Code](https://img.shields.io/badge/Zenodo-Software%20Archive-blue)](https://zenodo.org/doi/10.5281/zenodo.12119542) [![Hugging Face](https://img.shields.io/badge/🤗%20Model-rfonod%2Fgeo--trax-yellow)](https://huggingface.co/rfonod/geo-trax) [![Hugging Face Space](https://img.shields.io/badge/🤗%20Space-Live%20Demo-yellow)](https://huggingface.co/spaces/rfonod/geo-trax) [![Project Website](https://img.shields.io/badge/REAL%20Lab-Geo--trax-informational)](https://www.real-lab.ch/geo-trax) [![YouTube](https://img.shields.io/badge/YouTube-Video-red?logo=youtube&logoColor=red)](https://youtu.be/gOGivL9FFLk) [![Geo Export](https://img.shields.io/badge/Geo%20Export-GeoJSON%20%7C%20GeoPackage-4c8)](#geo-export)
 
 **Geo-trax** (GEO-referenced TRAjectory eXtraction) is a comprehensive pipeline that extracts high-accuracy, georeferenced vehicle trajectories from high-altitude drone imagery. Built for quasi-stationary aerial monitoring of urban traffic, it turns raw bird's-eye view (BEV) drone footage into precise, real-world vehicle trajectories. The framework combines YOLO detection, multi-object tracking, and video stabilization with a robust orthophoto-based georeferencing stage, producing geo-coordinated, lane-resolved trajectories that are spatially and temporally consistent and ready for large-scale traffic analysis and simulation. It is optimized for urban intersections and arterial corridors, where high-fidelity, vehicle-level insights drive intelligent transportation systems and digital twin applications.
 
@@ -575,7 +575,7 @@ Modes 3 and 4 replace the standard axis-aligned YOLO detections with **rotated b
 </details>
 
 > [!NOTE]
-> **Why use master frames?** When georeferencing, geo-trax can route each video's homography through a shared *master frame* per location ID. A master frame is a high-quality, near-nadir BEV frame chosen once per location (see [`tools/find_master_frames.py`](tools/find_master_frames.py)), used instead of registering every video's reference frame directly to the orthophoto. The mapping is split into two homographies: `reference → master` (recomputed per video) and `master → orthophoto` (computed **once per location ID and cached**, validated by hashes of the master image, the orthophoto and the `georef -> matching` settings, so the cache is recomputed when any of them changes; caches written before v1.4.2 carry only the master-image hash and are still accepted, with a warning that the other two could not be checked — pass `--recompute` if they changed). This gives two benefits:
+> **Why use master frames?** When georeferencing, geo-trax can route each video's homography through a shared *master frame* per location ID. A master frame is a high-quality, near-nadir BEV frame chosen once per location (see [`tools/find_master_frames.py`](tools/find_master_frames.py)), used instead of registering every video's reference frame directly to the orthophoto. The mapping is split into two homographies: `reference → master` (recomputed per video) and `master → orthophoto` (computed **once per location ID and cached**, validated by hashes of the master image, the orthophoto and the `georef -> matching` settings, so the cache is recomputed when any of them changes (except `gpu`, `gpu_device_id` and `device`, which only choose where the matching runs, so switching machines or devices reuses the cache); caches written before v1.4.2 carry only the master-image hash and are still accepted, with a warning that the other two could not be checked — pass `--recompute` if they changed). This gives two benefits:
 > - **Speed**: the expensive cross-domain `master → orthophoto` registration runs once and is reused across every drone and flight at that location, instead of once per video.
 > - **Consistency & robustness**: every video is matched against the *same* master frame. This same-modality BEV-to-BEV registration is far more reliable than a direct BEV-to-orthophoto match, so trajectories from different drones, altitudes, and viewpoints resolve into one coherent coordinate system.
 >
@@ -661,6 +661,7 @@ Suppose the input video is `video_file.mp4`. By default, outputs are written to 
 
 </details>
 
+<a id="geo-export"></a>
 <details>
 <summary><b>🗺️ Viewing exported GIS files (GeoPackage / GeoJSON)</b></summary>
 
@@ -689,7 +690,7 @@ Both open in QGIS, ArcGIS Pro, GDAL/OGR, Python (GeoPandas), R (`sf`), and DuckD
 3. Color by attribute: right-click the layer, choose **Properties > Symbology**, select **Graduated** with value `Mean_Speed` (or **Categorized** with `Vehicle_Class`), and click **Classify**.
 4. Click any trajectory with the **Identify Features** tool to see its attributes. A `_local` export (EPSG:5186 here) is reprojected on the fly, so it overlays the same basemap.
 
-**In Python** (GeoPandas and Matplotlib are already installed with geo-trax)
+**In Python** (GeoPandas, Matplotlib, and Folium are already installed with geo-trax)
 
 ```python
 import geopandas as gpd
@@ -702,8 +703,9 @@ print(lines.groupby("Vehicle_Class")["Mean_Speed"].mean())  # mean speed per cla
 lines.plot(column="Mean_Speed", cmap="viridis", legend=True, figsize=(8, 8))  # static map colored by speed
 plt.show()
 
-# Interactive web map in a notebook (extra packages: python -m pip install folium mapclassify)
-lines.explore(column="Vehicle_Class", categorical=True, tooltip=["Vehicle_ID", "Mean_Speed", "Vehicle_Length"])
+# Interactive web map, saved as HTML to open in any browser (in a Jupyter notebook, a bare `m` shows it inline)
+m = lines.explore(column="Vehicle_Class", categorical=True, tooltip=["Vehicle_ID", "Mean_Speed", "Vehicle_Length"])
+m.save("U_video_cut_map.html")
 ```
 
 **Converting to other formats** with [GDAL's `ogr2ogr`](https://gdal.org/programs/ogr2ogr.html) (bundled with QGIS, or `conda install -c conda-forge gdal`), e.g. KML for Google Earth or a Shapefile for older GIS tools:
@@ -857,7 +859,7 @@ If you use **Geo-trax** in your research or software, please cite:
   title = {Geo-trax: A Comprehensive Framework for Georeferenced Vehicle Trajectory Extraction from Drone Imagery},
   year = {2026},
   month = sep,
-  version = {1.5.0},
+  version = {1.5.1},
   license = {MIT},
   doi = {10.5281/zenodo.12119542},
   url = {https://github.com/rfonod/geo-trax}

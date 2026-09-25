@@ -28,6 +28,8 @@ class BColors:
 NOTICE_LEVEL = 25
 logging.addLevelName(NOTICE_LEVEL, "NOTICE")
 
+LOG_FILE_SUFFIXES = ('.log', '.txt')
+
 
 class ColoredFormatter(logging.Formatter):
     """Custom formatter for colored log output."""
@@ -78,10 +80,13 @@ def setup_logger(name: str, verbose: bool = False, log_path: str | Path | None =
 
     ``log_path`` may be a directory (an auto-named ``<stage>_<timestamp>_<pid>.log`` file is
     created inside it) or a full file path (used verbatim). A path that does not exist yet counts
-    as a directory unless it carries a suffix, so '--log-path ./logs' creates the directory the
-    user asked for; testing ``is_dir()`` alone took that down the file branch and left a regular
-    file named 'logs' that every later run appended to, since the test then kept returning False.
-    Give a full file path a suffix to pin it. When omitted, logs go to a
+    as a directory unless it ends in one of ``LOG_FILE_SUFFIXES`` (``.log``/``.txt``), so
+    '--log-path ./logs' creates the directory the user asked for; testing ``is_dir()`` alone took
+    that down the file branch and left a regular file named 'logs' that every later run appended
+    to, since the test then kept returning False. Any suffix at all is not enough to make it a
+    file, because a dotted directory name such as 'logs.v2' or '2026.09' has one too. An existing
+    file is always used verbatim, whatever its suffix. Give a full file path a ``.log`` or
+    ``.txt`` suffix to pin it. When omitted, logs go to a
     platform-specific directory (see default_log_dir). The timestamp keeps the auto-derived name
     from ever landing on a stale file left by an earlier, unrelated run (a plain PID would
     eventually be reused, e.g. after a reboot, and FileHandler's append mode would silently merge
@@ -108,7 +113,9 @@ def setup_logger(name: str, verbose: bool = False, log_path: str | Path | None =
             log_filepath = default_log_dir() / stage_filename
         else:
             log_path = Path(log_path)
-            treat_as_dir = log_path.is_dir() or (not log_path.exists() and not log_path.suffix)
+            treat_as_dir = log_path.is_dir() or (
+                not log_path.exists() and log_path.suffix.lower() not in LOG_FILE_SUFFIXES
+            )
             log_filepath = log_path / stage_filename if treat_as_dir else log_path
         log_filepath.parent.mkdir(parents=True, exist_ok=True)
         file_handler = logging.FileHandler(log_filepath)

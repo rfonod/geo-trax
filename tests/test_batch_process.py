@@ -10,7 +10,7 @@ from unittest.mock import patch
 
 import pytest
 
-from geotrax.batch_process import filter_files_to_process, handle_existing_results, process_file
+from geotrax.batch_process import filter_files_to_process, handle_existing_results, process_file, process_input
 
 logger = logging.getLogger(__name__)
 
@@ -133,3 +133,80 @@ def test_geo_only_skips_visualization():
         process_file(Path('v.mp4'), _process_file_args(geo_only=True, no_geo=False, save=True), logger)
     actions = [call.args[3] for call in step.call_args_list]
     assert 'Visualizing' not in actions and 'Georeferencing' in actions
+
+
+def test_filter_files_excludes_videos_directly_inside_an_excluded_scan_root():
+    """Pointing batch straight at an output folder must not ingest the annotated videos in it."""
+    files = [Path('/p/D1/results/v_mode_0.mp4'), Path('/p/D1/results/sub/w.mp4')]
+    result = filter_files_to_process(files, _args(folders_exclude=['results']), logger, Path('/p/D1/results'))
+    assert result == []
+
+
+def test_filter_files_resolves_a_dot_scan_root(tmp_path, monkeypatch):
+    root = tmp_path / 'results'
+    root.mkdir()
+    monkeypatch.chdir(root)
+    files = [Path('v_mode_0.mp4')]
+    assert filter_files_to_process(files, _args(folders_exclude=['results']), logger, Path('.')) == []
+
+
+# --- process_input interruption ----------------------------------------------
+
+def _run_process_input(tmp_path, process_file_effect):
+    (tmp_path / 'a.mp4').touch()
+    (tmp_path / 'b.mp4').touch()
+    args = argparse.Namespace(
+        input=tmp_path, cfg=None, cut_frame_right=None, folders_exclude=[], exclude_patterns=None,
+        plot_save=True, plot_show=False, viz_only=False, geo_only=False,
+    )
+    with patch('geotrax.batch_process.load_config', return_value={}), \
+            patch('geotrax.batch_process.sync_args_with_config'), \
+            patch('geotrax.batch_process.process_file', side_effect=process_file_effect), \
+            patch('geotrax.batch_process.run_plotting') as plotting, \
+            patch.object(logger, 'error') as error:
+        with pytest.raises(SystemExit) as exc:
+            process_input(args, logger)
+    return exc.value.code, plotting, error
+
+
+def test_interrupted_run_reports_failures_and_exits_non_zero(tmp_path):
+    code, plotting, error = _run_process_input(tmp_path, [False, KeyboardInterrupt])
+    assert code == 130
+    plotting.assert_not_called()
+    assert any('a.mp4' in call.args[0] for call in error.call_args_list)
+
+
+def test_interrupted_run_without_failures_still_exits_non_zero(tmp_path):
+    code, _, _ = _run_process_input(tmp_path, [True, KeyboardInterrupt])
+    assert code == 130
+
+
+def test_completed_run_with_failures_exits_one(tmp_path):
+    code, plotting, _ = _run_process_input(tmp_path, [False, True])
+    assert code == 1
+    plotting.assert_called_once()
+
+
+
+def test_filter_files_excludes_an_absolute_output_folder_by_path_only(tmp_path):
+    """An absolute -of /x/D1 must skip that folder, not every input folder named 'D1'."""
+    out = tmp_path / 'out' / 'D1'
+    files = [tmp_path / 'data' / 'D1' / 'v.mp4', out / 'v_mode_0.mp4']
+    result = filter_files_to_process(files, _args(), logger, tmp_path, out.resolve())
+    assert result == [tmp_path / 'data' / 'D1' / 'v.mp4']
+
+
+def test_absolute_output_folder_name_is_not_added_to_folders_exclude(tmp_path):
+    (tmp_path / 'data' / 'D1').mkdir(parents=True)
+    (tmp_path / 'data' / 'D1' / 'v.mp4').touch()
+    args = argparse.Namespace(
+        input=tmp_path / 'data' / 'D1', cfg=None, cut_frame_right=None, folders_exclude=['results'],
+        exclude_patterns=None, plot_save=False, plot_show=False, viz_only=False, geo_only=False,
+    )
+    config = {'output': {'folder': str(tmp_path / 'out' / 'D1')}}
+    with patch('geotrax.batch_process.load_config', return_value=config), \
+            patch('geotrax.batch_process.sync_args_with_config'), \
+            patch('geotrax.batch_process.process_file', return_value=True) as processed:
+        process_input(args, logger)
+    assert args.folders_exclude == ['results']
+    assert [call.args[0].name for call in processed.call_args_list] == ['v.mp4']

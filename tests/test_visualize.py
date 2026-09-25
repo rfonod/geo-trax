@@ -5,6 +5,7 @@
 
 import argparse
 import logging
+from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pandas as pd
@@ -20,6 +21,7 @@ from geotrax.visualize import (
     read_tracks_oriented,
     read_transforms,
     resolve_stab_anchor,
+    visualize_results,
 )
 
 logger = logging.getLogger(__name__)
@@ -382,3 +384,46 @@ def test_resolve_stab_anchor_prefers_recorded_anchor(tmp_path, caplog):
 def test_resolve_stab_anchor_ignores_malformed_metadata(tmp_path):
     _write_metadata(tmp_path, 'processing: [unclosed\n')
     assert resolve_stab_anchor(_anchor_args(tmp_path, 3), {'folder': 'results'}, logger) == 3
+
+
+# --- visualize_results: partial-video cleanup --------------------------------
+
+def _render(stop):
+    """Run visualize_results with every I/O helper stubbed and the frame loop raising *stop*."""
+    def frames(*_args, **_kwargs):
+        yield 0, np.zeros((2, 2, 3), dtype=np.uint8)
+        raise stop
+
+    config = {'main': {'output': {}, 'class_names': {}, 'visualization': {}}}
+    args = argparse.Namespace(save=True, show=False, viz_mode=[0])
+    stubs = {
+        'load_config_all': MagicMock(return_value=config),
+        'resolve_stab_anchor': MagicMock(return_value=0),
+        'get_and_verify_filepaths': MagicMock(return_value=(None, None, None)),
+        'read_tracks': MagicMock(return_value=(None, None)),
+        'read_transforms': MagicMock(return_value=None),
+        'read_georeferenced_results': MagicMock(return_value=None),
+        'initialize_streams': MagicMock(return_value=(None, None, None, None)),
+        'save_frame': MagicMock(),
+        'process_frames': frames,
+        'finalize_video': MagicMock(),
+    }
+    with patch.multiple('geotrax.visualize', **stubs):
+        try:
+            visualize_results(args, logger)
+            raised = None
+        except BaseException as e:  # noqa: BLE001 - the test inspects what escaped
+            raised = type(e)
+    return stubs['finalize_video'].call_args.args[6], raised
+
+
+@pytest.mark.parametrize(
+    'stop, status, raised',
+    [
+        (SystemExit(1), 'failed', SystemExit),              # sys.exit(1) in save_frame / read_frame_at
+        (RuntimeError('boom'), 'failed', None),             # ordinary error: logged, next mode continues
+        (KeyboardInterrupt(), 'interrupted', KeyboardInterrupt),  # q or Ctrl+C keeps the partial video
+    ],
+)
+def test_visualize_results_marks_how_the_render_stopped(stop, status, raised):
+    assert _render(stop) == (status, raised)

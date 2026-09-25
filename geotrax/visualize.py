@@ -166,6 +166,9 @@ def visualize_results(args: argparse.Namespace, logger: logging.Logger) -> None:
                 if args.save:
                     save_frame(vid_writer, annotated_frame, logger)
             status = 'done'
+        except SystemExit:
+            status = 'failed'
+            raise
         except Exception as e:
             status = 'failed'
             logger.error(f"An error occurred: {e}")
@@ -1001,8 +1004,8 @@ def finalize_video(vid_reader: cv2.VideoCapture, vid_writer: cv2.VideoWriter, vi
     """
     Finalize the video processing.
 
-    ``status`` is 'done', 'failed' (an error stopped rendering) or 'interrupted' (the user
-    pressed q). A failed render's partial video is deleted, since batch's skip-if-exists check
+    ``status`` is 'done', 'failed' (an error, including a sys.exit, stopped rendering) or
+    'interrupted' (the user pressed q or Ctrl+C). A failed render's partial video is deleted, since batch's skip-if-exists check
     would otherwise treat it as complete and never re-render it; an interrupted one is kept.
     """
     vid_reader.release()

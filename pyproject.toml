@@ -74,6 +74,9 @@ dependencies = [
     "lapx>=0.5.2",
     "stabilo>=1.4.3",
     "geopandas>=1.0.0",
+    "pandas>=2.0",  # pd.to_datetime(format='mixed') in aggregate.py; geopandas alone still allows pandas 1.4
+    "folium>=0.12",
+    "mapclassify>=2.4.0",
     "matplotlib>=3.3.0",
     "seaborn>=0.11.0",
     "pysrt>=1.1.2",
