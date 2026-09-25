@@ -28,6 +28,24 @@ geotrax batch data/U_video_cut.mp4 -orf data/orthophotos -osf data/segmentations
 
 > **Note:** The trajectory and distribution plots generated from this 5-second sample are not statistically meaningful due to the limited sample size. Longer video clips are needed for representative results.
 
+### GIS Export
+
+`data/results-full/` also holds the georeferenced trajectories exported for GIS use, one LineString per vehicle (144 vehicles) in WGS84 with per-vehicle attributes (class, start/end time, mean/max speed, estimated length and width):
+
+- [`U_video_cut_lines.gpkg`](results-full/U_video_cut_lines.gpkg): GeoPackage, the default format; opens directly in QGIS or ArcGIS.
+- [`U_video_cut_lines.geojson`](results-full/U_video_cut_lines.geojson): GeoJSON; GitHub renders it as an interactive map, and it drops straight into [kepler.gl](https://kepler.gl/) or [geojson.io](https://geojson.io/).
+
+They are generated from the shipped georeferenced CSV, so reproducing them needs no downloads:
+
+```bash
+geotrax export data/results-full/U_video_cut.csv                    # -> U_video_cut_lines.gpkg
+geotrax export data/results-full/U_video_cut.csv --format geojson   # -> U_video_cut_lines.geojson
+```
+
+After running the full pipeline command above, `geotrax export data/U_video_cut.mp4` exports your own run from `data/results/` instead. Add `--geometry points` for one Point per trajectory row, or `--crs local` for the local projected CRS (EPSG:5186 here); see `geotrax export -h`.
+
+New to these formats? [Viewing exported GIS files](../README.md#usage) in the main README shows how to open them in the browser (GitHub, geojson.io, kepler.gl), in QGIS, and in Python.
+
 <details>
 <summary><b>⚡ Run this on GPU</b></summary>
 
@@ -118,7 +136,7 @@ geo-trax/
     │   ├── U_video_cut_mode_0.mp4
     │   ├── ...
     │   └── plots/
-    ├── results-full/     ← in repo (reference output)
+    ├── results-full/     ← in repo (reference output, incl. the GIS export *_lines.gpkg/.geojson)
     ├── results-pixel/    ← in repo (reference output)
     ├── sample_videos/    ← download: sample_videos.zip
     │   ├── A_D1_2022-10-07_PM5_60s.mp4

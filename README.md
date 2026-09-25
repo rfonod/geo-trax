@@ -517,7 +517,7 @@ geotrax export video.mp4                   # georeferenced trajectories to a Geo
 ```
 
 > [!TIP]
-> See [data/README.md](data/README.md) for sample data and testing examples.
+> See [data/README.md](data/README.md) for sample data and testing examples, including a [sample GIS export](data/README.md#gis-export) of the demo clip's trajectories ([view it as a map on GitHub](data/results-full/U_video_cut_lines.geojson)).
 
 <details>
 <summary><b>💡 More Examples & Advanced Usage</b></summary>
@@ -649,7 +649,7 @@ Suppose the input video is `video_file.mp4`. By default, outputs are written to 
   - `Visibility`: Boolean indicating if the vehicle's bounding box is fully visible within the frame.
   - `Is_Interpolated` *(optional)*: Present only when extraction was run with `--interpolate` (`extraction.interpolate: true`). `0` = real detection, `1` = row synthesized by linear interpolation at the extraction stage to fill a frame gap; propagated from the `.txt` tracks file.
 
-- **video_file_lines.gpkg** / **video_file_points.geojson** (`<stem>_<lines|points>[_local].<gpkg|geojson>`): Written on demand by `geotrax export` next to the georeferenced CSV (or under `--output-folder`), for use in QGIS, ArcGIS, kepler.gl, or any GDAL-based tool. `lines` holds one LineString per vehicle, time-ordered, with the attributes `Vehicle_ID`, `Vehicle_Class`, `Num_Points`, `Start_Time`/`End_Time`, `Start_Frame`/`End_Frame`, `Mean_Speed`/`Max_Speed` (km/h), and the median `Vehicle_Length`/`Vehicle_Width` (m); aggregated datasets add `Drone_ID` and order by `Local_Time` instead of `Frame_Number`. `points` holds one Point per CSV row with every CSV column. Coordinates are WGS84 (EPSG:4326) by default, or `Local_X`/`Local_Y` in `georef.transformation.target_crs` with `--crs local` (marked by the `_local` suffix).
+- **video_file_lines.gpkg** / **video_file_points.geojson** (`<stem>_<lines|points>[_local].<gpkg|geojson>`): Written on demand by `geotrax export` next to the georeferenced CSV (or under `--output-folder`), for use in QGIS, ArcGIS, kepler.gl, or any GDAL-based tool. `lines` holds one LineString per vehicle, time-ordered, with the attributes `Vehicle_ID`, `Vehicle_Class`, `Num_Points`, `Start_Time`/`End_Time`, `Start_Frame`/`End_Frame`, `Mean_Speed`/`Max_Speed` (km/h), and the median `Vehicle_Length`/`Vehicle_Width` (m); aggregated datasets add `Drone_ID` and order by `Local_Time` instead of `Frame_Number`. `points` holds one Point per CSV row with every CSV column. Coordinates are WGS84 (EPSG:4326) by default, or `Local_X`/`Local_Y` in `georef.transformation.target_crs` with `--crs local` (marked by the `_local` suffix). See *Viewing exported GIS files* below for how to open them.
 
 - **video_file_geo_transf.txt** (`<stem><geo_transform_postfix>.txt`): Contains the 3x3 georeferencing transformation matrix (homography) that maps points from the video's reference frame to the orthomap. The format is a comma-separated list of the 9 matrix elements:
 
@@ -658,6 +658,60 @@ Suppose the input video is `video_file.mp4`. By default, outputs are written to 
   ```
 
 **Note:** *All output files are saved in the configured output folder (default: `results/` sub-folder next to the input video); nothing is written next to the input video, so the source dataset can stay read-only. Trajectory and distribution plots are always written to a `plots/` sub-folder inside the output folder.*
+
+</details>
+
+<details>
+<summary><b>🗺️ Viewing exported GIS files (GeoPackage / GeoJSON)</b></summary>
+
+`geotrax export` writes two open, widely supported vector formats:
+
+| Format | What it is | Best for |
+|---|---|---|
+| **GeoPackage** (`.gpkg`, default) | [OGC open standard](https://www.geopackage.org/): a single SQLite file that can hold large datasets in any coordinate system | Desktop GIS, large datasets, the local projected CRS (`--crs local`) |
+| **GeoJSON** (`.geojson`) | [RFC 7946](https://datatracker.ietf.org/doc/html/rfc7946) plain-text JSON in WGS84 | Web maps, quick sharing, small to medium datasets |
+
+Both open in QGIS, ArcGIS Pro, GDAL/OGR, Python (GeoPandas), R (`sf`), and DuckDB (spatial extension); GeoJSON also opens in most web map tools. The examples below use the sample export shipped in [`data/results-full/`](data/README.md#gis-export) (144 vehicle trajectories from the 5-second demo clip). Each LineString is one vehicle, with `Vehicle_ID`, `Vehicle_Class`, `Start_Time`/`End_Time`, `Mean_Speed`/`Max_Speed` (km/h), and `Vehicle_Length`/`Vehicle_Width` (m) as attributes.
+
+**In the browser (no install)**
+
+- **GitHub**: open [`U_video_cut_lines.geojson`](data/results-full/U_video_cut_lines.geojson) in the repository. GitHub renders any `.geojson` file as an interactive map; click a line to see its attributes.
+- **[geojson.io](https://geojson.io/)** (open source): drag and drop a `.geojson` file onto the map to view it on a basemap, inspect each feature's attributes, or edit it.
+- **[kepler.gl](https://kepler.gl/demo)** (open source, OpenJS Foundation): made for large movement datasets. Data is processed locally in your browser.
+  1. Open [kepler.gl/demo](https://kepler.gl/demo) and drag `U_video_cut_lines.geojson` into the **Add Data** dialog. A line layer appears on the basemap.
+  2. In the layer panel, open the layer and set **Stroke Color** to be based on `Mean_Speed` (speed heat map) or `Vehicle_Class`.
+  3. For playback, also add the georeferenced CSV (`data/results-full/U_video_cut.csv`). kepler.gl builds a point layer from its `Latitude`/`Longitude` columns; under **Filters**, add a filter on `Timestamp` to get a time slider with a play button that animates the vehicles.
+
+**On the desktop: [QGIS](https://qgis.org/)** (free and open source, Windows/macOS/Linux)
+
+1. Drag `U_video_cut_lines.gpkg` (or the `.geojson`) into the QGIS window.
+2. Add a basemap: in the **Browser** panel, expand **XYZ Tiles** and double-click **OpenStreetMap**, then drag it below the trajectory layer in the **Layers** panel.
+3. Color by attribute: right-click the layer, choose **Properties > Symbology**, select **Graduated** with value `Mean_Speed` (or **Categorized** with `Vehicle_Class`), and click **Classify**.
+4. Click any trajectory with the **Identify Features** tool to see its attributes. A `_local` export (EPSG:5186 here) is reprojected on the fly, so it overlays the same basemap.
+
+**In Python** (GeoPandas and Matplotlib are already installed with geo-trax)
+
+```python
+import geopandas as gpd
+import matplotlib.pyplot as plt
+
+lines = gpd.read_file("data/results-full/U_video_cut_lines.gpkg")  # the .geojson reads the same way
+print(lines.head())
+print(lines.groupby("Vehicle_Class")["Mean_Speed"].mean())  # mean speed per class [km/h]
+
+lines.plot(column="Mean_Speed", cmap="viridis", legend=True, figsize=(8, 8))  # static map colored by speed
+plt.show()
+
+# Interactive web map in a notebook (extra packages: python -m pip install folium mapclassify)
+lines.explore(column="Vehicle_Class", categorical=True, tooltip=["Vehicle_ID", "Mean_Speed", "Vehicle_Length"])
+```
+
+**Converting to other formats** with [GDAL's `ogr2ogr`](https://gdal.org/programs/ogr2ogr.html) (bundled with QGIS, or `conda install -c conda-forge gdal`), e.g. KML for Google Earth or a Shapefile for older GIS tools:
+
+```bash
+ogr2ogr -f KML U_video_cut_lines.kml data/results-full/U_video_cut_lines.gpkg
+ogr2ogr -f "ESRI Shapefile" U_video_cut_lines.shp data/results-full/U_video_cut_lines.gpkg
+```
 
 </details>
 
