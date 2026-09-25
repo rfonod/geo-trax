@@ -95,6 +95,8 @@ def test_export_lines_roundtrip(tmp_path, fmt, ext):
     assert gdf.crs.to_epsg() == 4326
     assert set(gdf.geom_type) == {'LineString'}
     assert not list(tmp_path.glob('.*'))
+    layers = gpd.list_layers(out)
+    assert list(layers['name']) == ['video_lines']  # never the temporary file's name
 
 
 def test_export_points_keeps_every_row_and_column(tmp_path):

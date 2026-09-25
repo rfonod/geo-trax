@@ -222,16 +222,16 @@ def output_path_for(csv_file: Path, args: argparse.Namespace) -> Path:
 def write_layer(gdf: gpd.GeoDataFrame, path: Path, fmt: str) -> None:
     """Write *gdf* to *path* atomically, as one layer named after the file stem.
 
+    The layer name is passed explicitly for both drivers: GDAL otherwise derives it from the temporary
+    file, and GeoJSON stores it in its top-level 'name' member.
+
     The temporary file keeps the real extension (``keep_suffix``), since GDAL warns when a GeoPackage
     is written under another one.
     """
     path.parent.mkdir(parents=True, exist_ok=True)
     driver = FORMATS[fmt][0]
     with atomic_output(path, keep_suffix=True) as tmp_path:
-        if driver == 'GPKG':
-            gdf.to_file(tmp_path, driver=driver, layer=path.stem)
-        else:
-            gdf.to_file(tmp_path, driver=driver)
+        gdf.to_file(tmp_path, driver=driver, layer=path.stem)
 
 
 def resolve_crs(crs_mode: str, config: dict, logger: logging.Logger) -> str:
