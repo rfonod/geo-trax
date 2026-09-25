@@ -127,6 +127,8 @@ from geotrax.utils.file_utils import (
 from geotrax.utils.logging_utils import setup_logger
 from geotrax.utils.registration import DETECTOR_CHOICES, DEVICE_CHOICES, estimate_homography
 
+# Execution-placement keys of cfg -> georef -> matching, at their shipped values (see compute_matching_hash).
+MATCHING_PLACEMENT_DEFAULTS = {'gpu': False, 'gpu_device_id': 0, 'device': 'auto'}
 
 def georeference(args: argparse.Namespace, logger: logging.Logger) -> None:
     """
@@ -385,19 +387,11 @@ def get_ortho_parameters(ortho_folder: Path, location_id: str, geo_source: str, 
     ortho_filepath = ortho_folder / (location_id + '.png')
     if geo_source == "metadata-tif":
         with Image.open(ortho_filepath.with_suffix('.tif')) as img_tif:
-            if isinstance(img_tif, TiffImagePlugin.TiffImageFile):
-                lng0, lat0 =  img_tif.tag_v2[33922][3], img_tif.tag_v2[33922][4]
-                dlng, dlat =  img_tif.tag_v2[33550][0], -img_tif.tag_v2[33550][1]
-                skew_x, skew_y = 0.0, 0.0
-                if 34264 in img_tif.tag_v2:
-                    # ModelTransformationTag is a row-major 4x4 matrix, so the x-from-y skew is
-                    # m[1] and the y-from-x skew is m[4]. Index 2 is the K (elevation) coefficient,
-                    # which GDAL always writes as 0.0 — reading it dropped the latitude's
-                    # dependence on ortho_x entirely (see ortho2geo).
-                    skew_x, skew_y = img_tif.tag_v2[34264][1], img_tif.tag_v2[34264][4]
-            else:
-                logger.error(f"Failed to read georeferencing parameters from .tif metadata for orthophoto: '{ortho_filepath}'.")
-                sys.exit(1)
+            params = read_geotiff_parameters(img_tif) if isinstance(img_tif, TiffImagePlugin.TiffImageFile) else None
+        if params is None:
+            logger.error(f"Failed to read georeferencing parameters from .tif metadata for orthophoto: '{ortho_filepath}'.")
+            sys.exit(1)
+        lng0, lat0, dlng, dlat, skew_x, skew_y = params
     elif geo_source == "text-file":
         ortho_params = read_ortho_config_file(ortho_filepath.with_suffix('.txt'))
         lng0, lat0, dlng, dlat = ortho_params[:4]
@@ -434,6 +428,30 @@ def get_ortho_parameters(ortho_folder: Path, location_id: str, geo_source: str, 
     logger.info(f"Loaded orthophoto parameters from a '{geo_source}' for orthophoto: '{ortho_filepath.name}'.")
 
     return lng0, lat0, dlng, dlat, skew_x, skew_y
+
+
+def read_geotiff_parameters(img_tif: TiffImagePlugin.TiffImageFile) -> tuple | None:
+    """
+    Read (lng0, lat0, dlng, dlat, skew_x, skew_y) from a GeoTIFF's georeferencing tags.
+
+    A GeoTIFF places the raster either with ModelTransformationTag (34264), a row-major 4x4
+    matrix and the only form that can express skew, or with ModelTiepointTag (33922) plus
+    ModelPixelScaleTag (33550). The spec makes the two mutually exclusive, so the transformation
+    matrix is read on its own: reading the tiepoint and scale first raised KeyError on every
+    compliant skewed file before its skew was ever reached. In the matrix, m[0]/m[5] are the
+    pixel sizes (m[5] already negative for a north-up image), m[3]/m[7] the origin, and m[1]/m[4]
+    the x-from-y and y-from-x skews; m[2] is the elevation coefficient, which reading as a skew
+    dropped the latitude's dependence on ortho_x (see ortho2geo). The scale tag stores the y pixel
+    size as a positive number, hence the sign flip. Returns None when neither form is present.
+    """
+    tags = img_tif.tag_v2
+    if 34264 in tags:
+        m = tags[34264]
+        return m[3], m[7], m[0], m[5], m[1], m[4]
+    if 33922 in tags and 33550 in tags:
+        tiepoint, scale = tags[33922], tags[33550]
+        return tiepoint[3], tiepoint[4], scale[0], -scale[1], 0.0, 0.0
+    return None
 
 
 def get_geo_params_source(geo_source: str | None, ortho_folder: Path, location_id: str, logger: logging.Logger) -> str:
@@ -598,7 +616,7 @@ def get_master_to_ortho_homography(master_frame: np.ndarray, ortho_folder: Path,
 
     current_master_hash = compute_hash(master_frame)
     current_ortho_hash = compute_file_hash(ortho_folder / (location_id + '.png'))
-    current_matching_hash = compute_config_hash(config)
+    current_matching_hash = compute_matching_hash(config)
 
     if homography_filepath.exists() and not recompute:
         try:
@@ -669,6 +687,22 @@ def compute_file_hash(filepath: Path) -> str:
         return digest.hexdigest()
     except OSError:
         return 'unavailable'
+
+
+def compute_matching_hash(config: dict) -> str:
+    """
+    Compute the cfg -> georef -> matching hash stored as Matching_Hash in the master -> orthophoto cache.
+
+    The keys in MATCHING_PLACEMENT_DEFAULTS choose where the registration runs, not what it
+    computes, yet --geo-gpu / --geo-gpu-device-id / --geo-device write them back into this block.
+    Hashing them as given made every switch between machines or devices declare the shared cache
+    stale, recompute the expensive registration, and overwrite it, so videos of one dataset could
+    end up with different master -> orthophoto homographies. They are reset to their shipped
+    defaults rather than dropped, so a cache written with the default config keeps its hash; a key
+    absent from the block stays absent for the same reason.
+    """
+    placement = {key: value for key, value in MATCHING_PLACEMENT_DEFAULTS.items() if key in config}
+    return compute_config_hash({**config, **placement})
 
 
 def compute_config_hash(config: dict) -> str:

@@ -5,6 +5,7 @@
 
 import argparse
 import logging
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import numpy as np
@@ -21,12 +22,14 @@ from geotrax.georeference import (
     compute_hash,
     compute_homography,
     compute_kinematics,
+    compute_matching_hash,
     compute_speed,
     create_and_format_georeferenced_df,
     create_polygon,
     interpolate_missing_points,
     ortho2geo,
     ortho2local,
+    read_geotiff_parameters,
     read_ortho_config_file,
 )
 from geotrax.utils import registration
@@ -471,3 +474,42 @@ def test_resolve_reference_frame_keeps_an_explicit_ref_frame(tmp_path):
     args, full_config = _anchor_setup(tmp_path, recorded=300, configured=0, ref_frame=5, cli_provided={'ref_frame'})
     resolve_reference_frame(args, full_config, {}, logger)
     assert args.ref_frame == 5
+
+
+# --- compute_matching_hash ---------------------------------------------------
+
+_MATCHING = {'detector_name': 'rsift', 'downsample_ratio': 1.0, 'gpu': False, 'gpu_device_id': 0, 'device': 'auto'}
+
+
+def test_matching_hash_ignores_where_the_registration_runs():
+    """Switching GPU/device must not invalidate the shared master -> orthophoto cache."""
+    moved = {**_MATCHING, 'gpu': True, 'gpu_device_id': 1, 'device': 'cuda'}
+    assert compute_matching_hash(moved) == compute_matching_hash(_MATCHING)
+
+
+def test_matching_hash_of_the_default_block_is_unchanged():
+    """Caches written before placement keys were normalized must keep their hash."""
+    from geotrax.georeference import compute_config_hash
+    assert compute_matching_hash(_MATCHING) == compute_config_hash(_MATCHING)
+
+
+def test_matching_hash_still_tracks_what_is_computed():
+    assert compute_matching_hash({**_MATCHING, 'detector_name': 'orb'}) != compute_matching_hash(_MATCHING)
+
+
+# --- read_geotiff_parameters -------------------------------------------------
+
+def test_geotiff_transformation_matrix_alone_gives_origin_scale_and_skew():
+    """A compliant skewed GeoTIFF carries 34264 without the tiepoint/scale tags."""
+    matrix = (0.1, 0.01, 0.0, 127.0, 0.02, -0.1, 0.0, 37.0, 0, 0, 0, 0, 0, 0, 0, 1)
+    tif = SimpleNamespace(tag_v2={34264: matrix})
+    assert read_geotiff_parameters(tif) == (127.0, 37.0, 0.1, -0.1, 0.01, 0.02)
+
+
+def test_geotiff_tiepoint_and_scale_give_an_unskewed_transform():
+    tif = SimpleNamespace(tag_v2={33922: (0, 0, 0, 127.0, 37.0, 0), 33550: (0.1, 0.1, 0)})
+    assert read_geotiff_parameters(tif) == (127.0, 37.0, 0.1, -0.1, 0.0, 0.0)
+
+
+def test_geotiff_without_georeferencing_tags_returns_none():
+    assert read_geotiff_parameters(SimpleNamespace(tag_v2={33922: (0, 0, 0, 1, 2, 0)})) is None
