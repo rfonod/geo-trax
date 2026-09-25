@@ -46,6 +46,21 @@ def get_output_dir(source: Path, output_cfg: dict | None = None) -> Path:
     return folder if folder.is_absolute() else source.parent / folder
 
 
+def output_folder_exclusion(output_cfg: dict | None = None) -> tuple[str | None, Path | None]:
+    """Return how a directory scan should skip the configured output folder, as ``(name, path)``.
+
+    A relative folder is recreated next to every input, so it is skipped by *name* (``path`` is
+    None). An absolute folder is one shared directory, so it is skipped by resolved *path* only
+    (``name`` is None): skipping its name as well would drop every unrelated input folder that
+    happens to share it, e.g. ``-of /mnt/out/D1`` dropping every ``D1`` drone folder.
+    """
+    cfg = output_cfg or DEFAULT_OUTPUT
+    folder = Path(cfg.get('folder', DEFAULT_OUTPUT['folder']))
+    if folder.is_absolute():
+        return None, folder.resolve()
+    return folder.name or None, None
+
+
 def build_result_path(
     source: Path,
     result_type: str,

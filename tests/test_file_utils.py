@@ -16,6 +16,7 @@ from geotrax.utils.file_utils import (
     determine_location_id,
     determine_suffix_and_fourcc,
     get_output_dir,
+    output_folder_exclusion,
 )
 
 
@@ -175,3 +176,18 @@ def test_atomic_output_keep_suffix_puts_the_real_extension_last(tmp_path):
     with atomic_output(target) as tmp:
         assert tmp.name == '.layer.gpkg.tmp'
         tmp.write_text('default')
+
+
+# --- output_folder_exclusion -------------------------------------------------
+
+def test_output_folder_exclusion_relative_folder_is_skipped_by_name():
+    assert output_folder_exclusion({'folder': 'out'}) == ('out', None)
+
+
+def test_output_folder_exclusion_absolute_folder_is_skipped_by_path_only(tmp_path):
+    """Its name must not be excluded, or every input folder called 'D1' would be dropped."""
+    assert output_folder_exclusion({'folder': str(tmp_path / 'D1')}) == (None, (tmp_path / 'D1').resolve())
+
+
+def test_output_folder_exclusion_defaults_to_results():
+    assert output_folder_exclusion(None) == ('results', None)

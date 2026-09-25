@@ -238,7 +238,7 @@ from geotrax.plot import add_plotting_args, default_plot_args, generate_plots
 from geotrax.utils.cli_utils import add_cfg_arg, add_common_args, finalize_cli_args
 from geotrax.utils.config_utils import load_config, sync_args_with_config
 from geotrax.utils.constants import VIDEO_FORMATS
-from geotrax.utils.file_utils import DEFAULT_OUTPUT, check_if_results_exist, determine_suffix_and_fourcc
+from geotrax.utils.file_utils import DEFAULT_OUTPUT, check_if_results_exist, determine_suffix_and_fourcc, output_folder_exclusion
 from geotrax.utils.logging_utils import BColors, setup_logger
 from geotrax.visualize import add_visualization_args, resolve_viz_modes, visualize_results
 
@@ -275,8 +275,11 @@ def process_input(args: argparse.Namespace, logger: logging.Logger) -> None:
     # batch.folders_exclude defaults to the literal ['results'], so with a custom output folder
     # the recursive scan re-ingested its own annotated videos as inputs on the next run. Derive
     # the exclusion from the configured folder instead of relying on the two happening to match.
-    output_folder_name = Path(out_cfg.get('folder', DEFAULT_OUTPUT['folder'])).name
-    if output_folder_name and output_folder_name not in args.folders_exclude:
+    # A relative folder is excluded by name, an absolute one by path (see output_folder_exclusion).
+    output_folder_name, output_dir = output_folder_exclusion(out_cfg)
+    if output_dir is not None:
+        logger.info(f"Excluding the configured output folder '{output_dir}' from the video scan.")
+    elif output_folder_name and output_folder_name not in args.folders_exclude:
         args.folders_exclude.append(output_folder_name)
         logger.info(f"Excluding the configured output folder '{output_folder_name}' from the video scan.")
 
@@ -294,8 +297,15 @@ def process_input(args: argparse.Namespace, logger: logging.Logger) -> None:
                 )
             args.cut_frame_right = None
             args._cfg_pinned = {'cut_frame_right'}
+            resolved_input = input_path.resolve()
+            inside_output = output_dir is not None and resolved_input.is_relative_to(output_dir)
+            if resolved_input.name in args.folders_exclude or inside_output:
+                logger.warning(
+                    f"'{input_path}' is itself an excluded folder (cfg -> batch -> folders_exclude or the "
+                    "configured output folder), so none of the videos in it will be processed."
+                )
             potential_files_to_process = [file for file in input_path.rglob('*') if file.is_file() and file.suffix.lower() in VIDEO_FORMATS]
-            files_to_process = filter_files_to_process(potential_files_to_process, args, logger, input_path)
+            files_to_process = filter_files_to_process(potential_files_to_process, args, logger, input_path, output_dir)
             files_to_process = sorted(files_to_process)
 
             pbar = tqdm(files_to_process, unit="video")
@@ -306,14 +316,19 @@ def process_input(args: argparse.Namespace, logger: logging.Logger) -> None:
                 pbar.update(1)
     except KeyboardInterrupt:
         logger.error("Batch processing interrupted by user.")
-        return
-
-    if (args.plot_save is not False or args.plot_show is not False) and not args.viz_only and not args.geo_only and input_path.is_dir():
-        run_plotting(input_path, args, logger)
+        interrupted = True
+    else:
+        interrupted = False
+        plotting_enabled = args.plot_save is not False or args.plot_show is not False
+        if plotting_enabled and not args.viz_only and not args.geo_only and input_path.is_dir():
+            run_plotting(input_path, args, logger)
 
     if failed:
         listed = '\n  '.join(str(file) for file in failed)
         logger.error(f"{len(failed)} video(s) could not be processed:\n  {listed}")
+    if interrupted:
+        sys.exit(130)
+    if failed:
         sys.exit(1)
 
 
@@ -391,7 +406,9 @@ def process_step(file: Path, args: argparse.Namespace, logger: logging.Logger, a
             func(args, logger)
 
 
-def filter_files_to_process(files: list, args: argparse.Namespace, logger: logging.Logger, root: Path = None) -> list:
+def filter_files_to_process(
+    files: list, args: argparse.Namespace, logger: logging.Logger, root: Path = None, output_dir: Path = None
+) -> list:
     """
     Filter files based on exclusion criteria (folders and patterns).
 
@@ -399,16 +416,22 @@ def filter_files_to_process(files: list, args: argparse.Namespace, logger: loggi
     component of the path is tested rather than only the immediate parent, which let
     '<excluded>/<subdir>/video.mp4' through on a recursive scan. Components are taken relative to
     *root* when given, so that a directory name above the scanned tree cannot match by accident.
+    The name of *root* itself is still tested: pointing batch straight at an output folder
+    ('geotrax batch D1/results/') would otherwise ingest the annotated '<stem>_mode_<N>.mp4'
+    videos lying directly inside it as new inputs. It is resolved first, since the name of '.' is
+    empty. *output_dir* is an absolute, shared output folder; it is matched by resolved path
+    rather than by name, so only that one directory is skipped.
     """
     excluded_folders = set(args.folders_exclude or [])
+    root_name = (root.resolve().name,) if root else ()
     filtered_files = []
     for file in files:
         try:
-            scanned_parts = file.relative_to(root).parent.parts if root else file.parent.parts
+            scanned_parts = root_name + file.relative_to(root).parent.parts if root else file.parent.parts
         except ValueError:
             scanned_parts = file.parent.parts
 
-        if excluded_folders.intersection(scanned_parts):
+        if excluded_folders.intersection(scanned_parts) or (output_dir and file.resolve().is_relative_to(output_dir)):
             logger.info(f"Skipping '{file}' as it's in an excluded folder.")
             continue
 
