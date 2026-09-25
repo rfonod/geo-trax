@@ -689,7 +689,7 @@ Both open in QGIS, ArcGIS Pro, GDAL/OGR, Python (GeoPandas), R (`sf`), and DuckD
 3. Color by attribute: right-click the layer, choose **Properties > Symbology**, select **Graduated** with value `Mean_Speed` (or **Categorized** with `Vehicle_Class`), and click **Classify**.
 4. Click any trajectory with the **Identify Features** tool to see its attributes. A `_local` export (EPSG:5186 here) is reprojected on the fly, so it overlays the same basemap.
 
-**In Python** (GeoPandas and Matplotlib are already installed with geo-trax)
+**In Python** (GeoPandas, Matplotlib, and Folium are already installed with geo-trax)
 
 ```python
 import geopandas as gpd
@@ -702,8 +702,9 @@ print(lines.groupby("Vehicle_Class")["Mean_Speed"].mean())  # mean speed per cla
 lines.plot(column="Mean_Speed", cmap="viridis", legend=True, figsize=(8, 8))  # static map colored by speed
 plt.show()
 
-# Interactive web map in a notebook (extra packages: python -m pip install folium mapclassify)
-lines.explore(column="Vehicle_Class", categorical=True, tooltip=["Vehicle_ID", "Mean_Speed", "Vehicle_Length"])
+# Interactive web map, saved as HTML to open in any browser (in a Jupyter notebook, a bare `m` shows it inline)
+m = lines.explore(column="Vehicle_Class", categorical=True, tooltip=["Vehicle_ID", "Mean_Speed", "Vehicle_Length"])
+m.save("U_video_cut_map.html")
 ```
 
 **Converting to other formats** with [GDAL's `ogr2ogr`](https://gdal.org/programs/ogr2ogr.html) (bundled with QGIS, or `conda install -c conda-forge gdal`), e.g. KML for Google Earth or a Shapefile for older GIS tools:
