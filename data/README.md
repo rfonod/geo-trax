@@ -33,7 +33,7 @@ geotrax batch data/U_video_cut.mp4 -orf data/orthophotos -osf data/segmentations
 `data/results-full/` also holds the georeferenced trajectories exported for GIS use, one LineString per vehicle (144 vehicles) in WGS84 with per-vehicle attributes (class, start/end time, mean/max speed, estimated length and width):
 
 - [`U_video_cut_lines.gpkg`](results-full/U_video_cut_lines.gpkg): GeoPackage, the default format; opens directly in QGIS or ArcGIS.
-- [`U_video_cut_lines.geojson`](results-full/U_video_cut_lines.geojson): GeoJSON; GitHub renders it as an interactive map, and it drops straight into [kepler.gl](https://kepler.gl/) or [geojson.io](https://geojson.io/).
+- [`U_video_cut_lines.geojson`](results-full/U_video_cut_lines.geojson): GeoJSON; GitHub renders it as an interactive map, and it drops straight into [geojson.io](https://geojson.io/) or [kepler.gl](https://kepler.gl/).
 
 They are generated from the shipped georeferenced CSV, so reproducing them needs no downloads:
 
