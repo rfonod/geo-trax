@@ -247,7 +247,7 @@ A single `ultralytics.conf` threshold rarely suits every class: rare or harder c
 geotrax extract video.mp4 --set 'class_conf={1: 0.15, 2: 0.4}'   # or set extraction.class_conf in a copied config
 ```
 
-The detector runs at the lowest of these thresholds, and each detection is then held to the threshold of its own class *before* it reaches the tracker, so rejected boxes never start or extend a track. With `class_conf: null` (the default) extraction is unchanged. The thresholds also apply in SAHI mode. Lowering a threshold lets more boxes compete for `ultralytics.max_det`, so raise it if a dense scene hits the cap.
+The detector runs at the lowest of these thresholds, and each detection is then held to the threshold of its own class *before* it reaches the tracker, so rejected boxes never start or extend a track. Each track is later given a single class by a confidence-weighted vote, so the output can still hold rows of a class below its threshold: detections of another class on the same track, kept under that class's own threshold. With `class_conf: null` (the default) extraction is unchanged. The thresholds also apply in SAHI mode. Lowering a threshold lets more boxes compete for `ultralytics.max_det`, so raise it if a dense scene hits the cap.
 
 ### Small-Object Detection with SAHI
 

@@ -665,6 +665,24 @@ def test_class_conf_callback_can_drop_every_box():
     assert len(predictor.results[0].boxes) == 0
 
 
+def test_class_conf_callback_filters_the_tracktrack_loose_nms_pass():
+    predictor = _fake_predictor([[0, 0, 10, 10, 0.9, 0]])
+    loose = _fake_predictor([[0, 0, 10, 10, 0.9, 0], [50, 50, 60, 60, 0.5, 2]]).results
+    calls = []
+
+    def orig_postprocess(*args, **kwargs):
+        calls.append(kwargs)
+        return loose
+
+    predictor._orig_postprocess = orig_postprocess
+    callback = make_class_conf_callback(ClassConf(0.25, 0.25, {2: 0.6}))
+    callback(predictor)
+    callback(predictor)
+    results = predictor._orig_postprocess(None, None, None, iou=0.95)
+    assert calls == [{'iou': 0.95}]
+    np.testing.assert_array_equal(results[0].boxes.cls.numpy(force=True), [0])
+
+
 def test_sahi_predictions_to_boxes_applies_class_conf():
     preds = [
         _make_sahi_pred(0, 0, 10, 10, 0.3, 0),

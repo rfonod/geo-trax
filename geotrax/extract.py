@@ -465,23 +465,39 @@ def make_class_conf_callback(class_conf: ClassConf) -> Callable[[Any], None]:
     Ultralytics appends then, so rejected detections never reach the tracker. ``Results`` indexing
     does not carry ``feats`` (the ReID embeddings of tracker ``model: auto``), so they are sliced
     alongside the boxes; otherwise the tracker would receive the kept boxes without their features.
+
+    The ``tracktrack`` tracker also re-runs NMS on the raw predictions (through the predictor's
+    ``_orig_postprocess``, captured by its ``on_predict_start`` hook) to recover detections the tight
+    NMS suppressed, at the lowered detector threshold. That loose pass is wrapped with the same filter,
+    since a box below its class threshold would otherwise be fed back to the tracker as a recovered
+    detection.
     """
 
+    def filter_result(result: Any) -> Any:
+        boxes = result.boxes
+        if boxes is None or len(boxes) == 0:
+            return result
+        cls = boxes.cls.detach().numpy(force=True)
+        keep = class_conf_mask(cls, boxes.conf.detach().numpy(force=True), class_conf)
+        if keep.all():
+            return result
+        idx = np.flatnonzero(keep)
+        filtered = result[idx]
+        feats = getattr(result, 'feats', None)
+        if feats is not None:
+            filtered.feats = feats[idx]
+        return filtered
+
     def filter_results(predictor: Any) -> None:
-        for i, result in enumerate(predictor.results):
-            boxes = result.boxes
-            if boxes is None or len(boxes) == 0:
-                continue
-            cls = boxes.cls.detach().numpy(force=True)
-            keep = class_conf_mask(cls, boxes.conf.detach().numpy(force=True), class_conf)
-            if keep.all():
-                continue
-            idx = np.flatnonzero(keep)
-            filtered = result[idx]
-            feats = getattr(result, 'feats', None)
-            if feats is not None:
-                filtered.feats = feats[idx]
-            predictor.results[i] = filtered
+        predictor.results[:] = [filter_result(result) for result in predictor.results]
+        loose_postprocess = getattr(predictor, '_orig_postprocess', None)
+        if loose_postprocess is not None and not getattr(loose_postprocess, '_class_conf_filtered', False):
+
+            def filtered_postprocess(*args: Any, **kwargs: Any) -> list:
+                return [filter_result(result) for result in loose_postprocess(*args, **kwargs)]
+
+            filtered_postprocess._class_conf_filtered = True
+            predictor._orig_postprocess = filtered_postprocess
 
     return filter_results
 
