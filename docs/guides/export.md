@@ -32,7 +32,9 @@ The input can be a CSV, a video, or a folder. A folder is searched recursively, 
 `lines` holds one LineString per vehicle, in time order, with the attributes:
 
 - `Vehicle_ID`, `Vehicle_Class`, and `Drone_ID` for aggregated datasets;
-- `Num_Points`, `Start_Time`/`End_Time`, and `Start_Frame`/`End_Frame` for per-video CSVs;
+- `Num_Points`, the number of points on the line;
+- `Start_Time`/`End_Time`, from `Timestamp` for per-video CSVs (empty when the video had no flight log) and from `Local_Time` for aggregated datasets;
+- `Start_Frame`/`End_Frame` for per-video CSVs;
 - `Mean_Speed`/`Max_Speed` in km/h;
 - the median `Vehicle_Length`/`Vehicle_Width` in meters.
 

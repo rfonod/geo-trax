@@ -104,6 +104,7 @@ docs = [
     "mkdocs>=1.6,<2",  # 1.6 added the anchor validation mkdocs.yml enables; 2.0 is announced without the plugin API the rest of this list needs
     "mkdocs-material>=9.5",
     "mkdocstrings[python]>=0.26",
+    "mkdocstrings-python>=1.8",  # 1.8 added the symbol-type headings and signature cross-references mkdocs.yml enables
     "mkdocs-gen-files>=0.5",
 ]
 

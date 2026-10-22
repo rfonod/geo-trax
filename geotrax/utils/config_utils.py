@@ -180,10 +180,11 @@ def load_config_all(args: argparse.Namespace, logger: logging.Logger, needs_mode
             so an unavailable model cannot abort them.
 
     Returns:
-        A dict with the keys `'stabilo'`, `'ultralytics'` (including the resolved `model` and the
-            `tracker` file path) and `'georef'`, holding those sections, and `'main'`, holding the
-            remaining sections plus `class_names`, `class_names_source`, `model_configured`,
-            `tracker_active`, `tracker_params` and `args`.
+        A dict with the keys `'stabilo'`, `'ultralytics'` and `'georef'`, holding those sections, and
+            `'main'`, holding the remaining sections plus `class_names`, `class_names_source`,
+            `model_configured`, `tracker_active`, `tracker_params` and `args`. With `needs_model=True`,
+            `'ultralytics'` also holds the resolved `model` and the `tracker` file path; with `False`,
+            the model and tracker entries of `'main'` are empty or `None`.
 
     Raises:
         SystemExit: The config cannot be loaded, an override is invalid, or the model or tracker

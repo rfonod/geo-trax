@@ -64,7 +64,7 @@ API_DIR = ROOT / 'docs' / 'reference' / 'api'
 API_UNLISTED = {'logging_utils': {'BColors', 'ColoredFormatter', 'FileFormatter', 'notice'}}
 
 KEY_RE = re.compile(r'^(?P<indent> *)(?P<key>-?[\w.-]+):(?P<rest>.*)$')
-COMMENTED_KEY_RE = re.compile(r'^(?P<indent> +)#\s?(?P<key>[a-z_]\w*):\s+(?P<rest>.*)$')
+COMMENTED_KEY_RE = re.compile(r'^(?P<indent> +)#\s?(?P<key>[a-z_]\w*):\s+(?P<rest>\S.*?\s#\s.*)$')
 CLI_TAIL_RE = re.compile(r'\s+—\s+(?:CLI:\s*|set via\s+)(?P<hint>.*)$')
 FLAG_RE = re.compile(r'(?<![\w-])(--[\w-]+)')
 SECTION_TITLE_RE = re.compile(r'^-{3}\s*(?P<title>.*?)\s*-{3}$')
@@ -467,7 +467,7 @@ def help_cell(action: argparse.Action, cfg_paths: dict) -> str:
     text = action.help or ''
     if '%(' in text:
         text = text % {**vars(action), 'prog': ''}
-    if (action.dest not in cfg_paths and action.default not in (None, False, argparse.SUPPRESS)
+    if (action.dest not in cfg_paths and not any(action.default is v for v in (None, False, argparse.SUPPRESS))
             and 'default' not in text.lower()):
         text += f' Default: {action.default}.'
     return md(text.strip())

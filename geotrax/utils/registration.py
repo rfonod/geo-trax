@@ -115,9 +115,10 @@ def estimate_homography(img_src: np.ndarray, img_dst: np.ndarray, logger: loggin
         **stabilizer_kwargs: Any [`Stabilizer`](https://rfonod.github.io/stabilo/) parameter,
             typically the whole `georef.matching` block. Applied on top of
             [`DEFAULT_STABILIZER_KWARGS`][geotrax.utils.registration.DEFAULT_STABILIZER_KWARGS],
-            so new stabilo options need no change here. The keys in
+            so a key geo-trax does not know is still passed to stabilo, with a warning in case it
+            is a typo. The keys in
             [`FIXED_STABILIZER_KWARGS`][geotrax.utils.registration.FIXED_STABILIZER_KWARGS] are
-            pinned, unrecognized keys are ignored with a warning, and `max_features` is capped at
+            pinned, and `max_features` is capped at
             [`DL_MAX_FEATURES_CAP`][geotrax.utils.registration.DL_MAX_FEATURES_CAP] for the
             learning-based detectors.
 
@@ -131,6 +132,9 @@ def estimate_homography(img_src: np.ndarray, img_dst: np.ndarray, logger: loggin
         ValueError: From stabilo, for an invalid parameter combination. In particular `gpu=True`
             needs `detector_name='orb'` and a CUDA-enabled OpenCV build, and has no CPU fallback;
             the learning-based detectors use `device='cuda'` instead.
+        RuntimeError: From a learning-based detector that runs out of memory (also `MemoryError`);
+            stabilo re-raises it instead of reporting a failed registration. Lower `downsample_ratio`
+            or `max_features`, or switch `device`.
 
     Examples:
         Register a drone frame to an orthophoto with the shipped matching settings:
@@ -149,7 +153,8 @@ def estimate_homography(img_src: np.ndarray, img_dst: np.ndarray, logger: loggin
     """
     unknown = sorted(set(stabilizer_kwargs) - KNOWN_STABILIZER_KWARGS)
     if unknown:
-        logger.warning(f"Ignoring unrecognized registration key(s) {unknown}; check cfg -> georef -> matching for typos.")
+        logger.warning(f"Passing unrecognized registration key(s) {unknown} to stabilo as is; check cfg -> georef -> "
+                       f"matching for typos.")
 
     kwargs = {**DEFAULT_STABILIZER_KWARGS, **stabilizer_kwargs}
 

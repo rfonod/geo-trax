@@ -252,10 +252,11 @@ The detector runs at the lowest of these thresholds, and each detection is then 
 
 ### Small-Object Detection with SAHI
 
-For footage where vehicles are near the detection floor (higher altitudes, sub-4K sensors), the extraction stage can optionally run [SAHI](https://github.com/obss/sahi) sliced inference: each frame is split into overlapping slices, the detector runs on every slice (plus one full-frame pass), and the results are merged before tracking. This substantially improves tiny-object recall at roughly 5x the per-frame detection cost with the default 1920 x 1080 slices.
+For footage where vehicles are near the detection floor (higher altitudes, sub-4K sensors), the extraction stage can optionally run [SAHI](https://github.com/obss/sahi) sliced inference: each frame is split into overlapping slices, the detector runs on every slice (plus one full-frame pass), and the results are merged before tracking. This substantially improves tiny-object recall, at a cost that grows with the number of slices. On 4K footage the default 1920 x 1080 slices with 20% overlap form a 3 x 3 grid, because two overlapping slices cover only 3456 of the 3840 px; that is nine passes plus the full-frame pass, roughly 10x the per-frame detection cost. Slightly larger slices give a 2 x 2 grid at about half that cost; see the [SAHI guide](https://rfonod.github.io/geo-trax/guides/sahi/#slice-grid).
 
 ```bash
 geotrax extract video.mp4 --sahi     # also available on 'geotrax batch'
+geotrax extract video.mp4 --sahi --set sahi.slice_width=2160 --set sahi.slice_height=1215   # 2 x 2 grid on 4K
 ```
 
 SAHI is an optional extra. If it is not installed, the run stops immediately with the exact install command for your setup.
