@@ -170,7 +170,7 @@ stabilo:
   akaze_threshold: 0.001 # AKAZE detector response threshold; lower = more candidate keypoints; (0.0, inf]
 
   # Learning-based (kornia) detector weights; only used when detector_name is one of them.
-  # Mind the rotation and memory caveats before switching: see README -> Feature Detectors.
+  # Mind the rotation and memory caveats before switching: see https://rfonod.github.io/geo-trax/guides/feature-detectors/
   loftr_weights: 'outdoor'                # LoFTR pretrained weights; [outdoor, indoor]
   loftr_confidence: 0.0                   # LoFTR min. correspondence confidence to keep; [0.0, 1.0] (0.0 keeps all)
   disk_weights: 'depth'                   # DISK pretrained weights; [depth, epipolar]
@@ -202,7 +202,7 @@ georef:
 
   # Feature matching (MAGSAC++ based image registration against orthophotos).
   # Learning-based detectors need care here: the orthophoto is north-up and large (64 MP in the
-  # Songdo data), so lower downsample_ratio first. See README -> Feature Detectors.
+  # Songdo data), so lower downsample_ratio first. See https://rfonod.github.io/geo-trax/guides/feature-detectors/
   matching:
     detector_name: rsift               # Feature detector & descriptor; classical: ['orb', 'sift', 'rsift', 'brisk', 'kaze', 'akaze'], learned: ['xfeat', 'disk', 'dedode', 'keynet', 'loftr'] — CLI: --geo-detector
     matcher_name: bf                   # Descriptor matcher; ['bf', 'flann', 'lightglue'] (lightglue is learned; needs disk/dedode/keynet)
@@ -298,10 +298,10 @@ ultralytics:
   device:       # (int | str | list) detection compute device; blank = auto (CUDA/GPU when available, else CPU); 0/[0,1,2,3] for CUDA, 'npu:0' Ascend, 'xpu:0' Intel, 'cpu'/'mps', or -1/[-1,-1] to auto-select idle GPUs
 
   # Detection / inference
-  conf: 0.15          # (float) object confidence threshold for detection; [0.0, 1.0]
+  conf: 0.15          # (float) object confidence threshold for detection; [0.0, 1.0] — CLI: --conf
   iou: 0.8            # (float) IoU threshold for NMS; [0.0, 1.0] — raised (recall preset): more permissive NMS, keeps more overlapping/adjacent boxes
   max_det: 1500       # (int) maximum number of detections per image; [1, inf)
-  classes: [0,1,2,3]  # (int | list[int]) filter by class id(s); 0=car, 1=bus, 2=truck, 3=motorcycle
+  classes: [0,1,2,3]  # (int | list[int]) filter by class id(s); 0=car, 1=bus, 2=truck, 3=motorcycle — CLI: --classes
   augment: false      # (bool) apply test-time augmentation during prediction
   agnostic_nms: true  # (bool) class-agnostic NMS
   dnn: false          # (bool) use OpenCV DNN for ONNX inference

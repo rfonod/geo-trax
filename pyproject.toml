@@ -5,7 +5,8 @@
 # Key Sections:
 # - [build-system]: Build requirements and backend (setuptools).
 # - [project]: Metadata, required and optional dependencies.
-# - [project.optional-dependencies]: Optional packages for development (dev), model export (export), and SAHI sliced inference (sahi).
+# - [project.optional-dependencies]: Optional packages for development (dev), model export (export), SAHI sliced inference (sahi),
+#   and the documentation site (docs; needs a source checkout, since it builds from docs/ and mkdocs.yml).
 # - [project.scripts]: The 'geotrax' console command (see geotrax/cli.py for subcommands).
 # - [tool.*]: Tool configurations (setuptools, ruff, pytest).
 #
@@ -18,14 +19,17 @@
 #   python -m pip install -e '.[dev]'        # core + dev (pip)
 #   python -m pip install -e '.[export]'     # core + export (pip)
 #   python -m pip install -e '.[sahi]'       # core + SAHI sliced inference (pip)
+#   python -m pip install -e '.[docs]'       # core + documentation site tooling (pip)
 #   poetry install                           # core (Poetry; auto-manages virtualenv)
 #   poetry install --extras dev              # core + dev (Poetry)
 #   poetry install --extras export           # core + export (Poetry)
 #   poetry install --extras sahi             # core + sahi (Poetry)
+#   poetry install --extras docs             # core + docs (Poetry)
 #   uv venv --python 3.11 && uv pip install -e .           # core (uv; faster)
 #   uv venv --python 3.11 && uv pip install -e '.[dev]'    # core + dev (uv)
 #   uv venv --python 3.11 && uv pip install -e '.[export]' # core + export (uv)
 #   uv venv --python 3.11 && uv pip install -e '.[sahi]'   # core + sahi (uv)
+#   uv venv --python 3.11 && uv pip install -e '.[docs]'   # core + docs (uv)
 
 [build-system]
 requires = ["setuptools>=77.0", "wheel"]
@@ -96,9 +100,16 @@ export = [
 sahi = [
     "sahi>=0.11.21",  # SAHI sliced inference; 0.11.20 added the 'ultralytics' model type, 0.11.21 dropped the numpy<2 pin
 ]
+docs = [
+    "mkdocs>=1.6,<2",  # 1.6 added the anchor validation mkdocs.yml enables; 2.0 is announced without the plugin API the rest of this list needs
+    "mkdocs-material>=9.5",
+    "mkdocstrings[python]>=0.26",
+    "mkdocs-gen-files>=0.5",
+]
 
 [project.urls]
 Homepage = "https://github.com/rfonod/geo-trax/"
+Documentation = "https://rfonod.github.io/geo-trax/"
 Source = "https://github.com/rfonod/geo-trax/"
 Repository = "https://github.com/rfonod/geo-trax/"
 Changelog = "https://github.com/rfonod/geo-trax/releases"

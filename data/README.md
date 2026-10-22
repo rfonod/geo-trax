@@ -44,12 +44,12 @@ geotrax export data/results-full/U_video_cut.csv --format geojson   # -> U_video
 
 After running the full pipeline command above, `geotrax export data/U_video_cut.mp4` exports your own run from `data/results/` instead. Add `--geometry points` for one Point per trajectory row, or `--crs local` for the local projected CRS (EPSG:5186 here); see `geotrax export -h`.
 
-New to these formats? [Viewing exported GIS files](../README.md#usage) in the main README shows how to open them in the browser (GitHub, geojson.io, kepler.gl), in QGIS, and in Python.
+New to these formats? [Viewing exported files](https://rfonod.github.io/geo-trax/guides/export/#viewing-exported-files) in the documentation shows how to open them in the browser (GitHub, geojson.io, kepler.gl), in QGIS, and in Python.
 
 <details>
 <summary><b>⚡ Run this on GPU</b></summary>
 
-The stabilization and georeferencing steps can be also CUDA-accelerated with `--stab-gpu` / `--geo-gpu` on a source-built CUDA OpenCV (georeferencing GPU additionally needs `georef.matching.detector_name: orb`). See [GPU acceleration](../README.md#gpu-acceleration) in the main README for the build and benchmark details.
+The stabilization and georeferencing steps can be also CUDA-accelerated with `--stab-gpu` / `--geo-gpu` on a source-built CUDA OpenCV (georeferencing GPU additionally needs `georef.matching.detector_name: orb`). See the [GPU acceleration guide](https://rfonod.github.io/geo-trax/guides/gpu/) for the build and benchmark details.
 
 </details>
 

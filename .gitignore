@@ -23,6 +23,9 @@ share/python-wheels/
 *.egg
 MANIFEST
 
+# Documentation site build output (mkdocs build)
+site/
+
 # Virtual environments
 .env
 .venv

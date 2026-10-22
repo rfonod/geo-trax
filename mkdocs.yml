@@ -1,0 +1,151 @@
+# Documentation site for geo-trax, built with MkDocs + Material and deployed to GitHub Pages by
+# .github/workflows/docs.yml. Build locally with 'mkdocs serve' (live preview) or
+# 'mkdocs build --strict' (what CI runs); both need the docs extra: python -m pip install -e '.[docs]'.
+#
+# The config, CLI and citation pages under reference/ and citation.md are not in docs/: they are
+# generated on every build by docs/_scripts/gen_reference.py (gen-files plugin below).
+
+site_name: Geo-trax
+site_description: Georeferenced vehicle trajectory extraction from high-altitude drone imagery.
+site_author: Robert Fonod
+site_url: https://rfonod.github.io/geo-trax/
+repo_url: https://github.com/rfonod/geo-trax
+repo_name: rfonod/geo-trax
+edit_uri: edit/main/docs/
+copyright: Copyright &copy; 2026 Robert Fonod. Distributed under the MIT License.
+
+theme:
+  name: material
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.indexes
+    - navigation.top
+    - navigation.footer
+    - content.code.copy
+    - content.action.edit
+    - search.suggest
+    - search.highlight
+    - toc.follow
+  icon:
+    repo: fontawesome/brands/github
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+
+plugins:
+  - search
+  - gen-files:
+      scripts:
+        - docs/_scripts/gen_reference.py
+  - mkdocstrings:
+      handlers:
+        python:
+          options:
+            docstring_style: google
+            docstring_options:
+              returns_multiple_items: false
+            docstring_section_style: table
+            show_source: true
+            show_root_heading: true
+            show_root_full_path: false
+            show_symbol_type_heading: true
+            show_symbol_type_toc: true
+            show_signature_annotations: true
+            separate_signature: true
+            signature_crossrefs: true
+            members_order: source
+            filters: ["!^_"]
+            heading_level: 3
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.tabbed:
+      alternate_style: true
+
+extra_css:
+  - stylesheets/extra.css
+
+exclude_docs: |
+  _scripts/
+
+validation:
+  nav:
+    omitted_files: warn
+    not_found: warn
+    absolute_links: warn
+  links:
+    not_found: warn
+    anchors: warn
+    absolute_links: warn
+    unrecognized_links: warn
+
+nav:
+  - Home: index.md
+  - Guides:
+      - Batch processing: guides/batch.md
+      - Extract: guides/extract.md
+      - Georeference: guides/georeference.md
+      - Aggregate: guides/aggregate.md
+      - Visualize: guides/visualize.md
+      - Plot: guides/plot.md
+      - Export: guides/export.md
+      - GPU acceleration: guides/gpu.md
+      - Feature detectors: guides/feature-detectors.md
+      - SAHI inference: guides/sahi.md
+  - Config reference:
+      - reference/config/index.md
+      - input: reference/config/input.md
+      - output: reference/config/output.md
+      - processing: reference/config/processing.md
+      - batch: reference/config/batch.md
+      - extraction: reference/config/extraction.md
+      - stabilo: reference/config/stabilo.md
+      - georef: reference/config/georef.md
+      - visualization: reference/config/visualization.md
+      - plotting: reference/config/plotting.md
+      - ultralytics: reference/config/ultralytics.md
+      - tracker: reference/config/tracker.md
+      - Presets:
+          - confident: reference/config/presets/confident.md
+          - lenient: reference/config/presets/lenient.md
+          - stable: reference/config/presets/stable.md
+  - CLI reference:
+      - reference/cli/index.md
+      - geotrax batch: reference/cli/batch.md
+      - geotrax extract: reference/cli/extract.md
+      - geotrax georeference: reference/cli/georeference.md
+      - geotrax aggregate: reference/cli/aggregate.md
+      - geotrax visualize: reference/cli/visualize.md
+      - geotrax plot: reference/cli/plot.md
+      - geotrax export: reference/cli/export.md
+      - geotrax config: reference/cli/config.md
+  - API reference:
+      - reference/api/index.md
+      - registration: reference/api/registration.md
+      - config_utils: reference/api/config_utils.md
+      - file_utils: reference/api/file_utils.md
+      - logging_utils: reference/api/logging_utils.md
+  - Citation: citation.md

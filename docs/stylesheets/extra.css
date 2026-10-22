@@ -1,0 +1,19 @@
+/* Responsive 16:9 YouTube embed on the home page. */
+.video-embed {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  margin: 1em 0;
+}
+
+.video-embed iframe {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+
+/* Generated reference tables carry long descriptions; let them wrap instead of scrolling. */
+.md-typeset table:not([class]) td {
+  vertical-align: top;
+}
