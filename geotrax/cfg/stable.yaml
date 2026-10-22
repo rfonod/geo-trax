@@ -134,7 +134,7 @@ stabilo:
 
   # Feature detector and descriptor
   detector_name: 'orb'  # Feature detector/descriptor; classical: [orb, sift, rsift, brisk, kaze, akaze], learned: [xfeat, disk, dedode, keynet, loftr] — CLI: --stab-detector
-  max_features: 4000    # Maximum keypoints to detect per frame; higher = more robust but slower; [0, inf) — raised (stability preset) for a more robust homography
+  max_features: 4000    # Maximum keypoints kept per frame, the strongest by response; higher = more robust but slower; [0, inf) — raised (stability preset) for a more robust homography
   ref_multiplier: 2.0   # Multiplier applied to max_features for the reference frame only; (0.0, inf)
   sift_enable_precise_upscale: false  # SIFT/RSIFT only: precise sub-pixel upscaling at octave -1; [true, false]
   rsift_eps: 0.00000001 # RSIFT only: epsilon added before RootSIFT L1-normalisation (1e-8); > 0.0, keep very small
@@ -156,10 +156,11 @@ stabilo:
   mask_use: true            # Exclude detected vehicle bounding boxes from feature extraction; [true, false]
   mask_margin_ratio: 0.15   # Extra margin around each bounding box mask as a fraction of its size; [0.0, 1.0]
 
-  # Detector-specific thresholds (used if threshold analysis was not performed)
-  brisk_threshold: 130  # BRISK response threshold; lower = more keypoints; (0, 255]
-  kaze_threshold: 0.01  # KAZE response threshold; lower = more keypoints; (0.0, inf]
-  akaze_threshold: 0.01 # AKAZE response threshold; lower = more keypoints; (0.0, inf]
+  # Detector-specific thresholds (BRISK, KAZE, AKAZE): each detects every keypoint whose response
+  # exceeds its threshold, then keeps the max_features strongest. The defaults are OpenCV's.
+  brisk_threshold: 30    # BRISK (AGAST) detection threshold; lower = more candidate keypoints; (0, 255]
+  kaze_threshold: 0.001  # KAZE detector response threshold; lower = more candidate keypoints; (0.0, inf]
+  akaze_threshold: 0.001 # AKAZE detector response threshold; lower = more candidate keypoints; (0.0, inf]
 
   # Learning-based (kornia) detector weights; only used when detector_name is one of them.
   # Mind the rotation and memory caveats before switching: see README -> Feature Detectors.
@@ -201,7 +202,7 @@ georef:
     filter_type: ratio                 # Match filter; ['none', 'ratio', 'distance'] (ratio = Lowe's ratio test)
     sift_enable_precise_upscale: true  # SIFT/RSIFT precise sub-pixel upscaling at octave -1; [true, false]
     downsample_ratio: 1.0              # Resize images by this factor before detection, then rescale keypoints; (0.0, 1.0]. Lower it for learned detectors
-    max_features: 250000           # Maximum number of features to detect; [0, inf)
+    max_features: 250000           # Maximum number of features kept, the strongest by response; [0, inf)
     filter_ratio: 0.55             # Lowe ratio-test threshold; lower = stricter (fewer but better matches); (0.0, 1.0]
     ransac_method: 38              # RANSAC method (same options as stabilization above)
     ransac_epipolar_threshold: 3.0 # Reprojection error threshold [px] for RANSAC inlier classification, in the pixels of ransac_threshold_space; (0.0, inf)
