@@ -15,13 +15,12 @@ implementation shared by the georeferencing stage and the analysis tools.
 """
 
 import logging
+from typing import Any
 
 import cv2
 import numpy as np
 from stabilo import Stabilizer
 
-# Registration defaults: the single source of truth, and the fallback for any key absent from
-# cfg -> georef -> matching. Every key here is overridable from the config or the CLI.
 DEFAULT_STABILIZER_KWARGS = {
     'detector_name': 'rsift',
     'matcher_name': 'bf',
@@ -40,32 +39,51 @@ DEFAULT_STABILIZER_KWARGS = {
     'gpu': False,
     'gpu_device_id': 0,
 }
+"""Registration defaults: RootSIFT, brute-force matching with a ratio test, and MAGSAC++.
 
-# Registration geometry pinned by geo-trax regardless of config: callers assume a
-# full-resolution 3x3 src->dst homography estimated from a single image pair with no
-# exclusion mask. A config value for any of these is ignored (with a warning).
+The single source of truth for registration, and the fallback for any key absent from
+`georef.matching`. Every key can be overridden from the config, the CLI or the keyword arguments
+of [`estimate_homography`][geotrax.utils.registration.estimate_homography].
+"""
+
 FIXED_STABILIZER_KWARGS = {
     'transformation_type': 'projective',
     'mask_use': False,
     'ref_multiplier': 1.0,
     'match_query_frame': 'current',
 }
+"""Registration geometry pinned regardless of the config.
 
-MIN_MAX_FEATURES = 10000   # do not retry below this feature count
-DL_MAX_FEATURES_CAP = 8192  # ceiling for the learning-based detectors, which take max_features as top_k
+Callers assume a full-resolution 3x3 source-to-destination homography estimated from a single
+image pair with no exclusion mask, so a supplied value for any of these keys is ignored with a
+warning.
+"""
 
-# Derived from stabilo so the CLI choices cannot drift when it gains a detector or device.
+MIN_MAX_FEATURES = 10000
+"""Lowest `max_features` that the halving retry in `estimate_homography` goes down to."""
+
+DL_MAX_FEATURES_CAP = 8192
+"""Ceiling on `max_features` for the learning-based detectors, which consume it as `top_k`."""
+
 DETECTOR_CHOICES = list(Stabilizer.VALID_DETECTORS)
-DEVICE_CHOICES = list(Stabilizer.VALID_DEVICES)
-DL_DETECTORS = set(Stabilizer.DL_DETECTORS)
+"""Every detector name stabilo accepts; the `choices` of `--stab-detector` and `--geo-detector`."""
 
-# Every key estimate_homography knowingly forwards to the Stabilizer (mirrors cfg -> georef -> matching
-# in cfg/default.yaml). Update alongside that config block when a new stabilo option is adopted.
+DEVICE_CHOICES = list(Stabilizer.VALID_DEVICES)
+"""Every torch device name stabilo accepts; the `choices` of `--stab-device` and `--geo-device`."""
+
+DL_DETECTORS = set(Stabilizer.DL_DETECTORS)
+"""The learning-based (kornia) detectors, which run on a torch device instead of OpenCV."""
+
 KNOWN_STABILIZER_KWARGS = (
     set(DEFAULT_STABILIZER_KWARGS)
     | set(FIXED_STABILIZER_KWARGS)
     | {'device', 'loftr_weights', 'loftr_confidence', 'disk_weights', 'dedode_detector_weights', 'dedode_descriptor_weights'}
 )
+"""Every key `estimate_homography` forwards to the Stabilizer without a warning.
+
+Mirrors `georef.matching` in `default.yaml`; extend it together with that block when a new stabilo
+option is adopted.
+"""
 
 
 def _clamp_dl_max_features(kwargs: dict, logger: logging.Logger) -> None:
@@ -81,33 +99,53 @@ def _clamp_dl_max_features(kwargs: dict, logger: logging.Logger) -> None:
 
 
 def estimate_homography(img_src: np.ndarray, img_dst: np.ndarray, logger: logging.Logger,
-                        **stabilizer_kwargs) -> tuple:
-    """
-    Estimate the homography H mapping source -> destination image coordinates.
+                        **stabilizer_kwargs: Any) -> tuple:
+    """Estimate the homography that maps source image coordinates to destination coordinates.
 
-    The destination is set as the Stabilizer's reference frame and the source as the
-    current frame, so the resulting cur->ref transform maps src -> dst with the RANSAC
-    reprojection threshold evaluated in destination coordinates.
+    The destination is the Stabilizer's reference frame and the source its current frame, so the
+    RANSAC reprojection threshold is evaluated in destination coordinates. If detection or matching
+    fails, `max_features` is halved and the registration retried, down to
+    [`MIN_MAX_FEATURES`][geotrax.utils.registration.MIN_MAX_FEATURES]; the detector-free `loftr`
+    ignores `max_features` and is not retried.
 
-    `stabilizer_kwargs` is forwarded verbatim to the Stabilizer on top of
-    DEFAULT_STABILIZER_KWARGS, so any parameter stabilo accepts (including the
-    learning-based detectors' `device` and weight settings) can be driven from
-    cfg -> georef -> matching without a signature change here. The registration geometry in
-    FIXED_STABILIZER_KWARGS is pinned and overrides any supplied value.
-
-    Set `gpu=True` (with `gpu_device_id` selecting the CUDA device) to CUDA-accelerate the
-    registration. stabilo only GPU-accelerates the ORB detector, so `gpu=True` requires
-    `detector_name='orb'` and a CUDA-enabled OpenCV build; otherwise stabilo raises ValueError
-    (there is no CPU fallback). For the learning-based detectors use `device='cuda'` instead.
-
-    If detection or matching fails, `max_features` is halved and retried, down to
-    MIN_MAX_FEATURES. The detector-free `loftr` ignores max_features, so it is never retried.
+    Args:
+        img_src: Source image, e.g. a video frame.
+        img_dst: Destination image, e.g. an orthophoto.
+        logger: Receives the warnings about ignored keys, capped feature counts and retries.
+        **stabilizer_kwargs: Any [`Stabilizer`](https://rfonod.github.io/stabilo/) parameter,
+            typically the whole `georef.matching` block. Applied on top of
+            [`DEFAULT_STABILIZER_KWARGS`][geotrax.utils.registration.DEFAULT_STABILIZER_KWARGS],
+            so new stabilo options need no change here. The keys in
+            [`FIXED_STABILIZER_KWARGS`][geotrax.utils.registration.FIXED_STABILIZER_KWARGS] are
+            pinned, unrecognized keys are ignored with a warning, and `max_features` is capped at
+            [`DL_MAX_FEATURES_CAP`][geotrax.utils.registration.DL_MAX_FEATURES_CAP] for the
+            learning-based detectors.
 
     Returns:
-        (H, inliers_count, num_matches, (n_src_kpts, n_dst_kpts)) on success, or
-        (None, None, None, None) on failure. `inliers_count` is the number of RANSAC inliers
-        and `num_matches` is the number of good matches fed to findHomography (i.e. the
-        'inliers_count out of num_matches matches' figures).
+        `(H, inliers_count, num_matches, (n_src_kpts, n_dst_kpts))` on success, where `H` is the 3x3
+            homography, `inliers_count` the number of RANSAC inliers and `num_matches` the number of
+            filtered matches passed to the robust fit. `(None, None, None, None)` when every
+            attempt failed.
+
+    Raises:
+        ValueError: From stabilo, for an invalid parameter combination. In particular `gpu=True`
+            needs `detector_name='orb'` and a CUDA-enabled OpenCV build, and has no CPU fallback;
+            the learning-based detectors use `device='cuda'` instead.
+
+    Examples:
+        Register a drone frame to an orthophoto with the shipped matching settings:
+
+        ```python
+        import cv2
+        from geotrax.utils.config_utils import load_config
+        from geotrax.utils.logging_utils import setup_logger
+        from geotrax.utils.registration import estimate_homography
+
+        logger = setup_logger("register", dry_run=True)
+        matching = load_config("default", logger)["georef"]["matching"]
+        frame, ortho = cv2.imread("frame.png"), cv2.imread("ortho.png")
+        H, inliers, matches, _ = estimate_homography(frame, ortho, logger, **matching)
+        ```
     """
     unknown = sorted(set(stabilizer_kwargs) - KNOWN_STABILIZER_KWARGS)
     if unknown:

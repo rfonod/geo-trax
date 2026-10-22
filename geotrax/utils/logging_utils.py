@@ -26,6 +26,7 @@ class BColors:
 
 
 NOTICE_LEVEL = 25
+"""Custom level between INFO and WARNING, shown on the console without `--verbose`; logged with `logger.notice(...)`."""
 logging.addLevelName(NOTICE_LEVEL, "NOTICE")
 
 LOG_FILE_SUFFIXES = ('.log', '.txt')
@@ -64,7 +65,12 @@ logging.Logger.notice = notice
 
 
 def default_log_dir() -> Path:
-    """Return the platform-native directory for geo-trax log files."""
+    """Return the platform-native directory for geo-trax log files.
+
+    Returns:
+        `~/Library/Logs/geo-trax` on macOS, `%LOCALAPPDATA%\\geo-trax\\Logs` on Windows, and
+            `$XDG_STATE_HOME/geo-trax/logs` (default `~/.local/state/geo-trax/logs`) elsewhere.
+    """
     if WINDOWS:  # %LOCALAPPDATA%\geo-trax\Logs
         base = Path(os.environ.get('LOCALAPPDATA') or (Path.home() / 'AppData' / 'Local'))
         return base / 'geo-trax' / 'Logs'
@@ -76,22 +82,33 @@ def default_log_dir() -> Path:
 
 
 def setup_logger(name: str, verbose: bool = False, log_path: str | Path | None = None, dry_run: bool = False) -> logging.Logger:
-    """Set up a logger with a given name, verbosity level, and optional log path.
+    """Create the logger that every geo-trax command uses: colored console output plus a log file.
 
-    ``log_path`` may be a directory (an auto-named ``<stage>_<timestamp>_<pid>.log`` file is
-    created inside it) or a full file path (used verbatim). A path that does not exist yet counts
-    as a directory unless it ends in one of ``LOG_FILE_SUFFIXES`` (``.log``/``.txt``), so
-    '--log-path ./logs' creates the directory the user asked for; testing ``is_dir()`` alone took
-    that down the file branch and left a regular file named 'logs' that every later run appended
-    to, since the test then kept returning False. Any suffix at all is not enough to make it a
-    file, because a dotted directory name such as 'logs.v2' or '2026.09' has one too. An existing
-    file is always used verbatim, whatever its suffix. Give a full file path a ``.log`` or
-    ``.txt`` suffix to pin it. When omitted, logs go to a
-    platform-specific directory (see default_log_dir). The timestamp keeps the auto-derived name
-    from ever landing on a stale file left by an earlier, unrelated run (a plain PID would
-    eventually be reused, e.g. after a reboot, and FileHandler's append mode would silently merge
-    into it); the PID breaks the rare tie of two processes started in the same second. Pass a full
-    file path explicitly to opt out of this and pin a stable, reusable name.
+    The console shows NOTICE and above (INFO and above when `verbose`); the file always records INFO
+    and above. The first call also starts a non-blocking, cached check for a newer geo-trax on PyPI
+    (disable it with `GEOTRAX_DISABLE_UPDATE_CHECK=1`). Each call adds handlers, so create a
+    logger once per name.
+
+    Args:
+        name: Logger name; its last dotted component also names the auto-named log file.
+        verbose: Show INFO messages on the console too.
+        log_path: Where to write the log. A directory, existing or not, gets an auto-named
+            `<name>_<timestamp>_<pid>.log` file, whose timestamp and PID keep it from ever appending
+            to an unrelated earlier run. A full file path is used verbatim; a path that does not
+            exist yet counts as a file only if it ends in `.log` or `.txt`, so a dotted directory
+            name such as `logs.v2` still works. `None` uses
+            [`default_log_dir`][geotrax.utils.logging_utils.default_log_dir].
+        dry_run: Log to the console only, without a file.
+
+    Returns:
+        The configured logger, which also has a `notice()` method for the
+            [`NOTICE_LEVEL`][geotrax.utils.logging_utils.NOTICE_LEVEL].
+
+    Examples:
+        ```python
+        logger = setup_logger("my_analysis", verbose=True, dry_run=True)
+        logger.notice("Shown without --verbose.")
+        ```
     """
     logger = logging.getLogger(name)
     logger.setLevel(logging.INFO)

@@ -11,6 +11,7 @@ import sys
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
+from typing import Any
 
 import cv2
 import numpy as np
@@ -18,11 +19,6 @@ import yaml
 
 from geotrax.utils.constants import MACOS, WINDOWS
 
-# Fallback output naming conventions — reproduces the historical 'results/' layout.
-# Used ONLY when no config has been loaded (output_cfg=None in the path helpers, or
-# .get('key', DEFAULT_OUTPUT['key']) guards against a custom config missing a key).
-# In normal pipeline operation every stage loads the YAML and threads the full
-# cfg['output'] dict through, so DEFAULT_OUTPUT never takes precedence over config.
 DEFAULT_OUTPUT = {
     'folder': 'results',
     'tracks_postfix': '',
@@ -32,14 +28,24 @@ DEFAULT_OUTPUT = {
     'visualization_postfix': '',
     'metadata_postfix': '',
 }
+"""Fallback `output` section, reproducing the historical `results/` layout.
+
+Used only when no config is passed to the path helpers (`output_cfg=None`), or for a key missing
+from a custom config. The pipeline stages always pass the loaded `output` section.
+"""
 
 
 def get_output_dir(source: Path, output_cfg: dict | None = None) -> Path:
-    """Return the output directory for *source*.
+    """Return the output directory for an input file.
 
-    If ``output_cfg['folder']`` is an absolute path it is used as-is (shared
-    across all inputs in a batch). A relative name is resolved next to the
-    input video's parent directory.
+    Args:
+        source: Input video (or any file whose results are looked up).
+        output_cfg: The `output` config section; `None` uses
+            [`DEFAULT_OUTPUT`][geotrax.utils.file_utils.DEFAULT_OUTPUT].
+
+    Returns:
+        `output.folder` itself when it is absolute (one folder shared by every input), otherwise
+            that name inside the input's own directory.
     """
     cfg = output_cfg or DEFAULT_OUTPUT
     folder = Path(cfg.get('folder', DEFAULT_OUTPUT['folder']))
@@ -47,12 +53,18 @@ def get_output_dir(source: Path, output_cfg: dict | None = None) -> Path:
 
 
 def output_folder_exclusion(output_cfg: dict | None = None) -> tuple[str | None, Path | None]:
-    """Return how a directory scan should skip the configured output folder, as ``(name, path)``.
+    """Return how a directory scan should skip the configured output folder.
 
-    A relative folder is recreated next to every input, so it is skipped by *name* (``path`` is
-    None). An absolute folder is one shared directory, so it is skipped by resolved *path* only
-    (``name`` is None): skipping its name as well would drop every unrelated input folder that
-    happens to share it, e.g. ``-of /mnt/out/D1`` dropping every ``D1`` drone folder.
+    A relative folder is recreated next to every input, so it is skipped by name. An absolute
+    folder is one shared directory, so it is skipped by its resolved path only: skipping its name as
+    well would also drop every unrelated input folder that shares it, e.g. `-of /mnt/out/D1`
+    dropping every `D1` drone folder.
+
+    Args:
+        output_cfg: The `output` config section; `None` uses the default `results`.
+
+    Returns:
+        `(name, None)` for a relative folder, `(None, resolved_path)` for an absolute one.
     """
     cfg = output_cfg or DEFAULT_OUTPUT
     folder = Path(cfg.get('folder', DEFAULT_OUTPUT['folder']))
@@ -68,11 +80,29 @@ def build_result_path(
     viz_mode: int | None = None,
     ext: str | None = None,
 ) -> Path | None:
-    """Return the expected output path for *result_type* given *source*.
+    """Return the path where a stage writes one kind of result for an input video.
 
-    result_type choices: 'video', 'processed', 'video_transformations',
-    'geo_transformations', 'georeferenced', 'visualized', 'metadata'.
-    Returns ``None`` for unknown types.
+    Args:
+        source: Input video.
+        result_type: One of `'video'` (the input itself), `'processed'` (tracks `.txt`),
+            `'video_transformations'` (stabilization transforms), `'geo_transformations'`
+            (video-to-orthophoto homography), `'georeferenced'` (trajectory `.csv`),
+            `'visualized'` (annotated video) and `'metadata'` (run-metadata `.yaml`).
+        output_cfg: The `output` config section, which sets the folder and the filename postfixes;
+            `None` uses [`DEFAULT_OUTPUT`][geotrax.utils.file_utils.DEFAULT_OUTPUT].
+        viz_mode: Visualization mode, for `'visualized'` only.
+        ext: Video file extension without the dot, for `'visualized'` only.
+
+    Returns:
+        The path, which need not exist yet, or `None` for an unknown `result_type`.
+
+    Examples:
+        ```python
+        >>> build_result_path(Path("D1/A1.mp4"), "georeferenced")
+        PosixPath('D1/results/A1.csv')
+        >>> build_result_path(Path("D1/A1.mp4"), "visualized", viz_mode=2, ext="mp4")
+        PosixPath('D1/results/A1_mode_2.mp4')
+        ```
     """
     if result_type == 'video':
         return source
@@ -95,13 +125,19 @@ def build_result_path(
 
 
 def read_recorded_stab_anchor(source: Path, output_cfg: dict | None = None) -> int | None:
-    """Return the stabilization anchor frame recorded in the run-metadata YAML of *source*, or None.
+    """Return the stabilization anchor frame that `extract` recorded for an input video.
 
-    The stabilized track coordinates are expressed relative to the ``cut_frame_left`` that ``extract``
-    ran with, which it records under ``processing`` in the metadata YAML. Stages that run separately
-    (``georeference``, ``visualize``) must use that frame rather than their own ``cut_frame_left``.
-    Returns None when the file is missing or unreadable (e.g. results from before v1.4.0) or holds no
-    integer anchor, leaving the fallback to the caller.
+    Stabilized track coordinates are relative to the `processing.cut_frame_left` that `extract` ran
+    with, which it records in the run-metadata YAML. Stages that run separately (`georeference`,
+    `visualize`) must use that frame rather than their own `cut_frame_left`.
+
+    Args:
+        source: Input video.
+        output_cfg: The `output` config section, used to locate the metadata file.
+
+    Returns:
+        The recorded frame index, or `None` when the metadata file is missing or unreadable (e.g.
+            results from before v1.4.0) or holds no integer anchor; the fallback is up to the caller.
     """
     metadata_path = build_result_path(source, 'metadata', output_cfg)
     try:
@@ -118,16 +154,26 @@ def read_recorded_stab_anchor(source: Path, output_cfg: dict | None = None) -> i
 
 @contextmanager
 def atomic_output(path: Path, keep_suffix: bool = False) -> Iterator[Path]:
-    """Yield a temporary path next to *path* that replaces *path* only if the block completes.
+    """Write a file atomically: yield a temporary path that replaces `path` only if the block completes.
 
-    Result files are written in place otherwise, and ``batch`` treats any existing result as complete,
-    so an interrupted or failed write (Ctrl+C, a SLURM kill, a full disk) would leave a truncated file
-    that later runs skip and downstream stages read as valid. With this, *path* holds either its
+    `batch` treats any existing result as complete, so an interrupted write (Ctrl+C, a SLURM kill, a
+    full disk) must not leave a truncated file behind. Inside this context, `path` holds either its
     previous content or the complete new one, and the temporary file is always removed.
 
-    The temporary name ends in '.tmp' by default, so that no '*.csv'/'*.txt' result scan can pick it
-    up. ``keep_suffix=True`` keeps the real suffix last ('.name.tmp.gpkg') for writers such as GDAL
-    that check the extension of the file they write; use it only for formats no result scan globs.
+    Args:
+        path: Final destination.
+        keep_suffix: Name the temporary file `.name.tmp.ext` instead of `.name.ext.tmp`, for writers
+            such as GDAL that check the extension. The default suffix keeps the file out of every
+            `*.csv`/`*.txt` result scan; use `keep_suffix=True` only for formats no scan globs.
+
+    Yields:
+        The temporary path to write to, in the same directory as `path`.
+
+    Examples:
+        ```python
+        with atomic_output(csv_path) as tmp:
+            df.to_csv(tmp, index=False)
+        ```
     """
     tmp_path = path.with_name(f'.{path.stem}.tmp{path.suffix}' if keep_suffix else f'.{path.name}.tmp')
     try:
@@ -138,7 +184,15 @@ def atomic_output(path: Path, keep_suffix: bool = False) -> Iterator[Path]:
 
 
 def detect_delimiter(filepath: Path, lines_to_check: int = 5) -> str:
-    """Detect the delimiter of a CSV file by reading a few lines."""
+    """Guess whether a text file is comma, space or tab separated.
+
+    Args:
+        filepath: File to inspect.
+        lines_to_check: Number of leading lines to count delimiters in.
+
+    Returns:
+        The most frequent of `','`, `' '` and `'\\t'` in those lines.
+    """
     delimiters = {',': 0, ' ': 0, '\t': 0}
     with open(filepath) as file:
         for _ in range(lines_to_check):
@@ -151,8 +205,15 @@ def detect_delimiter(filepath: Path, lines_to_check: int = 5) -> str:
     return max(delimiters, key=lambda k: delimiters[k])
 
 
-def convert_to_serializable(obj):
-    """Convert an object to a serializable format."""
+def convert_to_serializable(obj: Any) -> Any:
+    """Recursively convert paths and argparse namespaces into YAML/JSON-serializable values.
+
+    Args:
+        obj: A value, possibly nesting dicts, lists, `Path`s and `argparse.Namespace`s.
+
+    Returns:
+        `obj` with every `Path` turned into a string and every namespace into a dict.
+    """
     if isinstance(obj, Path):
         return str(obj)
     elif isinstance(obj, argparse.Namespace):
@@ -166,13 +227,30 @@ def convert_to_serializable(obj):
 
 
 def determine_location_id(source: Path, logger: logging.Logger = None) -> str:
-    """
-    Extract the location ID from the source filename. Location ID is the first sequence
-    of alphabetic characters in the filename. Symbols '_' and '-' can act as separators.
+    """Extract the location ID from a filename: its first run of letters.
+
+    The location ID selects the orthophoto, segmentation and master frame of a recording site. A
+    digit, `_` or `-` ends the run.
+
+    Args:
+        source: Video or result file named after its location.
+        logger: Receives the detected ID; without one, an error is printed instead.
+
+    Returns:
+        The location ID.
+
+    Raises:
+        SystemExit: The filename contains no letters.
+
     Examples:
-    'A1.mp4' -> 'A'
-    '2025-01-01_A_PM1.mp4' -> 'A'
-    'A1_AV.csv' -> 'A'
+        ```python
+        >>> determine_location_id(Path("A1.mp4"))
+        'A'
+        >>> determine_location_id(Path("2025-01-01_A_PM1.mp4"))
+        'A'
+        >>> determine_location_id(Path("A1_AV.csv"))
+        'A'
+        ```
     """
     location_id = []
     for char in source.stem:
@@ -197,7 +275,23 @@ def determine_location_id(source: Path, logger: logging.Logger = None) -> str:
 
 
 def get_ortho_folder(source: Path, ortho_folder: Path | None, logger: logging.Logger, critical: bool = True) -> Path:
-    """Get the orthophoto folder from the provided path or use the default folder structure."""
+    """Return the orthophoto folder for an input, given explicitly or found from the project layout.
+
+    Without an explicit folder, the nearest ancestor of `source` named `PROCESSED` or `DATASET` is
+    looked up, and its sibling `ORTHOPHOTOS` folder is used.
+
+    Args:
+        source: Input video or result file.
+        ortho_folder: Explicit folder (`--ortho-folder`), or `None` to use the project layout.
+        logger: Receives the outcome.
+        critical: Exit on failure instead of returning `None`.
+
+    Returns:
+        The orthophoto folder, or `None` when it cannot be found and `critical` is false.
+
+    Raises:
+        SystemExit: The folder cannot be found and `critical` is true.
+    """
     if ortho_folder is None:
         ortho_folder = source.parent
 
@@ -240,14 +334,25 @@ def get_ortho_folder(source: Path, ortho_folder: Path | None, logger: logging.Lo
 
 
 def determine_suffix_and_fourcc() -> tuple[str, str]:
-    """Determine the suffix and fourcc for the output video format."""
+    """Return the container suffix and FourCC codec for annotated videos on this platform.
+
+    Returns:
+        `('mp4', 'avc1')` on macOS, `('avi', 'WMV2')` on Windows and `('mp4', 'mp4v')` elsewhere.
+    """
     suffix = 'mp4' if MACOS else 'avi' if WINDOWS else 'mp4'
     fourcc = 'avc1' if MACOS else 'WMV2' if WINDOWS else 'mp4v'
     return suffix, fourcc
 
 
 def get_video_dimensions(video_path: Path) -> tuple[int, int]:
-    """Get the width and height of the video."""
+    """Return the frame size of a video.
+
+    Args:
+        video_path: Video file.
+
+    Returns:
+        `(width, height)` in pixels; `(0, 0)` if OpenCV cannot open the file.
+    """
     reader = cv2.VideoCapture(str(video_path))
     frame_w = int(reader.get(cv2.CAP_PROP_FRAME_WIDTH))
     frame_h = int(reader.get(cv2.CAP_PROP_FRAME_HEIGHT))
@@ -262,23 +367,37 @@ def check_if_results_exist(
     ext: str | None = None,
     output_cfg: dict | None = None,
 ) -> tuple[bool, Path | None]:
-    """Check if the results already exist for *file*.
+    """Check whether a result of an input video already exists; `batch` skips the stage if so.
 
-    *output_cfg* is the ``cfg -> output`` dict (or ``None`` to use the
-    historical defaults). Existing callers that pass ``viz_mode`` / ``ext``
-    positionally are unaffected because ``output_cfg`` is keyword-only.
+    Args:
+        file: Input video.
+        result_type: A result type accepted by
+            [`build_result_path`][geotrax.utils.file_utils.build_result_path].
+        viz_mode: Visualization mode, for `'visualized'` only.
+        ext: Video file extension, for `'visualized'` only.
+        output_cfg: The `output` config section; `None` uses the defaults.
+
+    Returns:
+        `(exists, path)`; `path` is `None` for an unknown `result_type`.
     """
     result_path = build_result_path(file, result_type, output_cfg, viz_mode, ext)
     return (result_path.exists() if result_path else False), result_path
 
 
 def get_keyframe_times(video_path: Path) -> np.ndarray:
-    """Return the presentation times (seconds) of the video keyframes, in stream order.
+    """Return the presentation times of a video's keyframes.
 
-    Reads ffprobe's per-packet ``pts_time,flags`` output and keeps the packets flagged ``K``. ffprobe
-    runs with an argument list, without a shell, so any path works on every platform (a shell pipe
-    through awk would need POSIX quoting, which cmd.exe does not honor). Raises
-    ``subprocess.CalledProcessError`` if ffprobe fails.
+    Reads ffprobe's per-packet `pts_time,flags` output and keeps the packets flagged `K`. ffprobe is
+    run with an argument list rather than through a shell, so any path works on every platform.
+
+    Args:
+        video_path: Video file; `ffprobe` must be on the `PATH`.
+
+    Returns:
+        Keyframe times in seconds, in stream order.
+
+    Raises:
+        subprocess.CalledProcessError: ffprobe failed.
     """
     output = subprocess.check_output(
         ['ffprobe', '-loglevel', 'error', '-select_streams', 'v:0', '-show_entries', 'packet=pts_time,flags',
