@@ -693,7 +693,7 @@ def resolve_class_names(
     """
     for source_label, log_tag, value in (
         ('cli', '--class-names', cli_value),
-        ('config', 'config class_names', cfg_value),
+        ('config', 'config extraction.class_rename', cfg_value),
     ):
         if value is not None:
             mapping = _load_class_names_mapping(value, logger)
@@ -708,6 +708,6 @@ def resolve_class_names(
     ids = classes if classes else range(100)
     logger.warning(
         "No class-name mapping found (CLI, config, or model); falling back to integer class IDs. "
-        "Provide one via cfg -> class_names or --class-names to label classes."
+        "Provide one via cfg -> extraction -> class_rename or --class-names to label classes."
     )
     return {int(i): str(int(i)) for i in ids}, 'fallback'
