@@ -1104,9 +1104,12 @@ def add_georeferencing_args(group) -> dict:
     return paths
 
 
-def parse_cli_args() -> argparse.Namespace:
+def _build_parser() -> tuple:
     """
-    Parse command-line arguments.
+    Build the georeference parser and its ``dest -> CfgArg`` map.
+
+    Split out of ``parse_cli_args`` so that the documentation site renders its CLI reference
+    from the same parser the command uses (see docs/_scripts/gen_reference.py).
     """
     parser = argparse.ArgumentParser(description="Georeferencing the tracking data using orthophotos.")
 
@@ -1118,6 +1121,14 @@ def parse_cli_args() -> argparse.Namespace:
     georef = parser.add_argument_group('Georeferencing arguments')
     cfg_paths |= add_georeferencing_args(georef)
 
+    return parser, cfg_paths
+
+
+def parse_cli_args() -> argparse.Namespace:
+    """
+    Parse command-line arguments.
+    """
+    parser, cfg_paths = _build_parser()
     return finalize_cli_args(parser, cfg_paths)
 
 

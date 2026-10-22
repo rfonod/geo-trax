@@ -298,8 +298,13 @@ def trace_dataset_vehicle(
     return None, None
 
 
-def parse_cli_args() -> argparse.Namespace:
-    """Parse command-line arguments."""
+def _build_parser() -> tuple:
+    """
+    Build the aggregate parser and its ``dest -> CfgArg`` map.
+
+    Split out of ``parse_cli_args`` so that the documentation site renders its CLI reference
+    from the same parser the command uses (see docs/_scripts/gen_reference.py).
+    """
     parser = argparse.ArgumentParser(description='Aggregate georeferenced tracking results')
     parser.add_argument('input', type=Path, help='Path to the PROCESSED folder of georeferenced results.')
 
@@ -307,6 +312,12 @@ def parse_cli_args() -> argparse.Namespace:
     optional.add_argument('--output-folder', '-of', type=Path, default=None, help="Path to the output folder for aggregated results. If not provided, a 'DATASET' folder is created next to the PROCESSED folder.")
     cfg_paths = add_common_args(optional, output_folder=False)
 
+    return parser, cfg_paths
+
+
+def parse_cli_args() -> argparse.Namespace:
+    """Parse command-line arguments."""
+    parser, cfg_paths = _build_parser()
     return finalize_cli_args(parser, cfg_paths)
 
 

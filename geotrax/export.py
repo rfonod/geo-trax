@@ -299,8 +299,13 @@ def export_trajectories(args: argparse.Namespace, logger: logging.Logger) -> Non
         sys.exit(1)
 
 
-def parse_cli_args(argv: list | None = None) -> argparse.Namespace:
-    """Parse command-line arguments."""
+def _build_parser() -> tuple:
+    """
+    Build the export parser and its ``dest -> CfgArg`` map.
+
+    Split out of ``parse_cli_args`` so that the documentation site renders its CLI reference
+    from the same parser the command uses (see docs/_scripts/gen_reference.py).
+    """
     parser = argparse.ArgumentParser(
         description='Export georeferenced trajectories to GIS formats (GeoPackage, GeoJSON)'
     )
@@ -345,6 +350,12 @@ def parse_cli_args(argv: list | None = None) -> argparse.Namespace:
     )
     cfg_paths = add_common_args(optional, output_folder=False)
 
+    return parser, cfg_paths
+
+
+def parse_cli_args(argv: list | None = None) -> argparse.Namespace:
+    """Parse command-line arguments."""
+    parser, cfg_paths = _build_parser()
     return finalize_cli_args(parser, cfg_paths, argv)
 
 

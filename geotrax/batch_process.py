@@ -484,9 +484,12 @@ def handle_existing_results(file: Path, args: argparse.Namespace, logger: loggin
     return True
 
 
-def parse_cli_args() -> argparse.Namespace:
+def _build_parser() -> tuple:
     """
-    Parse command-line arguments.
+    Build the batch parser and its ``dest -> CfgArg`` map.
+
+    Split out of ``parse_cli_args`` so that the documentation site renders its CLI reference
+    from the same parser the command uses (see docs/_scripts/gen_reference.py).
     """
     parser = argparse.ArgumentParser(description='Primary entry point for the full Geo-trax pipeline. Runs detection/tracking/stabilization, georeferencing, visualization, and plotting for a single video file or an entire directory tree. Stages are skipped if their output already exists; use --overwrite to force re-execution.')
 
@@ -524,6 +527,14 @@ def parse_cli_args() -> argparse.Namespace:
     plotting = parser.add_argument_group('Plotting options')
     cfg_paths |= add_plotting_args(plotting, dest_prefix='plot_')  # plot_* dests so they don't clash with the visualization args
 
+    return parser, cfg_paths
+
+
+def parse_cli_args() -> argparse.Namespace:
+    """
+    Parse command-line arguments.
+    """
+    parser, cfg_paths = _build_parser()
     return finalize_cli_args(parser, cfg_paths)
 
 

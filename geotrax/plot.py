@@ -868,7 +868,9 @@ def _build_parser() -> tuple:
     Build the plot parser and its ``dest -> CfgArg`` map.
 
     Split out of ``parse_cli_args`` so that ``default_plot_args`` can reuse the same registry
-    instead of restating it (see there for why a synthesized namespace needs one).
+    instead of restating it (see there for why a synthesized namespace needs one), and so that
+    the documentation site renders its CLI reference from the same parser the command uses
+    (see docs/_scripts/gen_reference.py).
     """
     parser = argparse.ArgumentParser(description="Trajectory and distribution plotting tool.")
 

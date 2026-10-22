@@ -990,9 +990,12 @@ def add_processing_args(group) -> dict:
     return paths
 
 
-def parse_cli_args() -> argparse.Namespace:
+def _build_parser() -> tuple:
     """
-    Parse command-line arguments.
+    Build the extract parser and its ``dest -> CfgArg`` map.
+
+    Split out of ``parse_cli_args`` so that the documentation site renders its CLI reference
+    from the same parser the command uses (see docs/_scripts/gen_reference.py).
     """
     parser = argparse.ArgumentParser(description='Vehicle Detection, Tracking, and Stabilization Pipeline')
 
@@ -1007,6 +1010,14 @@ def parse_cli_args() -> argparse.Namespace:
         "pipeline config (run 'geotrax config copy').")
     cfg_paths |= add_processing_args(processing)
 
+    return parser, cfg_paths
+
+
+def parse_cli_args() -> argparse.Namespace:
+    """
+    Parse command-line arguments.
+    """
+    parser, cfg_paths = _build_parser()
     return finalize_cli_args(parser, cfg_paths)
 
 def main() -> None:
