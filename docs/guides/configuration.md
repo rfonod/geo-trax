@@ -66,7 +66,7 @@ Pass only one.
 
 ## What a run records
 
-`geotrax extract` writes `<video>.yaml` to the output folder, next to the tracks. It records the run (geo-trax version, time, source video, config file, output folder), the model as configured and as resolved, the class names, and every setting as the run actually used it, after all flags and `--set` overrides. It is a record for provenance; it is laid out differently from a config, so it cannot be passed back with `-c`.
+`geotrax extract` writes `<video>.yaml` to the output folder, next to the tracks. It records the run (geo-trax version, time, source video, config file, output folder), the number of vehicles and track rows saved, the model as configured and as resolved, the class names, and every setting as the run actually used it, after all flags and `--set` overrides. It is a record for provenance; it is laid out differently from a config, so it cannot be passed back with `-c`.
 
 ## Logs
 

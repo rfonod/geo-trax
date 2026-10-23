@@ -45,7 +45,7 @@ To run or repeat a subset of the stages:
 | `--viz-only` | visualization only (needs the tracks from a previous run) |
 | `--plot-only` | plotting only |
 
-Georeferencing and visualization both need the tracks file from extraction; if it is missing, that stage is skipped for the video with an error, but the video is not counted as failed (see [Exit status](#exit-status)). A failure in one video does not stop the batch: the video is marked failed, its later stages are skipped, and the run continues.
+Georeferencing and visualization both need the tracks file from extraction. A video in which nothing was detected has none, but it is not a failure: its run metadata records zero vehicles, so later runs count its extraction as done (pass `--overwrite` to repeat it) and skip its other stages. A video that was never extracted, by contrast, fails `--geo-only` and `--viz-only`. A failure in one video does not stop the batch: the video is marked failed, its later stages are skipped, and the run continues.
 
 ## Directory mode
 
@@ -66,6 +66,6 @@ For multi-drone projects, the [recommended folder layout](own-data.md#folder-lay
 | `1` | at least one video failed; the failures are listed at the end |
 | `130` | interrupted with Ctrl+C or `q` in the preview window; the failures so far are listed |
 
-A stage skipped because its input is missing is logged as an error but is not a failure. This covers `--geo-only` or `--viz-only` on videos that were never extracted, and videos in which nothing was detected, since those leave no tracks file. After a run that ends with `0`, scripts should still check the log for errors.
+A video in which nothing was detected counts as succeeded. `--geo-only` or `--viz-only` on a video that was never extracted counts as failed, since the requested stage cannot run.
 
 `--dry-run` does not create a log file, so it is safe to run freely before a long job. All options are listed in the [CLI reference](../reference/cli/batch.md).

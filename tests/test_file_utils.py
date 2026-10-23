@@ -16,7 +16,9 @@ from geotrax.utils.file_utils import (
     determine_location_id,
     determine_suffix_and_fourcc,
     get_output_dir,
+    no_vehicles_detected,
     output_folder_exclusion,
+    read_recorded_stab_anchor,
 )
 
 
@@ -191,3 +193,43 @@ def test_output_folder_exclusion_absolute_folder_is_skipped_by_path_only(tmp_pat
 
 def test_output_folder_exclusion_defaults_to_results():
     assert output_folder_exclusion(None) == ('results', None)
+
+
+# --- run metadata readers ----------------------------------------------------
+
+def _write_run(tmp_path, metadata=None, tracks=False):
+    """An input video with the given run-metadata YAML and, optionally, a tracks file."""
+    video = tmp_path / 'A1.mp4'
+    video.touch()
+    (tmp_path / 'results').mkdir()
+    if metadata is not None:
+        (tmp_path / 'results' / 'A1.yaml').write_text(metadata)
+    if tracks:
+        (tmp_path / 'results' / 'A1.txt').write_text('0,1,2\n')
+    return video
+
+
+def test_read_recorded_stab_anchor_reads_cut_frame_left(tmp_path):
+    video = _write_run(tmp_path, 'processing:\n  cut_frame_left: 12\n')
+    assert read_recorded_stab_anchor(video) == 12
+
+
+@pytest.mark.parametrize('metadata', [None, 'processing: [1, 2]\n', 'processing:\n  cut_frame_left: true\n', ': bad: yaml: ['])
+def test_read_recorded_stab_anchor_returns_none_without_a_usable_record(tmp_path, metadata):
+    assert read_recorded_stab_anchor(_write_run(tmp_path, metadata)) is None
+
+
+def test_no_vehicles_detected_when_the_run_recorded_none(tmp_path):
+    video = _write_run(tmp_path, 'results:\n  vehicles: 0\n  rows: 0\n')
+    assert no_vehicles_detected(video) is True
+
+
+@pytest.mark.parametrize('metadata, tracks', [
+    ('results:\n  vehicles: 0\n', True),         # a tracks file wins over the record
+    ('results:\n  vehicles: 3\n', False),        # the tracks file is missing, not empty
+    ('run:\n  source: A1.mp4\n', False),         # metadata from before the record existed
+    ('results:\n  vehicles: false\n', False),
+    (None, False),                                # never extracted
+])
+def test_no_vehicles_detected_needs_a_zero_record_and_no_tracks(tmp_path, metadata, tracks):
+    assert no_vehicles_detected(_write_run(tmp_path, metadata, tracks)) is False

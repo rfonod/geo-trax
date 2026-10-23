@@ -122,6 +122,7 @@ from geotrax.utils.file_utils import (
     determine_location_id,
     get_ortho_folder,
     get_output_dir,
+    no_vehicles_detected,
     read_recorded_stab_anchor,
 )
 from geotrax.utils.logging_utils import setup_logger
@@ -133,12 +134,18 @@ MATCHING_PLACEMENT_DEFAULTS = {'gpu': False, 'gpu_device_id': 0, 'device': 'auto
 def georeference(args: argparse.Namespace, logger: logging.Logger) -> None:
     """
     Georeference the tracking data using orthophotos.
+
+    A video in which extraction detected no vehicles has no tracks file; it is reported and left
+    without a CSV rather than treated as an error (see file_utils.no_vehicles_detected).
     """
     # load_config_all() has already reconciled the CLI flags with the config in both directions
     # (see sync_args_with_config), so args and config agree and either can be read from here on.
     full_config = load_config_all(args, logger, needs_model=False)
     config = full_config['georef']
     out_cfg = full_config['main'].get('output', {})
+    if no_vehicles_detected(args.source, out_cfg):
+        logger.warning(f"No vehicles were detected in '{args.source}', so there is nothing to georeference.")
+        return
 
     n_steps = 8 if args.no_master else 10
     _bar_w = max(10, shutil.get_terminal_size().columns - 88)

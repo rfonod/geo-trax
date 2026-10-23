@@ -139,17 +139,46 @@ def read_recorded_stab_anchor(source: Path, output_cfg: dict | None = None) -> i
         The recorded frame index, or `None` when the metadata file is missing or unreadable (e.g.
             results from before v1.4.0) or holds no integer anchor; the fallback is up to the caller.
     """
-    metadata_path = build_result_path(source, 'metadata', output_cfg)
-    try:
-        with open(metadata_path) as f:
-            metadata = yaml.safe_load(f) or {}
-    except (OSError, yaml.YAMLError):
-        return None
-    processing = metadata.get('processing') if isinstance(metadata, dict) else None
+    processing = _read_run_metadata(source, output_cfg).get('processing')
     anchor = processing.get('cut_frame_left') if isinstance(processing, dict) else None
     if not isinstance(anchor, int) or isinstance(anchor, bool):
         return None
     return anchor
+
+
+def no_vehicles_detected(source: Path, output_cfg: dict | None = None) -> bool:
+    """Tell whether `extract` finished on an input video without finding any vehicle.
+
+    Such a run writes no tracks file, the file whose presence marks a finished extraction, so its
+    absence alone cannot separate a video in which nothing was detected from one that was never
+    extracted. The run-metadata YAML settles it: `extract` records the number of saved vehicles
+    there, and writes it even when there are none. `batch` uses this to count such a video as done
+    instead of failed, and `georeference` and `visualize` to stop without an error.
+
+    Args:
+        source: Input video.
+        output_cfg: The `output` config section, used to locate the result files.
+
+    Returns:
+        `True` when the metadata records zero vehicles and no tracks file exists; `False` when there
+            are tracks, or when the metadata is missing, unreadable or from before v1.5.2.
+    """
+    if check_if_results_exist(source, 'processed', output_cfg=output_cfg)[0]:
+        return False
+    results = _read_run_metadata(source, output_cfg).get('results')
+    vehicles = results.get('vehicles') if isinstance(results, dict) else None
+    return isinstance(vehicles, int) and not isinstance(vehicles, bool) and vehicles == 0
+
+
+def _read_run_metadata(source: Path, output_cfg: dict | None) -> dict:
+    """Load the run-metadata YAML of an input video; an empty dict when missing or unreadable."""
+    metadata_path = build_result_path(source, 'metadata', output_cfg)
+    try:
+        with open(metadata_path) as f:
+            metadata = yaml.safe_load(f)
+    except (OSError, yaml.YAMLError):
+        return {}
+    return metadata if isinstance(metadata, dict) else {}
 
 
 @contextmanager

@@ -10,7 +10,16 @@ from unittest.mock import patch
 
 import pytest
 
-from geotrax.batch_process import filter_files_to_process, handle_existing_results, process_file, process_input
+from geotrax.batch_process import (
+    ACTION_EXTRACT,
+    ACTION_GEOREF,
+    MissingInputError,
+    filter_files_to_process,
+    handle_existing_results,
+    process_file,
+    process_input,
+    should_process_file,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -210,3 +219,54 @@ def test_absolute_output_folder_name_is_not_added_to_folders_exclude(tmp_path):
         process_input(args, logger)
     assert args.folders_exclude == ['results']
     assert [call.args[0].name for call in processed.call_args_list] == ['v.mp4']
+
+
+# --- videos without tracks ---------------------------------------------------
+
+def _video(tmp_path, vehicles=None):
+    """An input video, with run metadata recording `vehicles` when given, and never a tracks file."""
+    video = tmp_path / 'A1.mp4'
+    video.touch()
+    if vehicles is not None:
+        (tmp_path / 'results').mkdir()
+        (tmp_path / 'results' / 'A1.yaml').write_text(f'results:\n  vehicles: {vehicles}\n  rows: 0\n')
+    return video
+
+
+def _stage_args(**overrides):
+    args = argparse.Namespace(overwrite=False, yes=False, dry_run=False, geo_only=False, viz_only=False)
+    for key, value in overrides.items():
+        setattr(args, key, value)
+    return args
+
+
+def test_a_video_with_nothing_detected_counts_as_extracted(tmp_path):
+    video = _video(tmp_path, vehicles=0)
+    assert should_process_file(video, _stage_args(), logger, ACTION_EXTRACT) is False
+    assert should_process_file(video, _stage_args(overwrite=True, yes=True), logger, ACTION_EXTRACT) is True
+
+
+@pytest.mark.parametrize('overrides', [{}, {'geo_only': True}, {'dry_run': True}])
+def test_a_video_with_nothing_detected_skips_georeferencing_without_failing(tmp_path, overrides):
+    assert should_process_file(_video(tmp_path, vehicles=0), _stage_args(**overrides), logger, ACTION_GEOREF) is False
+
+
+@pytest.mark.parametrize('vehicles', [None, 5])
+def test_geo_only_on_a_video_that_was_never_extracted_fails(tmp_path, vehicles):
+    """No tracks and no zero-vehicle record: the requested stage cannot run, so the video fails."""
+    with pytest.raises(MissingInputError, match='extract the video first'):
+        should_process_file(_video(tmp_path, vehicles), _stage_args(geo_only=True), logger, ACTION_GEOREF)
+
+
+def test_a_dry_run_that_extracts_expects_the_tracks_to_be_missing(tmp_path):
+    assert should_process_file(_video(tmp_path), _stage_args(dry_run=True), logger, ACTION_GEOREF) is True
+
+
+def test_a_dry_run_with_geo_only_still_reports_the_missing_tracks(tmp_path):
+    with pytest.raises(MissingInputError):
+        should_process_file(_video(tmp_path), _stage_args(dry_run=True, geo_only=True), logger, ACTION_GEOREF)
+
+
+def test_geo_only_on_a_never_extracted_video_marks_it_failed(tmp_path):
+    args = _process_file_args(geo_only=True, no_geo=False, overwrite=False, yes=False)
+    assert process_file(_video(tmp_path), args, logger) is False

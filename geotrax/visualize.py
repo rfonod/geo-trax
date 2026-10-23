@@ -128,6 +128,7 @@ from geotrax.utils.file_utils import (
     determine_suffix_and_fourcc,
     get_output_dir,
     get_video_dimensions,
+    no_vehicles_detected,
     read_recorded_stab_anchor,
 )
 from geotrax.utils.logging_utils import setup_logger
@@ -136,11 +137,17 @@ from geotrax.utils.logging_utils import setup_logger
 def visualize_results(args: argparse.Namespace, logger: logging.Logger) -> None:
     """
     Visualize the tracking results on a video.
+
+    A video in which extraction detected no vehicles has no tracks file; it is reported and left
+    without an annotated video rather than treated as an error (see file_utils.no_vehicles_detected).
     """
     # load_config_all() has already reconciled the CLI flags with the config in both directions
     # (see sync_args_with_config), so args and config agree and either can be read from here on.
     config = load_config_all(args, logger)['main']
     out_cfg = config.get('output', {})
+    if no_vehicles_detected(args.source, out_cfg):
+        logger.warning(f"No vehicles were detected in '{args.source}', so there is nothing to visualize.")
+        return
     if not args.save and not args.show:
         logger.warning("Neither --save nor --show is enabled. Visualization will run but produce no output. "
                        "Set 'save' or 'show' in the config file, or pass --save / --show on the command line.")

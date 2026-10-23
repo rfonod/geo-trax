@@ -855,7 +855,9 @@ def save_results(tracks: np.ndarray, transforms: np.ndarray, config: dict, logge
     interrupted or failed save therefore never leaves a tracks file that later stages would pair
     with the new metadata. Every file is written atomically (atomic_output). A transforms file this
     run does not write (stabilization or save_stab off) is removed, since visualize would otherwise
-    warp the new tracks with the old matrices. With no tracks, no tracks file is left at all.
+    warp the new tracks with the old matrices. With no tracks, no tracks file is left at all; the
+    metadata then records zero vehicles, which is how later stages and re-runs tell a video in which
+    nothing was detected from one that was never extracted (see file_utils.no_vehicles_detected).
     """
     source = config['main']['args'].source
     save_dir = increment_path(get_output_dir(source, out_cfg), exist_ok=True, mkdir=True)
@@ -888,7 +890,7 @@ def save_results(tracks: np.ndarray, transforms: np.ndarray, config: dict, logge
             f"(stabilization or save_stab disabled, or none computed), so it no longer matches the tracks."
         )
 
-    metadata = convert_to_serializable(_build_run_metadata(config, save_dir))
+    metadata = convert_to_serializable(_build_run_metadata(config, save_dir, tracks))
     with atomic_output(info_yaml_file) as tmp_file, open(tmp_file, 'w') as f:
         yaml.dump(metadata, f, default_flow_style=False, sort_keys=False)
     logger.info(f"Video info and configs saved to: '{info_yaml_file.resolve()}'")
@@ -904,12 +906,13 @@ def save_results(tracks: np.ndarray, transforms: np.ndarray, config: dict, logge
     logger.info(f"Tracking results saved to: '{tracks_txt_file.resolve()}'")
 
 
-def _build_run_metadata(config: dict, save_dir: Path) -> dict:
+def _build_run_metadata(config: dict, save_dir: Path, tracks: np.ndarray) -> dict:
     """Build a structured, human-readable record of the configuration this run actually used.
 
     Reads the config dict, which ``sync_args_with_config`` has already reconciled with the CLI
     flags and ``--set`` overrides, so the saved file reflects the run rather than the config file
-    it started from.
+    it started from. ``results`` records how many vehicles and track rows the run saved; a count of
+    zero marks a video in which nothing was detected, since no tracks file is written for it.
     """
     main = config['main']
     ul = config['ultralytics']
@@ -924,6 +927,10 @@ def _build_run_metadata(config: dict, save_dir: Path) -> dict:
             'source': str(args.source),
             'config': str(args.cfg),
             'output_folder': str(save_dir),
+        },
+        'results': {
+            'vehicles': int(np.unique(tracks[:, 1]).size) if tracks.size else 0,
+            'rows': int(tracks.shape[0]) if tracks.size else 0,
         },
         'model': {
             'configured': main.get('model_configured'),

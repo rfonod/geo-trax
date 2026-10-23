@@ -77,4 +77,4 @@ Each matrix maps frame `frame_id` to the reference frame. The first row is frame
 
 A record of the run (geo-trax version, time, source video, config file, model and class names) and of every setting as the run used it, with all CLI flags and `--set` overrides applied, so it records the run rather than the file it started from. See [What a run records](configuration.md#what-a-run-records).
 
-A tracking or saving failure leaves no tracks file and makes `extract` exit with status 1, so `batch` never treats a failed run as done. All options are in the [CLI reference](../reference/cli/extract.md).
+A tracking or saving failure leaves no tracks file and makes `extract` exit with status 1, so `batch` never treats a failed run as done. A video in which nothing was detected also leaves no tracks file, but `extract` exits with status 0 and the run metadata records zero vehicles; `batch`, `georeference` and `visualize` then treat the video as done, with nothing to process. All options are in the [CLI reference](../reference/cli/extract.md).

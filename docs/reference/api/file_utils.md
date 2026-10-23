@@ -14,6 +14,8 @@ Where each stage writes its results, how they are written safely, and small help
 
 ::: geotrax.utils.file_utils.read_recorded_stab_anchor
 
+::: geotrax.utils.file_utils.no_vehicles_detected
+
 ::: geotrax.utils.file_utils.DEFAULT_OUTPUT
 
 ## Writing files
