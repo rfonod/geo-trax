@@ -5,13 +5,7 @@ Object **detection** already runs on CUDA whenever a compatible GPU and PyTorch 
 !!! note
     This page covers the **OpenCV CUDA** path, which applies to the classical detectors. The learning-based detectors use a separate torch device (`--stab-device` / `--geo-device`) and are covered in [Feature detectors](feature-detectors.md#acceleration); the two paths cannot be combined.
 
-Throughout this page, dotted names like `ultralytics.device` or `georef.matching.detector_name` are **keys in the pipeline config**, not CLI flags. To change them, copy the bundled config once and pass your copy with `-c`:
-
-```bash
-geotrax config copy                 # writes default_copy.yaml in the current directory
-# edit default_copy.yaml, then pass it to any command:
-geotrax batch <video> ... -c default_copy.yaml
-```
+Throughout this page, dotted names like `ultralytics.device` or `tracker.botsort.gmc_method` are **keys in the pipeline config**. Change one for a single run with `--set KEY=VALUE`, or permanently in a copied config; see [Configuration](configuration.md).
 
 ## 1. Build OpenCV with CUDA
 
@@ -35,9 +29,10 @@ python -c "import cv2; print(cv2.__version__, cv2.cuda.getCudaEnabledDeviceCount
 Let pip install everything, then overwrite the CPU OpenCV by reinstalling the CUDA `opencv_contrib_python-*.whl` you built in step 1:
 
 ```bash
-pip install -e .          # installs torch/cuda/ultralytics/..., plus (temporarily) CPU opencv
+python -m pip install geo-trax   # or, from a source checkout: python -m pip install -e .
+                                 # installs torch/cuda/ultralytics/..., plus (temporarily) CPU opencv
 # reinstall the wheel produced by your CUDA OpenCV build in step 1 (path is wherever you built it):
-pip install --force-reinstall --no-deps /path/to/opencv_contrib_python-*.whl
+python -m pip install --force-reinstall --no-deps /path/to/opencv_contrib_python-*.whl
 python -c "import cv2; print(cv2.cuda.getCudaEnabledDeviceCount())"   # expect: 1
 ```
 
@@ -64,9 +59,10 @@ version = "$CVVER"
 [tool.setuptools]
 py-modules = []
 EOF
-  pip install --no-deps "$d" && rm -rf "$d"
+  python -m pip install --no-deps "$d" && rm -rf "$d"
 done
-pip install -e .          # opencv is satisfied by the stubs; your CUDA build is untouched
+python -m pip install geo-trax   # or python -m pip install -e . from a source checkout;
+                                 # opencv is satisfied by the stubs, so your CUDA build is untouched
 ```
 
 ## 3. Enable GPU per stage
@@ -77,13 +73,7 @@ pip install -e .          # opencv is satisfied by the stubs; your CUDA build is
 | Stabilization | `--stab-gpu` | works out of the box (default detector is ORB) |
 | Georeferencing | `--geo-gpu --geo-detector orb` | ORB is required; RootSIFT is not CUDA-accelerated |
 
-Only ORB is CUDA-accelerated, so georeferencing must be switched to it, which `--geo-detector` does on the command line. A copied config is still required if you did **not** add `video` to your OpenCV `BUILD_LIST` (step 1):
-
-```bash
-geotrax config copy                       # writes default_copy.yaml
-# edit default_copy.yaml:
-#   tracker.botsort.gmc_method: none      # ONLY if you did not add 'video' to BUILD_LIST (step 1); disables tracker GMC, verify tracking quality
-```
+Only ORB is CUDA-accelerated, so georeferencing must be switched to it, which `--geo-detector orb` does on the command line. If you did **not** add `video` to your OpenCV `BUILD_LIST` (step 1), also turn off the tracker's GMC with `--set tracker.botsort.gmc_method=none` (for another active tracker, use its block, e.g. `tracker.tracktrack.gmc_method`), and verify the tracking quality.
 
 These are the GPU-accelerated analogues of the two reproduce commands in [`data/README.md`](https://github.com/rfonod/geo-trax/blob/main/data/README.md). Their outputs are *equivalent, not identical* to the committed `data/results-pixel/` and `data/results-full/`: the CUDA path georeferences with ORB (RootSIFT is not GPU-accelerated), GPU feature extraction is not bit-identical to CPU, and with `gmc_method: none` the tracker runs without motion compensation.
 
@@ -96,7 +86,7 @@ geotrax batch data/U_video_cut.mp4 -orf data/orthophotos -osf data/segmentations
   --show-lanes --plot-segmentations -vm 0 3 --stab-gpu --geo-gpu --geo-detector orb
 ```
 
-Append `-c default_copy.yaml` to both if you needed the `gmc_method: none` workaround above.
+Append `--set tracker.botsort.gmc_method=none` to both if you needed the GMC workaround above.
 
 ## 4. Benchmark: detection-only CUDA vs fully CUDA
 
@@ -108,7 +98,7 @@ Three configurations are compared:
 - **ORB (CPU)**: the GPU-tuned config on CPU; a controlled, same-config baseline for the GPU run.
 - **fully CUDA**: the same ORB config with `--stab-gpu --geo-gpu`.
 
-The default run needs no config file: with no `-c`, geo-trax uses its shipped defaults (RootSIFT georeferencing, CPU for both stabilization and georeferencing). The ORB runs switch the georeferencing detector with `--geo-detector orb`; add `-c default_copy.yaml` to them as well if you needed `tracker.botsort.gmc_method: none`.
+The default run uses the shipped defaults (RootSIFT georeferencing, CPU for both stabilization and georeferencing). The ORB runs switch the georeferencing detector with `--geo-detector orb`. If you needed the GMC workaround, append `--set tracker.botsort.gmc_method=none` to `COMMON` (or to every `bench` line), so that all runs do the same work.
 
 With [hyperfine](https://github.com/sharkdp/hyperfine):
 
@@ -131,8 +121,8 @@ bench () { local label="$1"; shift; rm -rf /tmp/geotrax_bench
     && awk -v a="$t0" -v b="$(date +%s.%N)" -v l="$label" 'BEGIN{printf "%-28s %.1f s\n", l, b-a}' \
     || echo "$label FAILED (see /tmp/bench.log)"; }
 bench "geo-trax default (CPU)"
-bench "ORB (CPU)"        -c default_copy.yaml
-bench "fully CUDA (ORB)" -c default_copy.yaml --stab-gpu --geo-gpu
+bench "ORB (CPU)"        --geo-detector orb
+bench "fully CUDA (ORB)" --geo-detector orb --stab-gpu --geo-gpu
 ```
 
 Example on an **NVIDIA RTX 4090** (5-second sample clip, 150 frames; hyperfine mean ± σ over 5 runs):

@@ -107,7 +107,7 @@ extraction:
   min_track_length: 3   # Discard tracks shorter than this many frames; [1, inf)
   interpolate: false    # Fill per-track frame gaps with linear interpolation; adds is_interpolated column to output — CLI: --interpolate / --no-interpolate
   class_conf: null      # Per-class confidence thresholds, e.g. {1: 0.15, 2: 0.4}; unlisted classes keep ultralytics -> conf; null = one global threshold — set via --set class_conf='{2: 0.4}'
-  sahi:                 # Slicing Aided Hyper Inference: sliced detection for small objects (requires: pip install 'geo-trax[sahi]'); ~5x slower per frame with the defaults below
+  sahi:                 # Slicing Aided Hyper Inference: sliced detection for small objects (requires: python -m pip install 'geo-trax[sahi]'); ~10x the per-frame detection cost on 4K with the defaults below (3 x 3 slices plus a full-frame pass)
     enable: false                    # Run detection on overlapping frame slices and merge the results — CLI: --sahi / --no-sahi
     slice_height: 1080               # Slice height [px]; default = half of a 4K frame height; [1, inf)
     slice_width: 1920                # Slice width [px]; default = half of a 4K frame width; [1, inf)
@@ -196,8 +196,8 @@ stabilo:
 georef:
   # Coordinate reference systems and orthophoto geometry
   transformation:
-    source_crs: epsg:4326    # CRS of the georeferenced orthophoto (e.g. epsg:4326 = WGS 84); string
-    target_crs: epsg:5186    # Target projected CRS for local-coordinate output (e.g. epsg:5186 = Korea 2000); string
+    source_crs: epsg:4326    # CRS of the orthophoto's georeferencing; the Latitude/Longitude columns are computed in it, so keep WGS 84 (epsg:4326); string
+    target_crs: epsg:5186    # Projected CRS in meters for Local_X/Local_Y, in which speeds, accelerations and dimensions are also measured; epsg:5186 (Korea 2000) suits South Korea only, so set one for your area, e.g. its UTM zone; string
     cutout_width_px: 15000   # Original orthophoto cutout width [px]; used to derive geographic resolution when geo_source is 'center-text-file'; null falls back to the provided orthophoto width; [0, inf) or null
 
   # Feature matching (MAGSAC++ based image registration against orthophotos).

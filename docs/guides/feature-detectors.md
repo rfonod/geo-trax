@@ -20,7 +20,7 @@ The stabilization default is `orb`, tuned for high-altitude BEV footage with [St
 | `kaze` | nonlinear scale space, slower but accurate |
 | `akaze` | accelerated KAZE, a good speed/accuracy compromise |
 
-All six are OpenCV detectors, rotation invariant, and need no extra downloads. Each keeps at most `max_features` keypoints per frame, the strongest by response, counted in the downsampled image. ORB and SIFT do this natively; BRISK, KAZE and AKAZE first detect every keypoint above their threshold ([`brisk_threshold`](../reference/config/stabilo.md#stabilo.brisk_threshold), `kaze_threshold`, `akaze_threshold`, OpenCV's defaults) and then keep the strongest. The cap is a maximum, not a target: if a frame yields fewer keypoints than `max_features`, lower the threshold.
+All six are OpenCV detectors, rotation invariant, and need no extra downloads. Each keeps at most `max_features` keypoints per frame, the strongest ones, counted in the downsampled image. The cap is a maximum, not a target: BRISK, KAZE and AKAZE only find keypoints above their threshold ([`brisk_threshold`](../reference/config/stabilo.md#stabilo.brisk_threshold), `kaze_threshold`, `akaze_threshold`), so if they return fewer than `max_features`, lower it.
 
 ```bash
 geotrax extract video.mp4 --stab-detector akaze
@@ -31,7 +31,7 @@ Masking, RANSAC and downsampling parameters live under [`stabilo`](../reference/
 
 ## Learning-based detectors
 
-Stabilo 1.4.0 also exposes five [kornia](https://kornia.readthedocs.io/) models: `xfeat`, `disk`, `dedode`, `keynet`, and the detector-free `loftr`, plus the learned `lightglue` matcher (which pairs only with `disk`, `dedode` and `keynet`). They are available for experimentation on both steps, but they are **not** used by any geo-trax default and were not used to produce any published result. On this workload the classical detectors are faster, more predictable, and easier to reproduce.
+Stabilo also exposes five [kornia](https://kornia.readthedocs.io/) models: `xfeat`, `disk`, `dedode`, `keynet`, and the detector-free `loftr`, plus the learned `lightglue` matcher (which pairs only with `disk`, `dedode` and `keynet`). They are available for experimentation on both steps, but they are **not** used by any geo-trax default and were not used to produce any published result. On this workload the classical detectors are faster, more predictable, and easier to reproduce.
 
 Two properties make them awkward here.
 

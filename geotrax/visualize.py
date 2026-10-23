@@ -42,7 +42,7 @@ Options:
                         inline ID=NAME pairs (e.g. -cn 0=car 1=bus). Overrides model-derived
                         names. Defaults to cfg -> extraction -> class_rename, then model names.
   --log-path, -lp <str> : Where to write logs: a directory or a full file path; defaults to a platform-specific log directory.
-  --verbose, -v       : Set print verbosity level to INFO (default: WARNING).
+  --verbose, -v       : Also show INFO messages on the console (default: warnings and key notices only).
 
 Visualization Options:
   --save / --no-save, -s  : Save the annotated output video to file. Defaults to cfg -> visualization -> save.

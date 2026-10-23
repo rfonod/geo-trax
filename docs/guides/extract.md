@@ -28,14 +28,15 @@ geotrax extract path/to/video.mp4 --sahi
 
 | Concern | Where |
 |---|---|
-| Detection model | `--model`, or [`extraction.model`](../reference/config/extraction.md#extraction.model): a local `.pt` path or an `hf://<org>/<repo>/<file>.pt` reference |
-| Detection thresholds | `--conf`, or [`ultralytics`](../reference/config/ultralytics.md); per class with [`extraction.class_conf`](../reference/config/extraction.md#extraction.class_conf) |
-| Tracker | [`tracker.active`](../reference/config/tracker.md#tracker.active), and that tracker's block in `tracker` |
+| Detection model | `--model`, or [`extraction.model`](../reference/config/extraction.md#extraction.model): a local `.pt` path or an `hf://<org>/<repo>/<file>.pt` reference ([details](detection-tracking.md#detection-model)) |
+| Classes | `--classes` to filter, `--class-names` to rename ([details](detection-tracking.md#classes)) |
+| Detection thresholds | `--conf`, or [`ultralytics`](../reference/config/ultralytics.md); per class with [`extraction.class_conf`](../reference/config/extraction.md#extraction.class_conf) ([details](detection-tracking.md#confidence-thresholds)) |
+| Tracker | [`tracker.active`](../reference/config/tracker.md#tracker.active), and that tracker's block in `tracker` ([comparison](detection-tracking.md#trackers)) |
 | Stabilization | [`stabilo`](../reference/config/stabilo.md); the detector with `--stab-detector` (see [Feature detectors](feature-detectors.md)) |
 | Short tracks | [`extraction.min_track_length`](../reference/config/extraction.md#extraction.min_track_length) (no flag; use `--set min_track_length=5`) |
 | Dimension estimation | [`extraction.dimension_estimation`](../reference/config/extraction.md#extractiondimension_estimation), including the ground sample distance `gsd` |
 
-The detection model, the per-class thresholds and the trackers are compared in the README under [Detection Model](https://github.com/rfonod/geo-trax#detection-model) and [Tracking](https://github.com/rfonod/geo-trax#tracking). The `gsd` default (0.02725 m/px) is tuned for a DJI Mavic 3 at 140 to 150 m and 4K; re-tune it for other altitudes or cameras.
+The `gsd` default (0.02725 m/px) is tuned for a DJI Mavic 3 at 140 to 150 m and 4K; re-tune it for other altitudes or cameras, as described in [Your own data](own-data.md#settings-to-adapt).
 
 The stabilization reference frame is the first processed frame, `cut_frame_left`. It is recorded in the run metadata, and [georeferencing](georeference.md) and [visualization](visualize.md) read it from there, so they stay consistent with the stabilized coordinates even if they run with a different frame range.
 
@@ -57,7 +58,7 @@ frame_id, vehicle_id, x_c(unstab), y_c(unstab), w(unstab), h(unstab), x_c(stab),
 - `x_c(stab)`, `y_c(stab)`, `w(stab)`, `h(stab)`: the same in the stabilized (reference) frame.
 - `class_id`: 0 car (including vans), 1 bus, 2 truck, 3 motorcycle.
 - `confidence`: detection confidence (0 to 1).
-- `vehicle_length`, `vehicle_width`: estimated vehicle dimensions in pixels.
+- `vehicle_length`, `vehicle_width`: estimated vehicle dimensions in pixels, one value per vehicle; `nan` when no estimate could be made (short, stationary or edge-bound tracks).
 - `is_interpolated` (optional 15th column): present only with `--interpolate` (`extraction.interpolate: true`); `0` for a real detection, `1` for a row interpolated to fill a frame gap. Gaps longer than the active tracker's `track_buffer` are left unfilled, since the tracker would not have kept a lost track's ID across a longer occlusion.
 
 Each track has a single class, chosen by a confidence-weighted vote over its detections, so a track can hold rows whose own detection was another class.
@@ -74,6 +75,6 @@ Each matrix maps frame `frame_id` to the reference frame. The first row is frame
 
 ### Run metadata: `video_file.yaml`
 
-Video metadata plus the configuration the run actually used: the config file with every CLI flag and `--set` override already applied, so it records the run rather than the file it started from. Before v1.4.0 this file was saved next to the input video.
+A record of the run (geo-trax version, time, source video, config file, model and class names) and of every setting as the run used it, with all CLI flags and `--set` overrides applied, so it records the run rather than the file it started from. See [What a run records](configuration.md#what-a-run-records).
 
 A tracking or saving failure leaves no tracks file and makes `extract` exit with status 1, so `batch` never treats a failed run as done. All options are in the [CLI reference](../reference/cli/extract.md).

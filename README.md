@@ -108,20 +108,20 @@ Installed geo-trax from PyPI rather than a checkout? Use the non-editable form i
 geotrax batch data/U_video_cut.mp4 --no-geo
 
 # Full pipeline: extract, georeference, and analyze (orthophotos required; see data/README.md)
-geotrax batch data/U_video_cut.mp4 -orf data/orthophotos -mf data/master_frames --show-lanes
+geotrax batch data/U_video_cut.mp4 -orf data/orthophotos -osf data/segmentations -mf data/master_frames --show-lanes
 
 # Scale up: process a whole project tree, then merge multi-drone results into one dataset
 geotrax batch path/to/PROCESSED/
 geotrax aggregate path/to/PROCESSED/
 ```
 
-Run `geotrax -h` or `geotrax batch -h` for all options. The scale-up commands above run flag-free with the [recommended project structure](#real-world-deployment-the-songdo-experiment); any other layout works with explicit path flags.
+Run `geotrax -h` or `geotrax batch -h` for all options. The scale-up commands above run flag-free with the [recommended project structure](#real-world-deployment-the-songdo-experiment); any other layout works with explicit path flags. To georeference your own footage, [Your own data](https://rfonod.github.io/geo-trax/guides/own-data/) lists the files each location needs and the defaults to change outside South Korea.
 
 <details>
 <summary><b>📋 Full Feature Overview</b></summary>
 
 - **Detection**: YOLOv8s on aerial BEV imagery; detects car (incl. vans), bus, truck, and motorcycle; optional per-class confidence thresholds (`extraction.class_conf`) and [SAHI](https://github.com/obss/sahi) sliced inference for improved small-object recall (`--sahi`).
-- **Tracking**: six multi-object trackers (BoT-SORT default); see [Tracking](#tracking) for a comparison; optional per-track frame-gap interpolation.
+- **Tracking**: six multi-object trackers (BoT-SORT default; see [Tracking](#tracking)); optional per-track frame-gap interpolation.
 - **Stabilization**: homography-based trajectory correction via [Stabilo](https://github.com/rfonod/stabilo) ⚖️, tuned with [Stabilo-Optimize](https://github.com/rfonod/stabilo-optimize) 🎯; optional CUDA acceleration (`--stab-gpu`).
 - **Georeferencing**: frame-to-orthophoto registration; outputs lat/lon, local CRS, speed, acceleration, and lane assignment per vehicle; optional CUDA acceleration (`--geo-gpu`).
 - **Visualization**: track overlays on original, stabilized, or static-reference video, in five rendering modes (incl. oriented bounding boxes).
@@ -166,63 +166,13 @@ The entire pipeline is driven by a **single, self-contained YAML config**: one f
 | [`stable`](geotrax/cfg/stable.yaml) | Stabilization quality |
 
 ```bash
-geotrax batch video.mp4 -c confident   # use a bundled preset by name
-geotrax batch video.mp4 -c ./my.yaml   # use a custom config file
+geotrax batch video.mp4 -c confident                     # a bundled preset, by name
+geotrax config copy                                      # editable copies: <name>_copy.yaml
+geotrax batch video.mp4 -c default_copy.yaml             # your edited copy
+geotrax batch video.mp4 --set conf=0.35 --set iou=0.6    # one-off overrides of any key
 ```
 
-<details>
-<summary><b>⚙️ Inspect, copy, and customize configs</b></summary>
-
-Manage the bundled configs with the `geotrax config` command:
-
-```bash
-geotrax config show              # list bundled presets and their location
-geotrax config show default      # print a preset's full contents
-geotrax config copy              # copy presets into the current directory as <name>_copy.yaml
-geotrax config copy -o ~/myproj  # copy into a specific directory
-```
-
-Copy a preset, edit it, then pass it with `-c`:
-
-```bash
-geotrax config copy
-# edit default_copy.yaml ...
-geotrax extract video.mp4 -c default_copy.yaml
-```
-
-To switch the tracking algorithm, set `tracker.active` in the config (see [Tracking](#tracking)).
-
-</details>
-
-<details>
-<summary><b>✏️ One-off overrides with <code>--set</code></b></summary>
-
-Change any config value for a single run, without copying a config file. Available on every command that takes `-c`:
-
-```bash
-geotrax extract video.mp4 --set conf=0.35 --set iou=0.6     # repeat --set for several keys
-geotrax extract video.mp4 --set tracker.botsort.track_buffer=45
-geotrax georeference video.mp4 -orf ortho/ --set matching.downsample_ratio=0.25
-geotrax batch PROCESSED/ --set stabilo.max_features=4000 --set visualization.tail_length=90
-```
-
-- **KEY** is a dotted path (`ultralytics.conf`) or any unambiguous tail of one (`conf`, `matching.gpu`). An ambiguous or misspelled key stops the run and lists the candidates rather than being silently ignored. The full dotted path is the stable form: a short name that is unique today could become ambiguous once a future release adds a config key.
-- **VALUE** is read with YAML rules, exactly as in the config file, so `true`, `null`, `0.35`, and `[0, 1, 2]` all mean what they look like. A value of the wrong kind (text where a number belongs, a scalar where a list belongs) is rejected; numbers stay interchangeable.
-- **Precedence** is CLI > config file. Every override is echoed to the console, so it is never silent.
-
-Where a dedicated flag exists, prefer it: flags validate their input (`--stab-detector xfeatt` fails immediately and lists the valid detectors, while `--set` can only check the type) and they show up in `--help`. Passing both for the same key is an error, not a precedence puzzle:
-
-```console
-$ geotrax extract video.mp4 --set conf=0.1 --conf 0.5
-CRITICAL - Conflicting overrides for 'ultralytics.conf':
-  --set conf=0.1
-  --conf 0.5
-Pass only one.
-```
-
-`--set` is for experimentation; to make a change durable, copy a preset and pass it with `-c`.
-
-</details>
+The [Configuration guide](https://rfonod.github.io/geo-trax/guides/configuration/) covers inspecting and copying configs, the `--set` rules and their interplay with CLI flags, the run metadata, logs, and the update check; the [config reference](https://rfonod.github.io/geo-trax/reference/config/) documents every key.
 
 ## Detection Model
 
@@ -238,7 +188,7 @@ The default detector is **YOLOv8s** (HBB, 1920 × 1920 px, ~11 M parameters), tr
 
 > Pedestrian and bicycle classes exist in the weights but are underrepresented, unevaluated, and filtered by default. See the [model card](https://huggingface.co/rfonod/geo-trax) for full details.
 
-To use a different model, point `--model` (CLI) or `extraction.model` (config) to a local `.pt` path or `hf://<org>/<repo>/<file>.pt`; any [Ultralytics](https://github.com/ultralytics/ultralytics)-compatible model works. An `hf://` reference follows the repo's current `main`; to pin an exact version, add a revision (commit SHA, tag or branch) after the repo name: `hf://<org>/<repo>@<revision>/<file>.pt`.
+To use a different model, point `--model` (CLI) or `extraction.model` (config) to a local `.pt` path or `hf://<org>/<repo>/<file>.pt`; any [Ultralytics](https://github.com/ultralytics/ultralytics)-compatible model works. An `hf://` reference follows the repo's current `main`; to pin an exact version, add a revision (commit SHA, tag or branch) after the repo name: `hf://<org>/<repo>@<revision>/<file>.pt`. Class filtering and renaming are covered in the [Detection and tracking guide](https://rfonod.github.io/geo-trax/guides/detection-tracking/).
 
 ### Per-Class Confidence Thresholds
 
@@ -248,7 +198,7 @@ A single `ultralytics.conf` threshold rarely suits every class: rare or harder c
 geotrax extract video.mp4 --set 'class_conf={1: 0.15, 2: 0.4}'   # or set extraction.class_conf in a copied config
 ```
 
-The detector runs at the lowest of these thresholds, and each detection is then held to the threshold of its own class *before* it reaches the tracker, so rejected boxes never start or extend a track. Each track is later given a single class by a confidence-weighted vote, so the output can still hold rows of a class below its threshold: detections of another class on the same track, kept under that class's own threshold. With `class_conf: null` (the default) extraction is unchanged. The thresholds also apply in SAHI mode. Lowering a threshold lets more boxes compete for `ultralytics.max_det`, so raise it if a dense scene hits the cap.
+Each detection is held to the threshold of its own class *before* it reaches the tracker, so rejected boxes never start or extend a track; with `class_conf: null` (the default) extraction is unchanged. The [Detection and tracking guide](https://rfonod.github.io/geo-trax/guides/detection-tracking/#confidence-thresholds) explains how the thresholds interact with the per-track class vote and with `ultralytics.max_det`.
 
 ### Small-Object Detection with SAHI
 
@@ -259,9 +209,7 @@ geotrax extract video.mp4 --sahi     # also available on 'geotrax batch'
 geotrax extract video.mp4 --sahi --set sahi.slice_width=2160 --set sahi.slice_height=1215   # 2 x 2 grid on 4K
 ```
 
-SAHI is an optional extra. If it is not installed, the run stops immediately with the exact install command for your setup.
-
-Slice size, overlap, and merge settings live in `cfg -> extraction -> sahi` (run `geotrax config copy` to edit them). SAHI mode honors the `ultralytics` config keys `conf`, `device`, `imgsz` (applied per slice), and `classes`, as well as `extraction.class_conf`; the NMS-related keys (`iou`, `max_det`, `agnostic_nms`, etc.) are superseded by the SAHI merge settings. It supports YOLO models only and cannot be combined with the `tracktrack` tracker or with ReID model `auto` (both need a live Ultralytics predictor).
+SAHI is an optional extra (`python -m pip install 'geo-trax[sahi]'`); without it, the run stops at once with the install command for your setup. It supports YOLO models only and cannot be combined with the `tracktrack` tracker or with ReID model `auto`. The [SAHI guide](https://rfonod.github.io/geo-trax/guides/sahi/) covers the slicing and merge settings and which detection settings still apply.
 
 ### Custom Model Training
 
@@ -269,20 +217,13 @@ Training and export scripts for custom YOLO detectors live in `train/`, with a S
 
 ## Tracking
 
-Six multi-object trackers ship with [Ultralytics](https://github.com/ultralytics/ultralytics) `>=8.4.63`. Selection is config-driven: set `tracker.active`, no code changes needed. Default: **BoT-SORT**.
+Six multi-object trackers from [Ultralytics](https://github.com/ultralytics/ultralytics) are available: **BoT-SORT** (`botsort`, the default), **ByteTrack** (`bytetrack`), **OC-SORT** (`ocsort`), **Deep OC-SORT** (`deepocsort`), **FastTracker** (`fasttrack`) and **TrackTrack** (`tracktrack`). Selection is config-driven, with no code changes:
 
-| Tracker | `tracker.active` | ReID | GMC¹ | Pros | Cons |
-|---------|------------------|:----:|:----:|------|------|
-| **BoT-SORT** (default) | `botsort` | opt | ✅ | Strong accuracy; motion + optional appearance | Slower; ReID adds compute |
-| **ByteTrack** | `bytetrack` | ❌ | ❌ | Fastest; two-stage association | More ID switches under occlusion |
-| **OC-SORT** | `ocsort` | ❌ | ❌ | Robust to non-linear motion; lightweight | Weaker on long occlusions |
-| **Deep OC-SORT** | `deepocsort` | opt | opt | OC-SORT + appearance; dense scenes | Heaviest variant with ReID |
-| **FastTracker** | `fasttrack` | ❌ | ❌ | Occlusion-aware ByteTrack variant | Newer; several knobs to tune |
-| **TrackTrack** | `tracktrack` | opt | ✅ | Multi-cue cost; best ID retention | Most parameters; highest compute |
+```bash
+geotrax extract video.mp4 --set tracker.active=bytetrack
+```
 
-¹ GMC (in-tracker camera-motion compensation) runs during tracking and is independent of Stabilo's post-hoc trajectory stabilization stage.
-
-> 💡 Run `geotrax config show default` to print the full `tracker:` block, with every parameter for all six trackers documented inline. Run `geotrax config copy` to get an editable local copy. For a head-to-head comparison on your own data, see [`tools/compare_tracking.py`](tools/compare_tracking.py).
+The [Detection and tracking guide](https://rfonod.github.io/geo-trax/guides/detection-tracking/#trackers) compares them (accuracy, speed, appearance ReID, in-tracker camera-motion compensation) and covers tuning their parameters. For a head-to-head comparison on your own data, see [`tools/compare_tracking.py`](tools/compare_tracking.py).
 
 ## Stabilization
 
@@ -304,6 +245,8 @@ geotrax georeference video.mp4 -orf data/orthophotos --geo-detector sift
 
 Orthophotos are required; lane/road-section segmentations and per-location master frames are optional and improve lane assignment and robustness (see the [georeferencing guide](https://rfonod.github.io/geo-trax/guides/georeference/) and [data/README.md](data/README.md) for how to obtain them). Matching parameters live under `cfg -> georef -> matching`, kinematic filtering under `cfg -> georef -> filtering`.
 
+> ⚠️ Outside South Korea, set `georef.transformation.target_crs` to a projected CRS for your area (e.g. its UTM zone). The shipped EPSG:5186 is the Songdo one, and speeds, accelerations and dimensions are measured in it. [Your own data](https://rfonod.github.io/geo-trax/guides/own-data/) describes this and the file formats for a new location.
+
 > The [learning-based detectors](https://rfonod.github.io/geo-trax/guides/feature-detectors/#learning-based-detectors) are a poor fit for this stage in particular: the orthophoto is north-up while the drone frame can be at any heading, and every learned model except `keynet` is upright-only.
 
 ## GPU acceleration
@@ -319,7 +262,7 @@ The full setup (building OpenCV with CUDA, installing geo-trax without overwriti
 The `geotrax` CLI provides one subcommand per stage: `batch` (primary entry point), `extract`, `georeference`, `visualize`, `plot`, `aggregate`, `export`, and `config`. Run `geotrax <subcommand> -h` for its options (`python -m geotrax` works identically).
 
 <a id="geo-export"></a>
-The [documentation site](https://rfonod.github.io/geo-trax/) has a guide per stage, with more examples, the [output file formats](https://rfonod.github.io/geo-trax/guides/extract/#outputs), the [rotated-box visualization modes](https://rfonod.github.io/geo-trax/guides/visualize/#rotated-boxes-modes-3-and-4), [master frames](https://rfonod.github.io/geo-trax/guides/georeference/#master-frames), and [how to view the GIS exports](https://rfonod.github.io/geo-trax/guides/export/#viewing-exported-files) in the browser, QGIS, or Python. Its [CLI reference](https://rfonod.github.io/geo-trax/reference/cli/) and [config reference](https://rfonod.github.io/geo-trax/reference/config/) are generated from the code and the shipped config. See [data/README.md](data/README.md) for sample data, including a [sample GIS export](data/README.md#gis-export) of the demo clip.
+The [documentation site](https://rfonod.github.io/geo-trax/) has a guide per stage, plus guides to [configuration](https://rfonod.github.io/geo-trax/guides/configuration/) and to preparing [your own data](https://rfonod.github.io/geo-trax/guides/own-data/). The stage guides have more examples, the [output file formats](https://rfonod.github.io/geo-trax/guides/extract/#outputs), the [rotated-box visualization modes](https://rfonod.github.io/geo-trax/guides/visualize/#rotated-boxes-modes-3-and-4), [master frames](https://rfonod.github.io/geo-trax/guides/georeference/#master-frames), and [how to view the GIS exports](https://rfonod.github.io/geo-trax/guides/export/#viewing-exported-files) in the browser, QGIS, or Python. The site's [CLI reference](https://rfonod.github.io/geo-trax/reference/cli/) and [config reference](https://rfonod.github.io/geo-trax/reference/config/) are generated from the code and the shipped config. See [data/README.md](data/README.md) for sample data, including a [sample GIS export](data/README.md#gis-export) of the demo clip.
 
 ## Real-World Deployment: The Songdo Experiment
 

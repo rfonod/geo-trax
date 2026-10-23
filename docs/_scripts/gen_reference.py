@@ -401,7 +401,7 @@ def render_config_index(sections: dict) -> str:
         f'[`default.yaml`]({REPO_URL}/blob/main/geotrax/cfg/default.yaml) on every documentation build, so '
         'they always list the keys, defaults and comments of the shipped file. The CLI column names the '
         'flag that overrides a key for one run; any key can also be overridden with `--set KEY=VALUE`. '
-        f'See [Configuration]({REPO_URL}#configuration) in the README for presets, `geotrax config copy` '
+        'See the [Configuration guide](../../guides/configuration.md) for presets, `geotrax config copy` '
         'and the `--set` rules.',
         '',
         '## Sections',

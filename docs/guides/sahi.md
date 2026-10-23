@@ -1,6 +1,6 @@
 # SAHI inference
 
-[SAHI](https://github.com/obss/sahi) (Slicing Aided Hyper Inference) runs the detector on overlapping slices of each frame instead of on the whole frame, then merges the detections before tracking. It raises recall for vehicles near the detection floor, such as footage from higher altitudes or sub-4K sensors, at a cost that grows with the number of slices: on 4K footage the default slices form a 3 × 3 grid, so each frame takes nine slice passes plus one full-frame pass, roughly 10× the plain detection cost (see [Slice grid](#slice-grid) for a cheaper 2 × 2 setup). The overview is in the README under [Small-Object Detection with SAHI](https://github.com/rfonod/geo-trax#small-object-detection-with-sahi); this page covers setup and tuning.
+[SAHI](https://github.com/obss/sahi) (Slicing Aided Hyper Inference) runs the detector on overlapping slices of each frame instead of on the whole frame, then merges the detections before tracking. It raises recall for vehicles near the detection floor, such as footage from higher altitudes or sub-4K sensors, at a cost that grows with the number of slices: on 4K footage the default slices form a 3 × 3 grid, so each frame takes nine slice passes plus one full-frame pass, roughly 10× the plain detection cost (see [Slice grid](#slice-grid) for a cheaper 2 × 2 setup).
 
 ## Setup
 

@@ -32,7 +32,7 @@ Options:
   -st, --set <KEY=VALUE>      : Override a pipeline config value for this run; repeat for more than one.
   -lp, --log-path <str>       : Where to write logs: a directory or a full file path; defaults to a
                                 platform-specific log directory.
-  -v, --verbose               : Set print verbosity level to INFO (default: WARNING).
+  -v, --verbose               : Also show INFO messages on the console (default: warnings and key notices only).
 
 Examples:
   1. Export one video's trajectories as a GeoPackage of LineStrings (next to the CSV):

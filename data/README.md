@@ -49,7 +49,7 @@ New to these formats? [Viewing exported files](https://rfonod.github.io/geo-trax
 <details>
 <summary><b>⚡ Run this on GPU</b></summary>
 
-The stabilization and georeferencing steps can be also CUDA-accelerated with `--stab-gpu` / `--geo-gpu` on a source-built CUDA OpenCV (georeferencing GPU additionally needs `georef.matching.detector_name: orb`). See the [GPU acceleration guide](https://rfonod.github.io/geo-trax/guides/gpu/) for the build and benchmark details.
+The stabilization and georeferencing steps can be also CUDA-accelerated with `--stab-gpu` / `--geo-gpu` on a source-built CUDA OpenCV (georeferencing on the GPU also needs `--geo-detector orb`). See the [GPU acceleration guide](https://rfonod.github.io/geo-trax/guides/gpu/) for the build and benchmark details.
 
 </details>
 

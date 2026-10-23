@@ -111,5 +111,6 @@ def add_common_args(group, cfg: bool = True, output_folder: bool = True) -> dict
                             "or later runs never share a file) or a full file path ending in .log or .txt "
                             "(any other new path is created as a directory). "
                             "Defaults to a platform-specific log directory.")
-    group.add_argument('--verbose', '-v', action='store_true', help='Set print verbosity level to INFO (default: WARNING).')
+    group.add_argument('--verbose', '-v', action='store_true',
+                       help='Also show INFO messages on the console (default: warnings and key notices only).')
     return paths

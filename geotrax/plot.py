@@ -35,7 +35,7 @@ Options:
                      inline ID=NAME pairs (e.g. -cn 0=car 1=bus). Overrides model-derived
                      names. Defaults to cfg -> extraction -> class_rename, then model names.
   --log-path, -lp  : Where to write logs: a directory or a full file path; defaults to a platform-specific log directory.
-  --verbose, -v    : Set verbosity to INFO (default: WARNING).
+  --verbose, -v    : Also show INFO messages on the console (default: warnings and key notices only).
 
 Plot Background Options:
   --ortho-folder, -orf <path>        : Path to the folder with orthophoto images (.png) used as

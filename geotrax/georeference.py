@@ -33,7 +33,7 @@ Options:
     --output-folder, -of <str>     : Root folder for outputs (bare name or absolute path).
                                      Defaults to cfg -> output -> folder (historical default: 'results').
     --log-path, -lp <str>          : Where to write logs: a directory or a full file path; defaults to a platform-specific log directory.
-    --verbose, -v                  : Set print verbosity level to INFO (default: WARNING).
+    --verbose, -v                  : Also show INFO messages on the console (default: warnings and key notices only).
 
 Georeferencing Options:
     --ortho-folder, -orf <path>    : Custom path to the folder with orthophotos (.png, .tif, .txt).

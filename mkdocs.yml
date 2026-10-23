@@ -105,16 +105,22 @@ validation:
 nav:
   - Home: index.md
   - Guides:
-      - Batch processing: guides/batch.md
-      - Extract: guides/extract.md
-      - Georeference: guides/georeference.md
-      - Aggregate: guides/aggregate.md
-      - Visualize: guides/visualize.md
-      - Plot: guides/plot.md
-      - Export: guides/export.md
-      - GPU acceleration: guides/gpu.md
-      - Feature detectors: guides/feature-detectors.md
-      - SAHI inference: guides/sahi.md
+      - Pipeline:
+          - Batch processing: guides/batch.md
+          - Extract: guides/extract.md
+          - Georeference: guides/georeference.md
+          - Aggregate: guides/aggregate.md
+          - Visualize: guides/visualize.md
+          - Plot: guides/plot.md
+          - Export: guides/export.md
+      - Setup:
+          - Configuration: guides/configuration.md
+          - Your own data: guides/own-data.md
+      - Topics:
+          - Detection and tracking: guides/detection-tracking.md
+          - Feature detectors: guides/feature-detectors.md
+          - SAHI inference: guides/sahi.md
+          - GPU acceleration: guides/gpu.md
   - Config reference:
       - reference/config/index.md
       - input: reference/config/input.md

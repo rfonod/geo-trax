@@ -1,6 +1,6 @@
 # Export
 
-`geotrax export` converts georeferenced trajectories into vector files that open directly in QGIS, ArcGIS, kepler.gl or any GDAL-based tool. It reads the per-video CSVs from [georeference](georeference.md) and the dataset CSVs from [aggregate](aggregate.md). Each vehicle becomes one LineString (its trajectory), or each trajectory row becomes one Point. It is a standalone command; `geotrax batch` does not run it.
+`geotrax export` converts georeferenced trajectories into vector files that open directly in QGIS, ArcGIS or any GDAL-based tool, and as GeoJSON in web tools such as kepler.gl. It reads the per-video CSVs from [georeference](georeference.md) and the dataset CSVs from [aggregate](aggregate.md). Each vehicle becomes one LineString (its trajectory), or each trajectory row becomes one Point. It is a standalone command; `geotrax batch` does not run it.
 
 ## Examples
 
@@ -49,7 +49,7 @@ GeoJSON ([RFC 7946](https://datatracker.ietf.org/doc/html/rfc7946)) expects WGS8
 | **GeoPackage** (`.gpkg`, default) | [OGC open standard](https://www.geopackage.org/): a single SQLite file that can hold large datasets in any coordinate system | Desktop GIS, large datasets, the local projected CRS (`--crs local`) |
 | **GeoJSON** (`.geojson`) | [RFC 7946](https://datatracker.ietf.org/doc/html/rfc7946) plain-text JSON in WGS84 | Web maps, quick sharing, small to medium datasets |
 
-Both open in QGIS, ArcGIS Pro, GDAL/OGR, Python (GeoPandas), R (`sf`), and DuckDB (spatial extension); GeoJSON also opens in most web map tools. The examples below use the [sample export](https://github.com/rfonod/geo-trax/blob/main/data/README.md#gis-export) shipped in `data/results-full/` (144 vehicle trajectories from the 5-second demo clip). Each LineString is one vehicle, with `Vehicle_ID`, `Vehicle_Class`, `Start_Time`/`End_Time`, `Mean_Speed`/`Max_Speed` (km/h), and `Vehicle_Length`/`Vehicle_Width` (m) as attributes.
+Both open in QGIS, ArcGIS Pro, GDAL/OGR, Python (GeoPandas), R (`sf`), and DuckDB (spatial extension); GeoJSON also opens in most web map tools. The examples below use the [sample export](https://github.com/rfonod/geo-trax/blob/main/data/README.md#gis-export) shipped in `data/results-full/` (144 vehicle trajectories from the 5-second demo clip), where each LineString is one vehicle with the [attributes listed above](#output-files).
 
 ### In the browser (no install)
 

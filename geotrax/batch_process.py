@@ -59,7 +59,7 @@ Shared Options:
                           path is shared across all inputs in the batch. Also sets the base for
                           plots/. Defaults to cfg -> output -> folder (historical default: 'results').
     --log-path, -lp <str> : Where to write logs: a directory or a full file path; defaults to a platform-specific log directory.
-    --verbose, -v       : Set print verbosity level to INFO (default: WARNING).
+    --verbose, -v       : Also show INFO messages on the console (default: warnings and key notices only).
 
 Processing Options:
     --model, -m <str>     : Detection model to use — a local file path OR an
@@ -79,8 +79,9 @@ Processing Options:
                           an is_interpolated column to the .txt output (0 = detected, 1 = synthetic).
                           Defaults to cfg -> extraction -> interpolate (default: false).
     --sahi / --no-sahi    : Detect via SAHI sliced inference (improves small-object recall; requires
-                          'pip install geo-trax[sahi]'; roughly 5x slower per frame). Slicing parameters
-                          live in cfg -> extraction -> sahi. Defaults to cfg -> extraction -> sahi -> enable.
+                          python -m pip install 'geo-trax[sahi]'; roughly 10x the per-frame detection cost
+                          on 4K with the default slices). Slicing parameters live in cfg -> extraction -> sahi.
+                          Defaults to cfg -> extraction -> sahi -> enable.
     --stab-gpu / --no-stab-gpu, -sg : CUDA-accelerate stabilization (requires a CUDA-enabled OpenCV
                           build; no CPU fallback). Defaults to cfg -> stabilo -> gpu.
     --stab-gpu-device-id, -sgid <int> : CUDA device index used when stabilization GPU is enabled.

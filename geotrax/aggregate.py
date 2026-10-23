@@ -33,7 +33,7 @@ Options:
                                than one, e.g. --set folder=out. KEY is a dotted path or any
                                unambiguous tail of one; VALUE uses YAML rules.
   -lp, --log-path <str>      : Where to write logs: a directory or a full file path; defaults to a platform-specific log directory.
-  -v, --verbose              : Set print verbosity level to INFO (default: WARNING).
+  -v, --verbose              : Also show INFO messages on the console (default: warnings and key notices only).
 
 Examples:
 1. Basic aggregation with default output location:

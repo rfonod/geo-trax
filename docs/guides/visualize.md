@@ -5,8 +5,8 @@
 ## Examples
 
 ```bash
-# Live preview with the default settings
-geotrax visualize path/to/video.mp4 --show
+# Live preview only, without writing a video
+geotrax visualize path/to/video.mp4 --show --no-save
 
 # Save with confidences, hiding cars (class 0)
 geotrax visualize path/to/video.mp4 --save --class-filter 0 --show-conf
@@ -27,7 +27,7 @@ geotrax visualize path/to/video.mp4 --save --viz-mode 3 4
 geotrax visualize path/to/video.mp4 --show -cn 0=vehicle 1=bus 2=truck 3=bike
 ```
 
-Inside `geotrax batch`, `--viz-only` re-renders the videos from existing results without repeating extraction. Press `q` in the preview window to stop.
+Saving is on by default ([`visualization.save`](../reference/config/visualization.md#visualization.save)), so `--show` alone opens the preview *and* writes the video; add `--no-save` for a preview only. Press `q` in the preview window to stop. Inside `geotrax batch`, `--viz-only` re-renders the videos from existing results without repeating extraction.
 
 ## Rendering modes
 
@@ -55,11 +55,11 @@ Modes 3 and 4 replace the axis-aligned YOLO detections with **rotated bounding b
 - **Size estimation may fail.** Estimates come from frames where the vehicle moves in a nearly straight line over a sufficient distance. Short tracks, near-stationary vehicles, or detections close to the frame edges can yield no usable estimate. The box then falls back to a per-vehicle 25th percentile of the raw YOLO box extents, rotated to the heading, which tends to be inflated during turns, since axis-aligned boxes grow as a vehicle turns. Fallback boxes have a **dashed outline**.
 - **Heading may be unreliable.** For very slow or stationary vehicles the motion direction cannot be determined; the box is then aligned with the longer side of the raw bounding box. [`heading_smoothing`](../reference/config/visualization.md#visualization.heading_smoothing) and [`heading_min_speed`](../reference/config/visualization.md#visualization.heading_min_speed) tune this.
 - **Back-projection distortion (mode 3 only).** The rotated boxes are computed in stabilized space and projected back with the inverse stabilization homography; under strong camera motion this can skew them visibly.
-- **Edge clipping is approximate.** While a vehicle enters or leaves the frame, its detection covers only the visible part, so the rotated box is clipped to that footprint instead of being drawn at full size. Clipping starts once the detection is within [`edge_clip_margin`](../reference/config/visualization.md#visualization.edge_clip_margin) pixels of the border, since a YOLO box may stop a few pixels short of the true edge. The footprint is only known as an axis-aligned box, while the drawn box is rotated, so the clip boundary approximates where the vehicle really leaves the frame. The clip rectangle is smoothed over time ([`edge_clip_smoothing`](../reference/config/visualization.md#visualization.edge_clip_smoothing)) so the box shrinks steadily as the vehicle exits.
+- **Edge clipping is approximate.** While a vehicle enters or leaves the frame, the rotated box is clipped to the visible part of its detection rather than drawn at full size. That part is only known as an axis-aligned box, so the clip edge approximates where the vehicle really leaves the frame. [`edge_clip_margin`](../reference/config/visualization.md#visualization.edge_clip_margin) sets how close to the border clipping starts, and [`edge_clip_smoothing`](../reference/config/visualization.md#visualization.edge_clip_smoothing) steadies it over time.
 - Both modes need extraction to have run with stabilization (`extraction.stabilize: true`).
 
 ## Output
 
-`video_file_mode_X.mp4` (`<stem><visualization_postfix>_mode_<X>.mp4`) in the output folder, one per requested mode. A render that fails part-way deletes its partial video, so `batch` renders it again next time; stopping with `q` or Ctrl+C keeps the partial video.
+`video_file_mode_X.mp4` (`<stem><visualization_postfix>_mode_<X>.mp4`) in the output folder, one per requested mode. A render that fails part-way deletes its partial video, so `batch` renders it again next time. Stopping with `q` or Ctrl+C keeps the partial video, which `batch` then treats as done; pass `--overwrite` to render it again.
 
 All display settings live in the [`visualization`](../reference/config/visualization.md) section; the options are in the [CLI reference](../reference/cli/visualize.md).

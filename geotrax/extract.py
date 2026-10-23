@@ -31,7 +31,7 @@ Options:
     --output-folder, -of <str> : Root folder for outputs (bare name or absolute path).
                                 Defaults to cfg -> output -> folder (historical default: 'results').
     --log-path, -lp <str>     : Where to write logs: a directory or a full file path; defaults to a platform-specific log directory.
-    --verbose, -v             : Set print verbosity level to INFO (default: WARNING).
+    --verbose, -v             : Also show INFO messages on the console (default: warnings and key notices only).
 
 Processing Options:
     --model, -m <str>         : Detection model to use — a local file path OR an
@@ -49,8 +49,9 @@ Processing Options:
                               is_interpolated column to the .txt output (0 = real detection, 1 = synthetic).
                               Defaults to cfg -> extraction -> interpolate (default: false).
     --sahi / --no-sahi        : Detect via SAHI sliced inference (improves small-object recall; requires
-                              'pip install geo-trax[sahi]'; roughly 5x slower per frame). Slicing parameters
-                              live in cfg -> extraction -> sahi. Defaults to cfg -> extraction -> sahi -> enable.
+                              python -m pip install 'geo-trax[sahi]'; roughly 10x the per-frame detection cost
+                              on 4K with the default slices). Slicing parameters live in cfg -> extraction -> sahi.
+                              Defaults to cfg -> extraction -> sahi -> enable.
     --stab-gpu / --no-stab-gpu, -sg : CUDA-accelerate stabilization image matching (requires a CUDA-enabled
                               OpenCV build; no CPU fallback). Defaults to cfg -> stabilo -> gpu.
     --stab-gpu-device-id, -sgid <int> : CUDA device index used when stabilization GPU is enabled.
@@ -978,7 +979,7 @@ def add_processing_args(group) -> dict:
     add_cfg_arg(group, '--interpolate', action=argparse.BooleanOptionalAction, cfg='extraction.interpolate', paths=paths,
                 help='Fill per-track frame gaps with linear interpolation; adds is_interpolated column to output.')
     add_cfg_arg(group, '--sahi', action=argparse.BooleanOptionalAction, cfg='extraction.sahi.enable', paths=paths,
-                help="Detect via SAHI sliced inference for improved small-object recall (requires: pip install 'geo-trax[sahi]'). Slicing parameters live in cfg -> extraction -> sahi.")
+                help="Detect via SAHI sliced inference for improved small-object recall (requires: python -m pip install 'geo-trax[sahi]'). Slicing parameters live in cfg -> extraction -> sahi.")
     add_cfg_arg(group, '--stab-gpu', '-sg', action=argparse.BooleanOptionalAction, cfg='stabilo.gpu', paths=paths,
                 help='CUDA-accelerate stabilization (requires a CUDA-enabled OpenCV build; no CPU fallback).')
     add_cfg_arg(group, '--stab-gpu-device-id', '-sgid', type=int, cfg='stabilo.gpu_device_id', paths=paths,

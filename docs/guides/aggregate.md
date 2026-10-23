@@ -29,13 +29,13 @@ PROCESSED/
                 └── A2.csv
 ```
 
-The location ID is the leading letters of the clip name (`A1` → `A`). All clips of one location, date and session, from every drone, form one group. This is the layout of the [recommended project structure](https://github.com/rfonod/geo-trax#real-world-deployment-the-songdo-experiment).
+The location ID is the leading letters of the clip name (`A1` → `A`). All clips of one location, date and session, from every drone, form one group. This is the layout of the [recommended project structure](https://github.com/rfonod/geo-trax#real-world-deployment-the-songdo-experiment). The results must carry timestamps, which come from a [flight log](own-data.md#flight-logs) per video.
 
 ## What it does
 
 1. Finds every georeferenced CSV under the input folder and groups them by date, location ID and session.
 2. Concatenates each group, offsetting each file's `Vehicle_ID` by the highest ID before it so IDs stay unique across drones, and adds a `Drone_ID` column.
-3. Converts timestamps to local time (`HH:MM:SS.fff`) and standardizes the column order and types (lane numbers become strings).
+3. Reduces each `Timestamp` to its time of day (`Local_Time`, `HH:MM:SS.fff`) and standardizes the column order and types (lane numbers become strings). No time zone is converted, so `Local_Time` is local only if the flight logs are; the date is kept in the folder and file names.
 4. Writes one CSV per group, plus one ZIP archive per date and location for distribution.
 
 ## Outputs
