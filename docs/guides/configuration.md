@@ -56,7 +56,7 @@ geotrax batch PROCESSED/ --set stabilo.max_features=4000 --set visualization.tai
 
 - **KEY** is a dotted path (`ultralytics.conf`) or any unambiguous tail of one (`conf`, `matching.gpu`). A misspelled key stops the run with suggestions, and an ambiguous one lists every candidate: `track_buffer` alone matches all six trackers, so write `tracker.botsort.track_buffer`. The full dotted path is the stable form, since a short name that is unique today can become ambiguous when a later release adds a key.
 - **VALUE** is read with YAML rules, exactly as in the config file, so `true`, `null`, `0.35`, `[0, 1, 2]` and `{1: 0.15}` all mean what they look like. Quote values with spaces or braces for your shell: `--set 'class_conf={1: 0.15, 2: 0.4}'`.
-- **Types** are checked against the current value: text where a number belongs, or a scalar where a list belongs, is rejected. Integers and decimals are interchangeable, `0`/`1` are accepted for booleans, and `key=` sets a text value to the empty string. `null` is accepted only for keys whose shipped value is `null`; to clear any other key, edit a copied config.
+- **Types** are checked against the current value: text where a number belongs, or a scalar where a list belongs, is rejected. Integers and decimals are interchangeable, `0`/`1` are accepted for booleans, and `key=` sets a text value to the empty string. `null` is accepted for the keys that may be null: those shipped as `null`, and the few whose description says so although they ship with a value, such as `cutout_width_px`.
 
 Every applied override is printed, so none is silent.
 

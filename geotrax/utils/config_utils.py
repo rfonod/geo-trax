@@ -427,6 +427,14 @@ def _bundled_defaults() -> dict:
 
 _completed_configs_reported = set()  # config files whose filled-in keys were already logged in this process
 
+# Keys whose config comment documents null as a valid value although default.yaml ships a non-null one,
+# so --set KEY=null must be accepted for them (see _coerce_override_value; a test keeps this in step).
+_NULLABLE_PATHS = frozenset({
+    'georef.transformation.cutout_width_px',  # null = the width of the orthophoto as provided
+    'ultralytics.line_width',                 # null = Ultralytics scales the line width to the image
+    'ultralytics.workspace',                  # null = TensorRT allocates the workspace itself
+})
+
 
 def _fill_from_defaults(cfg: dict, defaults: dict, prefix: str = '') -> list[str]:
     """Add every key of *defaults* that *cfg* lacks, in place, and return the leaf paths added.
@@ -668,12 +676,17 @@ def _resolve_override_key(key: str, leaf_paths: list, cfg: dict, logger: logging
 
 
 def _coerce_override_value(path: str, value: Any, current: Any, raw_value: str, logger: logging.Logger) -> Any:
-    """Check an overridden value against the type already in the config, coercing where unambiguous."""
+    """Check an overridden value against the type already in the config, coercing where unambiguous.
+
+    A null is accepted where the bundled config allows one: for a key it ships as null, and for the
+    keys in _NULLABLE_PATHS, which it ships with a value although their comment documents null.
+    Taking only the shipped value as the evidence rejected `--set cutout_width_px=null`.
+    """
     if current is None:
         return value  # a null in the config carries no type information
 
     if value is None:
-        if _get_by_path(_bundled_defaults(), path, default=None) is None:
+        if _get_by_path(_bundled_defaults(), path, default=None) is None or path in _NULLABLE_PATHS:
             return value  # the key is documented as nullable in the bundled config
         expected = type(current).__name__
         logger.critical(

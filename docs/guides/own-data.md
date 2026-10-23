@@ -83,7 +83,7 @@ When many locations are cut from one large orthophoto, as [`tools/subset_orthoph
 - `ortho_parameters.txt` holds the parameters of the large orthophoto, in the same format as `A.txt`, shared by every location;
 - `A_center.txt` holds two numbers, the column and row of the cut-out's center in the large orthophoto;
 - `A.png` is the square cut-out, possibly downscaled;
-- [`georef.transformation.cutout_width_px`](../reference/config/georef.md#georef.transformation.cutout_width_px) is the side of the cut-out in pixels of the large orthophoto, before any downscaling. geo-trax derives the pixel size of `A.png` from it. The shipped value, 15000, is the Songdo one; if your cut-outs are not downscaled, set it to the width of `A.png`.
+- [`georef.transformation.cutout_width_px`](../reference/config/georef.md#georef.transformation.cutout_width_px) is the side of the cut-out in pixels of the large orthophoto, before any downscaling. geo-trax derives the pixel size of `A.png` from it. The shipped value, 15000, is the Songdo one; if your cut-outs are not downscaled, set it to `null` (e.g. `--set cutout_width_px=null`), which uses the width of `A.png`.
 
 ## Master frames
 
