@@ -5,6 +5,7 @@
 
 import argparse
 import atexit
+import copy
 import difflib
 import functools
 import json
@@ -298,6 +299,9 @@ def load_config(cfg_filepath: str | Path, logger: logging.Logger,
 
     A file that is missing, unreadable, malformed or not a mapping stops the run with a named error
     here, instead of an opaque traceback later from whichever stage first reads a missing section.
+    A key the file leaves out takes its value from the bundled `default.yaml`, so a config may hold
+    only the keys it changes, and a copy made before an upgrade keeps working with the keys added
+    since. Without that, a missing config-only key failed with a `KeyError` midway through a run.
 
     Args:
         cfg_filepath: Config path or bundled preset name, resolved with
@@ -308,7 +312,7 @@ def load_config(cfg_filepath: str | Path, logger: logging.Logger,
             there are none.
 
     Returns:
-        The config, with the overrides applied.
+        The config, completed from the bundled defaults, with the overrides applied.
 
     Raises:
         SystemExit: The file cannot be loaded as a config, or an override is invalid.
@@ -340,6 +344,13 @@ def load_config(cfg_filepath: str | Path, logger: logging.Logger,
             f"sections (found {found}). Run 'geotrax config copy' for a valid starting point."
         )
         sys.exit(1)
+
+    filled = _fill_from_defaults(kwargs, _bundled_defaults())
+    if filled and resolved_filepath not in _completed_configs_reported:
+        _completed_configs_reported.add(resolved_filepath)
+        listed = ', '.join(filled[:5]) + (f' and {len(filled) - 5} more' if len(filled) > 5 else '')
+        logger.info(f"Configuration file '{resolved_filepath}' leaves out {len(filled)} key(s), which take their "
+                    f"values from the bundled default.yaml: {listed}.")
 
     if args is not None:
         apply_cli_overrides(kwargs, getattr(args, 'set', None), args, logger)
@@ -414,13 +425,37 @@ def _bundled_defaults() -> dict:
         return yaml.safe_load(f)
 
 
+_completed_configs_reported = set()  # config files whose filled-in keys were already logged in this process
+
+
+def _fill_from_defaults(cfg: dict, defaults: dict, prefix: str = '') -> list[str]:
+    """Add every key of *defaults* that *cfg* lacks, in place, and return the leaf paths added.
+
+    Every mapping counts as a block to recurse into, the integer-keyed ``tau_c`` included, exactly as
+    ``_iter_leaf_paths`` and ``--set`` see the config, so a partial ``tau_c`` keeps the defaults of
+    the classes it omits. A block left empty or set to ``null`` is filled whole, since no stage can
+    read a null section; a ``null`` leaf is the user's value and stays. Defaults are deep-copied, as
+    the result is mutated later (``--set``, ``sync_args_with_config``) and ``_bundled_defaults`` is
+    cached.
+    """
+    added = []
+    for key, default in defaults.items():
+        path = f'{prefix}{key}'
+        actual = _resolve_key(cfg, str(key))
+        if actual is _MISSING or (isinstance(default, dict) and cfg[actual] is None):
+            cfg[key if actual is _MISSING else actual] = copy.deepcopy(default)
+            added.extend(_iter_leaf_paths(default, f'{path}.') if isinstance(default, dict) else [path])
+        elif isinstance(default, dict) and isinstance(cfg[actual], dict):
+            added.extend(_fill_from_defaults(cfg[actual], default, f'{path}.'))
+    return added
+
+
 def merge_bundled_defaults(section: dict | None, path: str) -> dict:
     """Fill the keys missing from a config block with the values from the bundled `default.yaml`.
 
-    [`sync_args_with_config`][geotrax.utils.config_utils.sync_args_with_config] gives that fallback
-    to every key with a CLI flag, so a custom config that predates a new key still works. A block of
-    config-only keys, such as `extraction.sahi`, gets it from this function wherever it is read as a
-    whole.
+    [`load_config`][geotrax.utils.config_utils.load_config] already fills every missing key this
+    way; this function gives the same fallback to a block read from a config dict that did not come
+    from it, such as `extraction.sahi`, which is read as a whole.
 
     Args:
         section: The block from the loaded config, possibly `None`.

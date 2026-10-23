@@ -31,7 +31,17 @@ geotrax config copy              # copy every preset here as <name>_copy.yaml
 geotrax config copy -o ~/myproj  # copy into another folder instead
 ```
 
-Edit the copy and pass it with `-c`. Keep it complete: only a few missing keys fall back to the shipped defaults, so a config trimmed to the keys you change fails partway through a run. A copy is a snapshot of the release it came from; after upgrading, compare it with `geotrax config show default` and carry over any new keys.
+Edit the copy and pass it with `-c`. A config only needs the keys you change: every key it leaves out takes its value from the bundled `default.yaml` (not from the preset the copy started as), and the log file lists the keys filled in this way. So a small file such as
+
+```yaml
+georef:
+  transformation:
+    target_crs: epsg:32633
+ultralytics:
+  conf: 0.35
+```
+
+is a complete config, and a copy made before an upgrade keeps working, with any keys added since at their defaults.
 
 ## One-off overrides with `--set`
 
