@@ -189,7 +189,7 @@ georef:
   # Coordinate reference systems and orthophoto geometry
   transformation:
     source_crs: epsg:4326    # CRS of the orthophoto's georeferencing; the Latitude/Longitude columns are computed in it, so keep WGS 84 (epsg:4326); string
-    target_crs: epsg:5186    # Projected CRS in meters for Local_X/Local_Y, in which speeds, accelerations and dimensions are also measured; epsg:5186 (Korea 2000) suits South Korea only, so set one for your area, e.g. its UTM zone; string
+    target_crs: epsg:5186    # Projected CRS in meters for Local_X/Local_Y, in which speeds, accelerations and dimensions are also measured; epsg:5186 (Korea 2000) suits South Korea only, so set one for your area, e.g. its UTM zone (a warning names it when the distortion at the site exceeds 1%); string
     cutout_width_px: 15000   # Original orthophoto cutout width [px]; used to derive geographic resolution when geo_source is 'center-text-file'; null falls back to the provided orthophoto width; [0, inf) or null
 
   # Feature matching (MAGSAC++ based image registration against orthophotos).

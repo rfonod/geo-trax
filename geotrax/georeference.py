@@ -82,6 +82,10 @@ Examples:
 Notes:
   - Orthophotos must be georeferenced; their coordinate system must match
     cfg -> georef -> transformation -> source_crs (default: EPSG:4326 / WGS84).
+  - Local coordinates, speeds, accelerations and dimensions are computed in
+    cfg -> georef -> transformation -> target_crs, which must be projected and in metres. The
+    default, EPSG:5186, suits South Korea only; a warning names the site's UTM zone when the CRS
+    distorts distances there by more than 1%.
   - Additional options (image matching, CRS, kinematic filtering, etc.) live under cfg -> georef
     in the pipeline config; apart from the --geo-gpu / --geo-gpu-device-id and
     --geo-detector / --geo-device overrides, no CLI flags exist for those settings.
@@ -107,6 +111,10 @@ import geopandas as gpd
 import numpy as np
 import pandas as pd
 from PIL import Image, TiffImagePlugin
+from pyproj import CRS, Proj, Transformer
+from pyproj.aoi import AreaOfInterest
+from pyproj.database import query_utm_crs_info
+from pyproj.exceptions import CRSError
 from scipy.ndimage import gaussian_filter1d
 from scipy.signal import savgol_filter
 from shapely.geometry import Polygon
@@ -130,6 +138,12 @@ from geotrax.utils.registration import DETECTOR_CHOICES, DEVICE_CHOICES, estimat
 
 # Execution-placement keys of cfg -> georef -> matching, at their shipped values (see compute_matching_hash).
 MATCHING_PLACEMENT_DEFAULTS = {'gpu': False, 'gpu_device_id': 0, 'device': 'auto'}
+
+# Largest distance distortion of target_crs at the site, as a fraction, accepted without a warning (see check_crs).
+CRS_SCALE_TOLERANCE = 0.01
+
+# (crs, location ID) pairs already warned about in this process, so a batch warns once per location.
+_crs_warnings_issued = set()
 
 def georeference(args: argparse.Namespace, logger: logging.Logger) -> None:
     """
@@ -195,6 +209,7 @@ def georeference(args: argparse.Namespace, logger: logging.Logger) -> None:
     latitude, longitude = ortho2geo(x_stab_ortho, y_stab_ortho, ortho_params)
     source_crs = config['transformation']['source_crs']
     target_crs = config['transformation']['target_crs']
+    check_crs(latitude, longitude, source_crs, target_crs, location_id, logger)
     x_local, y_local = geo2local(latitude, longitude, source_crs, target_crs)
     veh_dim_real = convert_dimensions(track_id, veh_dim_px, frame_size, homography_reference_to_ortho, ortho_params, source_crs, target_crs)
     visibility = calculate_visibility(track_id, bbox_unstab, frame_size, config['filtering']['visibility_margin'])
@@ -802,6 +817,92 @@ def geo2local(latitude: np.ndarray, longitude: np.ndarray, source_crs: str, targ
     x_local = local_coordinates_gdf.geometry.x.to_numpy()
     y_local = local_coordinates_gdf.geometry.y.to_numpy()
     return x_local, y_local
+
+
+def check_crs(latitude: np.ndarray, longitude: np.ndarray, source_crs: str, target_crs: str, location_id: str,
+              logger: logging.Logger) -> None:
+    """Stop on a CRS setup that cannot give correct results, and warn about one that distorts distances.
+
+    The orthophoto parameters are read as coordinates in source_crs, and the Latitude/Longitude
+    columns are computed from them directly (ortho2geo). With a geographic source_crs, a value
+    outside [-90, 90] or [-180, 180] means the parameters were not degrees, typically a projected
+    GeoTIFF taken for WGS 84, so nothing downstream would be valid and the run stops. A projected
+    source_crs still gives correct local coordinates, but Latitude/Longitude then hold its eastings
+    and northings, which is warned about.
+
+    Local_X/Local_Y, speeds, accelerations and the metric vehicle dimensions are all computed in
+    target_crs, so it must be projected and in metres; otherwise the run stops. Even then, a
+    projection stretches distances away from its natural origin: the shipped epsg:5186 is exact in
+    South Korea but 28% long in Vienna, with no error from any library. The scale factor of
+    target_crs at the median vehicle position (pyproj's get_factors) measures that distortion
+    directly, for any projection, including world-wide ones such as Web Mercator whose area of use
+    alone would not flag it. Beyond CRS_SCALE_TOLERANCE, a warning names the distortion and the
+    site's UTM zone, once per CRS and location ID, so a batch over many videos warns once.
+    """
+    try:
+        src, tgt = CRS.from_user_input(source_crs), CRS.from_user_input(target_crs)
+    except CRSError as e:
+        logger.critical(f"Invalid CRS in cfg -> georef -> transformation: {e}")
+        sys.exit(1)
+    finite = np.isfinite(latitude) & np.isfinite(longitude)
+    if not finite.any():
+        return
+    lat, lon = latitude[finite], longitude[finite]
+
+    if src.is_geographic:
+        if np.abs(lat).max() > 90 or np.abs(lon).max() > 180:
+            logger.critical(
+                f"The orthophoto georeferencing gives coordinates such as ({lat[0]:.1f}, {lon[0]:.1f}), which are "
+                f"not degrees, although source_crs '{source_crs}' is geographic. A projected orthophoto (e.g. a "
+                f"GeoTIFF in a UTM zone) must be reprojected to EPSG:4326 first, e.g. "
+                f"'gdalwarp -t_srs EPSG:4326 in.tif A.tif'."
+            )
+            sys.exit(1)
+        lat0, lon0 = float(np.median(lat)), float(np.median(lon))
+    else:
+        if ('source', source_crs, location_id) not in _crs_warnings_issued:
+            _crs_warnings_issued.add(('source', source_crs, location_id))
+            logger.warning(
+                f"source_crs '{source_crs}' is projected, so the Latitude/Longitude columns will hold its coordinates "
+                f"rather than WGS 84 degrees. Reproject the orthophoto to EPSG:4326 and set source_crs to epsg:4326."
+            )
+        lon0, lat0 = Transformer.from_crs(src, 'EPSG:4326', always_xy=True).transform(
+            float(np.median(lon)), float(np.median(lat)))
+
+    if not tgt.is_projected:
+        logger.critical(f"target_crs '{target_crs}' ({tgt.name}) is not a projected CRS. Local coordinates, speeds and "
+                        f"dimensions need one in metres, e.g. the UTM zone of the site.")
+        sys.exit(1)
+    units = {axis.unit_name for axis in tgt.axis_info if abs(axis.unit_conversion_factor - 1.0) > 1e-9}
+    if units:
+        logger.critical(f"target_crs '{target_crs}' ({tgt.name}) is in {', '.join(sorted(units))}, but speeds and "
+                        f"dimensions are computed in metres. Use a projected CRS in metres.")
+        sys.exit(1)
+
+    if (target_crs, location_id) in _crs_warnings_issued:
+        return
+    try:
+        factors = Proj(tgt).get_factors(lon0, lat0)
+        scales = [factors.meridional_scale, factors.parallel_scale]
+    except Exception as e:
+        logger.info(f"Could not compute the scale factor of target_crs '{target_crs}' at ({lat0:.4f}, {lon0:.4f}): {e}")
+        return
+    scale = max(scales, key=lambda s: abs(s - 1) if np.isfinite(s) else np.inf)
+    if np.isfinite(scale) and abs(scale - 1) <= CRS_SCALE_TOLERANCE:
+        return
+    _crs_warnings_issued.add((target_crs, location_id))
+    try:
+        utm = query_utm_crs_info(datum_name='WGS 84', area_of_interest=AreaOfInterest(lon0, lat0, lon0, lat0))
+        suggestion = f", e.g. its UTM zone: --set target_crs=epsg:{utm[0].code}" if utm else ""
+    except Exception:
+        suggestion = ""
+    effect = (f"{'stretches' if scale > 1 else 'shrinks'} distances by {abs(scale - 1):.1%}" if np.isfinite(scale)
+              else "cannot represent distances")
+    logger.warning(
+        f"target_crs '{target_crs}' ({tgt.name}) {effect} at location '{location_id}' ({lat0:.4f}, {lon0:.4f}), and "
+        f"Local_X/Local_Y, speeds, accelerations and vehicle dimensions with them. Set a projected CRS for this "
+        f"area in cfg -> georef -> transformation -> target_crs{suggestion}."
+    )
 
 
 def ortho2local(ortho_x: np.ndarray, ortho_y: np.ndarray, ortho_params: tuple, source_crs: str, target_crs: str) -> tuple:

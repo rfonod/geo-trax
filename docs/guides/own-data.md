@@ -48,7 +48,7 @@ The orthophoto is a north-up aerial image of the location, `A.png`, that covers 
 The source is picked from the files present. If files for two sources exist, the run stops and asks you to choose one with `--geo-source`.
 
 !!! warning "Use WGS84 coordinates"
-    `Latitude` and `Longitude` are computed directly from these parameters, so they must be in WGS84 degrees (EPSG:4326, the default [`georef.transformation.source_crs`](../reference/config/georef.md#georef.transformation.source_crs)). With a projected orthophoto, such as a GeoTIFF in a UTM zone, those columns would hold eastings and northings instead. Reproject such a file first, e.g. with GDAL: `gdalwarp -t_srs EPSG:4326 -r bilinear ortho_utm.tif A.tif`.
+    `Latitude` and `Longitude` are computed directly from these parameters, so they must be in WGS84 degrees (EPSG:4326, the default [`georef.transformation.source_crs`](../reference/config/georef.md#georef.transformation.source_crs)). With a projected orthophoto, such as a GeoTIFF in a UTM zone, those columns would hold eastings and northings instead; georeferencing then stops, since such values are not degrees. Reproject such a file first, e.g. with GDAL: `gdalwarp -t_srs EPSG:4326 -r bilinear ortho_utm.tif A.tif`.
 
 ### GeoTIFF
 
@@ -139,7 +139,7 @@ A few defaults are tuned for the Songdo experiment:
 | [`georef.transformation.cutout_width_px`](../reference/config/georef.md#georef.transformation.cutout_width_px) | `15000` | only with cut-outs; [see above](#cut-outs-of-a-larger-orthophoto) |
 
 !!! warning "Set `target_crs` outside South Korea"
-    `Local_X` and `Local_Y` are written in `target_crs`, and speeds, accelerations and vehicle dimensions are measured in it. EPSG:5186 is only accurate in South Korea; elsewhere every distance comes out too long, and geo-trax does not warn about it. A true 10 m measures 12.8 m in Vienna and 15.2 m in Los Angeles.
+    `Local_X` and `Local_Y` are written in `target_crs`, and speeds, accelerations and vehicle dimensions are measured in it. EPSG:5186 is only accurate in South Korea; elsewhere every distance comes out too long: a true 10 m measures 12.8 m in Vienna and 15.2 m in Los Angeles. geo-trax measures the distortion of `target_crs` at each location and warns when it exceeds 1%, naming the site's UTM zone, e.g. `--set target_crs=epsg:32633` for Vienna. A `target_crs` that is not projected in metres stops the run.
 
 The GSD is used only to pick the frames for estimating vehicle dimensions (it converts [`r0`](../reference/config/extraction.md#extraction.dimension_estimation.r0) from meters to pixels); the dimensions themselves are measured through the orthophoto. To find it, divide a known ground length, such as a lane width, by its length in pixels in a video frame.
 

@@ -245,7 +245,7 @@ geotrax georeference video.mp4 -orf data/orthophotos --geo-detector sift
 
 Orthophotos are required; lane/road-section segmentations and per-location master frames are optional and improve lane assignment and robustness (see the [georeferencing guide](https://rfonod.github.io/geo-trax/guides/georeference/) and [data/README.md](data/README.md) for how to obtain them). Matching parameters live under `cfg -> georef -> matching`, kinematic filtering under `cfg -> georef -> filtering`.
 
-> ⚠️ Outside South Korea, set `georef.transformation.target_crs` to a projected CRS for your area (e.g. its UTM zone). The shipped EPSG:5186 is the Songdo one, and speeds, accelerations and dimensions are measured in it. [Your own data](https://rfonod.github.io/geo-trax/guides/own-data/) describes this and the file formats for a new location.
+> ⚠️ Outside South Korea, set `georef.transformation.target_crs` to a projected CRS for your area (e.g. its UTM zone). The shipped EPSG:5186 is the Songdo one, and speeds, accelerations and dimensions are measured in it; georeferencing warns, naming the UTM zone, when it distorts distances at your site. [Your own data](https://rfonod.github.io/geo-trax/guides/own-data/) describes this and the file formats for a new location.
 
 > The [learning-based detectors](https://rfonod.github.io/geo-trax/guides/feature-detectors/#learning-based-detectors) are a poor fit for this stage in particular: the orthophoto is north-up while the drone frame can be at any heading, and every learned model except `keynet` is upright-only.
 

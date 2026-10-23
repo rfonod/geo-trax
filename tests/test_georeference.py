@@ -18,6 +18,7 @@ from geotrax.georeference import (
     apply_filter,
     apply_homography,
     calculate_visibility,
+    check_crs,
     compute_acceleration,
     compute_hash,
     compute_homography,
@@ -513,3 +514,69 @@ def test_geotiff_tiepoint_and_scale_give_an_unskewed_transform():
 
 def test_geotiff_without_georeferencing_tags_returns_none():
     assert read_geotiff_parameters(SimpleNamespace(tag_v2={33922: (0, 0, 0, 1, 2, 0)})) is None
+
+
+# --- check_crs ---------------------------------------------------------------
+
+SONGDO, VIENNA = (37.389, 126.663), (48.21, 16.37)
+
+
+@pytest.fixture
+def fresh_crs_warnings(monkeypatch):
+    """check_crs warns once per CRS and location per process; give every test a clean slate."""
+    monkeypatch.setattr('geotrax.georeference._crs_warnings_issued', set())
+
+
+def _check(site, source='epsg:4326', target='epsg:5186', location='A'):
+    lat, lon = site
+    check_crs(np.array([lat, lat + 1e-4, np.nan]), np.array([lon, lon + 1e-4, np.nan]), source, target, location, logger)
+
+
+def test_check_crs_accepts_the_korean_default_in_songdo(fresh_crs_warnings, caplog):
+    _check(SONGDO)
+    assert not [r for r in caplog.records if r.levelno >= logging.WARNING]
+
+
+def test_check_crs_warns_once_about_the_korean_default_elsewhere(fresh_crs_warnings, caplog):
+    """EPSG:5186 stretches distances by about 28% in Vienna; the warning names the UTM zone to use."""
+    _check(VIENNA)
+    _check(VIENNA)
+    warnings_ = [r.getMessage() for r in caplog.records if r.levelno == logging.WARNING]
+    assert len(warnings_) == 1
+    assert 'stretches distances by 27.9%' in warnings_[0] and '--set target_crs=epsg:32633' in warnings_[0]
+
+
+def test_check_crs_warns_again_for_another_location(fresh_crs_warnings, caplog):
+    _check(VIENNA, location='A')
+    _check(VIENNA, location='B')
+    assert len([r for r in caplog.records if r.levelno == logging.WARNING]) == 2
+
+
+@pytest.mark.parametrize('site, target', [(VIENNA, 'epsg:32633'), (SONGDO, 'epsg:32652')])
+def test_check_crs_accepts_the_local_utm_zone(fresh_crs_warnings, caplog, site, target):
+    _check(site, target=target)
+    assert not [r for r in caplog.records if r.levelno >= logging.WARNING]
+
+
+def test_check_crs_catches_a_worldwide_crs_that_distorts_the_site(fresh_crs_warnings, caplog):
+    """Web Mercator is valid everywhere, so only its scale factor (about 1.26 in Songdo) reveals the problem."""
+    _check(SONGDO, target='epsg:3857')
+    assert any('stretches distances by 25.9%' in r.getMessage() for r in caplog.records)
+
+
+@pytest.mark.parametrize('target', ['epsg:4326', 'epsg:2263', 'not-a-crs'])
+def test_check_crs_stops_on_a_target_crs_that_is_not_projected_in_metres(fresh_crs_warnings, target):
+    """Geographic degrees, US survey feet and an invalid CRS would all make the speeds meaningless."""
+    with pytest.raises(SystemExit):
+        _check(SONGDO, target=target)
+
+
+def test_check_crs_stops_when_wgs84_parameters_are_not_degrees(fresh_crs_warnings):
+    """A UTM GeoTIFF read as WGS 84 gives eastings and northings in the Latitude/Longitude columns."""
+    with pytest.raises(SystemExit):
+        _check((4140000.0, 300000.0))
+
+
+def test_check_crs_warns_that_a_projected_source_crs_fills_latitude_with_northings(fresh_crs_warnings, caplog):
+    _check((4140000.0, 300000.0), source='epsg:32652', target='epsg:32652')
+    assert any('Latitude/Longitude columns will hold its coordinates' in r.getMessage() for r in caplog.records)
