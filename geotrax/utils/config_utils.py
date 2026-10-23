@@ -161,6 +161,27 @@ def resolve_model_path(model_ref: str | Path, logger: logging.Logger) -> Path:
     return Path(local_path)
 
 
+def _drop_obsolete_ultralytics_keys(kwargs_ultralytics: dict, cfg_path, logger: logging.Logger) -> None:
+    """Remove the keys of `_OBSOLETE_ULTRALYTICS_KEYS` from the kwargs passed to `model.track()`.
+
+    A config copied from an earlier release still carries them, and a later partial config can too.
+    Ultralytics releases that removed such a key discard it with a deprecation warning, and they check
+    the arguments on every `track()` call, so the warning would repeat on every frame. None of these
+    keys affects tracking, so it is dropped here instead, with one warning per config file asking to
+    delete it. The run metadata still records the config as written.
+    """
+    obsolete = [key for key in _OBSOLETE_ULTRALYTICS_KEYS if key in kwargs_ultralytics]
+    for key in obsolete:
+        kwargs_ultralytics.pop(key)
+    report_key = str(resolve_config_path(cfg_path))
+    if obsolete and report_key not in _obsolete_keys_reported:
+        _obsolete_keys_reported.add(report_key)
+        listed = ', '.join(f"'ultralytics.{key}' (removed in Ultralytics {_OBSOLETE_ULTRALYTICS_KEYS[key]})"
+                           for key in obsolete)
+        logger.warning(f"Ignoring {listed} in configuration file '{report_key}'; "
+                       f"delete it from the file, it has no effect on detection or tracking.")
+
+
 def load_config_all(args: argparse.Namespace, logger: logging.Logger, needs_model: bool = True) -> dict:
     """Load the pipeline config for a stage, with every CLI override applied, and split it for its consumers.
 
@@ -168,7 +189,8 @@ def load_config_all(args: argparse.Namespace, logger: logging.Logger, needs_mode
     configuration the run actually used: `--set` first, then the dedicated flags through
     [`sync_args_with_config`][geotrax.utils.config_utils.sync_args_with_config]. A scalar
     `ultralytics.classes` is wrapped in a list, so consumers can always iterate it (or test it for
-    `None`).
+    `None`), and `ultralytics` keys that Ultralytics has removed, such as `keras` in an older copied
+    config, are left out with a warning.
 
     With `needs_model=True`, the model reference is resolved (and downloaded if needed), the class
     names are resolved, and the active tracker block is written to a temporary YAML file, since
@@ -202,6 +224,7 @@ def load_config_all(args: argparse.Namespace, logger: logging.Logger, needs_mode
         kwargs_ultralytics['classes'] = [classes]
     elif isinstance(classes, tuple):
         kwargs_ultralytics['classes'] = list(classes)
+    _drop_obsolete_ultralytics_keys(kwargs_ultralytics, args.cfg, logger)
     kwargs_georef      = full.get('georef', {})
     kwargs_main        = {k: v for k, v in full.items()
                           if k not in ('tracker', 'stabilo', 'ultralytics', 'georef')}
@@ -426,6 +449,13 @@ def _bundled_defaults() -> dict:
 
 
 _completed_configs_reported = set()  # config files whose filled-in keys were already logged in this process
+
+# 'ultralytics:' keys that earlier geo-trax configs shipped and Ultralytics has since removed, with the
+# release that removed them; load_config_all drops them before they reach model.track().
+_OBSOLETE_ULTRALYTICS_KEYS = {
+    'keras': '8.4.164',
+}
+_obsolete_keys_reported = set()  # config files whose obsolete ultralytics keys were already reported
 
 # Keys whose config comment documents null as a valid value although default.yaml ships a non-null one,
 # so --set KEY=null must be accepted for them (see _coerce_override_value; a test keeps this in step).

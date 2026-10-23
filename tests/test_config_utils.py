@@ -13,6 +13,7 @@ import yaml
 
 from geotrax import CFG_DIR
 from geotrax.utils.config_utils import (
+    _OBSOLETE_ULTRALYTICS_KEYS,
     apply_cli_overrides,
     backfill_args_from_config,
     merge_bundled_defaults,
@@ -373,6 +374,27 @@ def test_presets_carry_no_dead_half_key(preset):
     ultralytics = load_config(preset, logger)['ultralytics']
     assert 'half' not in ultralytics
     assert 'quantize' in ultralytics
+
+
+@pytest.mark.parametrize('preset', ['default', 'confident', 'lenient', 'stable'])
+def test_presets_ship_no_key_ultralytics_removed(preset):
+    """Ultralytics warns about a removed key on every track() call, i.e. on every frame."""
+    assert not set(load_config(preset, logger)['ultralytics']) & set(_OBSOLETE_ULTRALYTICS_KEYS)
+
+
+def test_load_config_all_drops_an_obsolete_ultralytics_key_with_one_warning(tmp_path, caplog):
+    """A config copied before v1.6.0 still holds 'keras: false', which Ultralytics 8.4.164 removed."""
+    cfg_file = tmp_path / 'old_copy.yaml'
+    cfg_file.write_text('ultralytics:\n  conf: 0.4\n  keras: false\n')
+    args = argparse.Namespace(cfg=str(cfg_file))
+    with caplog.at_level(logging.WARNING, logger=logger.name):
+        first = load_config_all(args, logger, needs_model=False)
+        second = load_config_all(args, logger, needs_model=False)
+    assert 'keras' not in first['ultralytics'] and 'keras' not in second['ultralytics']
+    assert first['ultralytics']['conf'] == 0.4
+    warnings = [r for r in caplog.records if "'ultralytics.keras'" in r.getMessage()]
+    assert len(warnings) == 1
+    assert load_config(cfg_file, logger)['ultralytics']['keras'] is False
 
 
 # --- load_config: keys left out of a custom config ---------------------------

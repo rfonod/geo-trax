@@ -41,7 +41,7 @@ ultralytics:
   conf: 0.35
 ```
 
-is a complete config, and a copy made before an upgrade keeps working, with any keys added since at their defaults.
+is a complete config, and a copy made before an upgrade keeps working, with any keys added since at their defaults. A key that a newer Ultralytics release has removed, such as `ultralytics.keras` in copies made before v1.6.0, is ignored with a warning that asks you to delete it.
 
 ## One-off overrides with `--set`
 
