@@ -161,7 +161,7 @@ def no_vehicles_detected(source: Path, output_cfg: dict | None = None) -> bool:
 
     Returns:
         `True` when the metadata records zero vehicles and no tracks file exists; `False` when there
-            are tracks, or when the metadata is missing, unreadable or from before v1.5.2.
+            are tracks, or when the metadata is missing, unreadable or from before v1.6.0.
     """
     if check_if_results_exist(source, 'processed', output_cfg=output_cfg)[0]:
         return False
