@@ -19,7 +19,7 @@
 # Tuned for DJI Mavic 3 footage at 140–150 m altitude, 4K resolution. Adjust for other hardware.
 #
 # Full parameter references:
-#   Stabilo (stabilization):  https://github.com/rfonod/stabilo
+#   Stabilo (stabilization):  https://rfonod.github.io/stabilo/usage/#8-configuration-parameters
 #   Ultralytics (detection):  https://github.com/ultralytics/ultralytics
 
 
@@ -116,7 +116,7 @@ extraction:
 # --- Stabilization settings ---
 # Parameters for Stabilo video stabilization. Optimized for ORB + BF matching with
 # MAGSAC++ estimation on high-altitude BEV drone imagery at ~150 m altitude.
-# Full parameter reference: https://github.com/rfonod/stabilo
+# Full parameter reference: https://rfonod.github.io/stabilo/usage/#8-configuration-parameters
 stabilo:
   # Image pre-processing
   clahe: false          # Apply Contrast Limited Adaptive Histogram Equalization before feature detection; [true, false]

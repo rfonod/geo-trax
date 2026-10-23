@@ -76,7 +76,7 @@ dependencies = [
     "ultralytics[extra]>=8.4.142,<9.0",
     "huggingface_hub>=0.30",
     "lapx>=0.5.2",
-    "stabilo>=1.4.5",
+    "stabilo>=1.4.6",
     "geopandas>=1.0.0",
     "pyproj>=3.5",  # imported directly by the CRS checks in georeference.py; geopandas>=1.0 already requires it
     "pandas>=2.0",  # pd.to_datetime(format='mixed') in aggregate.py; geopandas alone still allows pandas 1.4
