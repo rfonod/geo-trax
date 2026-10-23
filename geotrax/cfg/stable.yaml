@@ -320,8 +320,8 @@ ultralytics:
   # Export
   format: torchscript  # (str) export target format; e.g. torchscript|onnx|openvino|engine|coreml|...
   optimize: false      # (bool) DEEPX only; higher compiler optimization (slower compile, faster inference)
-  quantize:            # (int|str, optional) inference and export precision: 8/'int8', 16/'fp16', 32/'fp32', 'w8a8', 'w8a16', 'w8a32', 'w16a16'; null = default (fp32). Replaces the removed 'half' key, which ultralytics discards whenever 'quantize' is also present — CLI: --set quantize=16
-  dynamic: false       # (bool) dynamic shapes for torchscript, onnx, openvino, engine, coreml
+  quantize:            # (int|str, optional) inference and export precision: 8/'int8', 16/'fp16', 32/'fp32', 'w8a8', 'w8a16', 'w8a32', 'w16a16'; null = default (fp32); FP16 applies on GPU only, CPU inference stays FP32. Replaces the removed 'half' key, which ultralytics discards whenever 'quantize' is also present — CLI: --set quantize=16
+  dynamic: false       # (bool) dynamic shapes for torchscript, onnx, openvino, engine, coreml, mnn
   simplify: false      # (bool) ONNX-based exports only; simplify the intermediate ONNX graph
   opset:               # (int, optional) ONNX-based exports only; intermediate ONNX opset version; leave unset for tested default
   workspace: 4         # (float, optional) TensorRT engine only; workspace size in GiB
@@ -337,7 +337,7 @@ ultralytics:
   epochs: 200          # (int) number of epochs to train for
   time:                # (float, optional) max training hours; overrides epochs if set
   patience: 50         # (int) early stop after N epochs without improvement
-  batch: 8             # (int | float) batch size as int, or 0.0–1.0 for AutoBatch fraction of GPU memory
+  batch: 8             # (int | float) batch size as int, -1 for AutoBatch, or a float in (0.0, 1.0) for a GPU memory fraction
   save_period: -1      # (int) save checkpoint every N epochs; disabled if < 1
   cache: false         # (bool | str) cache images in RAM ('ram') or on 'disk'; false disables
   workers: 8           # (int) dataloader workers (per RANK if DDP)
@@ -366,7 +366,7 @@ ultralytics:
 
   # Segmentation
   overlap_mask: true   # (bool) merge instance masks into one mask during training
-  mask_ratio: 4        # (int) mask downsample ratio (segment only)
+  mask_ratio: 4        # (int) training mask downsample ratio (segment only); does not change the predicted mask resolution
 
   # Classification
   dropout: 0.0         # (float) dropout for classification head (classify only)
@@ -390,7 +390,7 @@ ultralytics:
   dlog: 1.0            # (float) depth log (SILog) loss gain (depth tasks)
   dgrad: 0.5           # (float) depth gradient loss gain (depth tasks)
   dlam: 1.0            # (float) depth SILog variance focus: 1.0 = scale-invariant, 0.0 = log-RMSE (depth tasks)
-  nbs: 64              # (int) nominal batch size used for loss normalization
+  nbs: 64              # (int) nominal batch size; gradients accumulate over round(nbs / batch) batches per optimizer step
   hsv_h: 0.015         # (float) HSV hue augmentation fraction
   hsv_s: 0.7           # (float) HSV saturation augmentation fraction
   hsv_v: 0.4           # (float) HSV value (brightness) augmentation fraction
@@ -405,8 +405,8 @@ ultralytics:
   mosaic: 1.0          # (float) mosaic augmentation probability
   mixup: 0.0           # (float) MixUp augmentation probability
   cutmix: 0.0          # (float) CutMix augmentation probability
-  copy_paste: 0.0      # (float) segment/obb copy-paste fraction of eligible objects
-  copy_paste_mode: flip # (str) segment/obb copy-paste strategy: flip or mixup
+  copy_paste: 0.0      # (float) segment/semantic/obb copy-paste fraction of eligible objects
+  copy_paste_mode: flip # (str) segment/semantic/obb copy-paste strategy: flip or mixup
   auto_augment: randaugment # (str) classification auto augmentation: randaugment, autoaugment, augmix
   erasing: 0.4         # (float) random erasing probability for classification (0.0–1.0)
 
