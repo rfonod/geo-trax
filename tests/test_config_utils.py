@@ -9,9 +9,11 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
+import yaml
 
 from geotrax import CFG_DIR
 from geotrax.utils.config_utils import (
+    _OBSOLETE_ULTRALYTICS_KEYS,
     apply_cli_overrides,
     backfill_args_from_config,
     merge_bundled_defaults,
@@ -372,3 +374,72 @@ def test_presets_carry_no_dead_half_key(preset):
     ultralytics = load_config(preset, logger)['ultralytics']
     assert 'half' not in ultralytics
     assert 'quantize' in ultralytics
+
+
+@pytest.mark.parametrize('preset', ['default', 'confident', 'lenient', 'stable'])
+def test_presets_ship_no_key_ultralytics_removed(preset):
+    """Ultralytics warns about a removed key on every track() call, i.e. on every frame."""
+    assert not set(load_config(preset, logger)['ultralytics']) & set(_OBSOLETE_ULTRALYTICS_KEYS)
+
+
+def test_load_config_all_drops_an_obsolete_ultralytics_key_with_one_warning(tmp_path, caplog):
+    """A config copied before v1.6.0 still holds 'keras: false', which Ultralytics 8.4.164 removed."""
+    cfg_file = tmp_path / 'old_copy.yaml'
+    cfg_file.write_text('ultralytics:\n  conf: 0.4\n  keras: false\n')
+    args = argparse.Namespace(cfg=str(cfg_file))
+    with caplog.at_level(logging.WARNING, logger=logger.name):
+        first = load_config_all(args, logger, needs_model=False)
+        second = load_config_all(args, logger, needs_model=False)
+    assert 'keras' not in first['ultralytics'] and 'keras' not in second['ultralytics']
+    assert first['ultralytics']['conf'] == 0.4
+    warnings = [r for r in caplog.records if "'ultralytics.keras'" in r.getMessage()]
+    assert len(warnings) == 1
+    assert load_config(cfg_file, logger)['ultralytics']['keras'] is False
+
+
+# --- load_config: keys left out of a custom config ---------------------------
+
+def _bundled(name='default'):
+    with open(CFG_DIR / f'{name}.yaml', encoding='utf-8') as f:
+        return yaml.safe_load(f)
+
+
+def test_load_config_completes_a_trimmed_config_from_the_defaults(tmp_path):
+    """A config holding only the keys it changes used to fail with a KeyError midway through a run."""
+    cfg_file = tmp_path / 'mine.yaml'
+    cfg_file.write_text('georef:\n  transformation:\n    target_crs: epsg:32633\nultralytics:\n  conf: 0.4\n')
+    cfg = load_config(cfg_file, logger)
+    default = _bundled()
+    assert cfg['georef']['transformation'] == {**default['georef']['transformation'], 'target_crs': 'epsg:32633'}
+    assert cfg['ultralytics']['conf'] == 0.4
+    assert cfg['tracker'] == default['tracker']
+    assert set(cfg) == set(default)
+
+
+def test_load_config_keeps_a_null_leaf_and_fills_a_null_block(tmp_path):
+    cfg_file = tmp_path / 'mine.yaml'
+    cfg_file.write_text('georef:\n  transformation:\n    cutout_width_px: null\nplotting:\n')
+    cfg = load_config(cfg_file, logger)
+    assert cfg['georef']['transformation']['cutout_width_px'] is None
+    assert cfg['plotting'] == _bundled()['plotting']
+
+
+def test_load_config_fills_the_classes_a_partial_tau_c_omits(tmp_path):
+    """tau_c is keyed by class id; like --set, the merge treats each class as its own key."""
+    cfg_file = tmp_path / 'mine.yaml'
+    cfg_file.write_text('extraction:\n  dimension_estimation:\n    tau_c:\n      0: 2.0\n')
+    tau_c = load_config(cfg_file, logger)['extraction']['dimension_estimation']['tau_c']
+    assert tau_c == {**_bundled()['extraction']['dimension_estimation']['tau_c'], 0: 2.0}
+
+
+def test_load_config_does_not_share_state_between_loads(tmp_path):
+    cfg_file = tmp_path / 'mine.yaml'
+    cfg_file.write_text('ultralytics:\n  conf: 0.4\n')
+    first = load_config(cfg_file, logger)
+    first['tracker']['botsort']['track_buffer'] = 999
+    assert load_config(cfg_file, logger)['tracker']['botsort']['track_buffer'] == _bundled()['tracker']['botsort']['track_buffer']
+
+
+@pytest.mark.parametrize('preset', ['default', 'confident', 'lenient', 'stable'])
+def test_load_config_leaves_the_complete_presets_unchanged(preset):
+    assert load_config(preset, logger) == _bundled(preset)

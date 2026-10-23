@@ -28,7 +28,7 @@
 # Tuned for DJI Mavic 3 footage at 140–150 m altitude, 4K resolution. Adjust for other hardware.
 #
 # Full parameter references:
-#   Stabilo (stabilization):  https://github.com/rfonod/stabilo
+#   Stabilo (stabilization):  https://rfonod.github.io/stabilo/usage/#8-configuration-parameters
 #   Ultralytics (detection):  https://github.com/ultralytics/ultralytics
 
 
@@ -99,7 +99,7 @@ extraction:
   min_track_length: 8   # Discard tracks shorter than this many frames; [1, inf) — raised (precision preset): drops short flicker/false tracks
   interpolate: false    # Fill per-track frame gaps with linear interpolation; adds is_interpolated column to output — CLI: --interpolate / --no-interpolate
   class_conf: null      # Per-class confidence thresholds, e.g. {1: 0.15, 2: 0.4}; unlisted classes keep ultralytics -> conf; null = one global threshold — set via --set class_conf='{2: 0.4}'
-  sahi:                 # Slicing Aided Hyper Inference: sliced detection for small objects (requires: pip install 'geo-trax[sahi]'); ~5x slower per frame with the defaults below
+  sahi:                 # Slicing Aided Hyper Inference: sliced detection for small objects (requires: python -m pip install 'geo-trax[sahi]'); ~10x the per-frame detection cost on 4K with the defaults below (3 x 3 slices plus a full-frame pass)
     enable: false                    # Run detection on overlapping frame slices and merge the results — CLI: --sahi / --no-sahi
     slice_height: 1080               # Slice height [px]; default = half of a 4K frame height; [1, inf)
     slice_width: 1920                # Slice width [px]; default = half of a 4K frame width; [1, inf)
@@ -125,7 +125,7 @@ extraction:
 # --- Stabilization settings ---
 # Parameters for Stabilo video stabilization. Optimized for ORB + BF matching with
 # MAGSAC++ estimation on high-altitude BEV drone imagery at ~150 m altitude.
-# Full parameter reference: https://github.com/rfonod/stabilo
+# Full parameter reference: https://rfonod.github.io/stabilo/usage/#8-configuration-parameters
 stabilo:
   # Image pre-processing
   clahe: false          # Apply Contrast Limited Adaptive Histogram Equalization before feature detection; [true, false]
@@ -133,7 +133,7 @@ stabilo:
 
   # Feature detector and descriptor
   detector_name: 'orb'  # Feature detector/descriptor; classical: [orb, sift, rsift, brisk, kaze, akaze], learned: [xfeat, disk, dedode, keynet, loftr] — CLI: --stab-detector
-  max_features: 2000    # Maximum keypoints to detect per frame; higher = more robust but slower; [0, inf)
+  max_features: 2000    # Maximum keypoints kept per frame, the strongest by response; higher = more robust but slower; [0, inf)
   ref_multiplier: 2.0   # Multiplier applied to max_features for the reference frame only; (0.0, inf)
   sift_enable_precise_upscale: false  # SIFT/RSIFT only: precise sub-pixel upscaling at octave -1; [true, false]
   rsift_eps: 0.00000001 # RSIFT only: epsilon added before RootSIFT L1-normalisation (1e-8); > 0.0, keep very small
@@ -155,13 +155,14 @@ stabilo:
   mask_use: true            # Exclude detected vehicle bounding boxes from feature extraction; [true, false]
   mask_margin_ratio: 0.15   # Extra margin around each bounding box mask as a fraction of its size; [0.0, 1.0]
 
-  # Detector-specific thresholds (used if threshold analysis was not performed)
-  brisk_threshold: 130  # BRISK response threshold; lower = more keypoints; (0, 255]
-  kaze_threshold: 0.01  # KAZE response threshold; lower = more keypoints; (0.0, inf]
-  akaze_threshold: 0.01 # AKAZE response threshold; lower = more keypoints; (0.0, inf]
+  # Detector-specific thresholds (BRISK, KAZE, AKAZE): each detects every keypoint whose response
+  # exceeds its threshold, then keeps the max_features strongest. The defaults are OpenCV's.
+  brisk_threshold: 30    # BRISK (AGAST) detection threshold; lower = more candidate keypoints; (0, 255]
+  kaze_threshold: 0.001  # KAZE detector response threshold; lower = more candidate keypoints; (0.0, inf]
+  akaze_threshold: 0.001 # AKAZE detector response threshold; lower = more candidate keypoints; (0.0, inf]
 
   # Learning-based (kornia) detector weights; only used when detector_name is one of them.
-  # Mind the rotation and memory caveats before switching: see README -> Feature Detectors.
+  # Mind the rotation and memory caveats before switching: see https://rfonod.github.io/geo-trax/guides/feature-detectors/
   loftr_weights: 'outdoor'                # LoFTR pretrained weights; [outdoor, indoor]
   loftr_confidence: 0.0                   # LoFTR min. correspondence confidence to keep; [0.0, 1.0] (0.0 keeps all)
   disk_weights: 'depth'                   # DISK pretrained weights; [depth, epipolar]
@@ -187,20 +188,20 @@ stabilo:
 georef:
   # Coordinate reference systems and orthophoto geometry
   transformation:
-    source_crs: epsg:4326    # CRS of the georeferenced orthophoto (e.g. epsg:4326 = WGS 84); string
-    target_crs: epsg:5186    # Target projected CRS for local-coordinate output (e.g. epsg:5186 = Korea 2000); string
+    source_crs: epsg:4326    # CRS of the orthophoto's georeferencing; the Latitude/Longitude columns are computed in it, so keep WGS 84 (epsg:4326); string
+    target_crs: epsg:5186    # Projected CRS in meters for Local_X/Local_Y, in which speeds, accelerations and dimensions are also measured; epsg:5186 (Korea 2000) suits South Korea only, so set one for your area, e.g. its UTM zone (a warning names it when the distortion at the site exceeds 1%); string
     cutout_width_px: 15000   # Original orthophoto cutout width [px]; used to derive geographic resolution when geo_source is 'center-text-file'; null falls back to the provided orthophoto width; [0, inf) or null
 
   # Feature matching (MAGSAC++ based image registration against orthophotos).
   # Learning-based detectors need care here: the orthophoto is north-up and large (64 MP in the
-  # Songdo data), so lower downsample_ratio first. See README -> Feature Detectors.
+  # Songdo data), so lower downsample_ratio first. See https://rfonod.github.io/geo-trax/guides/feature-detectors/
   matching:
     detector_name: rsift               # Feature detector & descriptor; classical: ['orb', 'sift', 'rsift', 'brisk', 'kaze', 'akaze'], learned: ['xfeat', 'disk', 'dedode', 'keynet', 'loftr'] — CLI: --geo-detector
     matcher_name: bf                   # Descriptor matcher; ['bf', 'flann', 'lightglue'] (lightglue is learned; needs disk/dedode/keynet)
     filter_type: ratio                 # Match filter; ['none', 'ratio', 'distance'] (ratio = Lowe's ratio test)
     sift_enable_precise_upscale: true  # SIFT/RSIFT precise sub-pixel upscaling at octave -1; [true, false]
     downsample_ratio: 1.0              # Resize images by this factor before detection, then rescale keypoints; (0.0, 1.0]. Lower it for learned detectors
-    max_features: 250000           # Maximum number of features to detect; [0, inf)
+    max_features: 250000           # Maximum number of features kept, the strongest by response; [0, inf)
     filter_ratio: 0.55             # Lowe ratio-test threshold; lower = stricter (fewer but better matches); (0.0, 1.0]
     ransac_method: 38              # RANSAC method (same options as stabilization above)
     ransac_epipolar_threshold: 3.0 # Reprojection error threshold [px] for RANSAC inlier classification, in the pixels of ransac_threshold_space; (0.0, inf)
@@ -289,10 +290,10 @@ ultralytics:
   device:       # (int | str | list) detection compute device; blank = auto (CUDA/GPU when available, else CPU); 0/[0,1,2,3] for CUDA, 'npu:0' Ascend, 'xpu:0' Intel, 'cpu'/'mps', or -1/[-1,-1] to auto-select idle GPUs
 
   # Detection / inference
-  conf: 0.4           # (float) object confidence threshold for detection; [0.0, 1.0]
+  conf: 0.4           # (float) object confidence threshold for detection; [0.0, 1.0] — CLI: --conf
   iou: 0.6            # (float) IoU threshold for NMS; [0.0, 1.0] — lowered (precision preset): more aggressive NMS, suppresses duplicate/overlapping boxes
   max_det: 1000       # (int) maximum number of detections per image; [1, inf)
-  classes: [0,1,2,3]  # (int | list[int]) filter by class id(s); 0=car, 1=bus, 2=truck, 3=motorcycle
+  classes: [0,1,2,3]  # (int | list[int]) filter by class id(s); 0=car, 1=bus, 2=truck, 3=motorcycle — CLI: --classes
   augment: false      # (bool) apply test-time augmentation during prediction
   agnostic_nms: true  # (bool) class-agnostic NMS
   dnn: false          # (bool) use OpenCV DNN for ONNX inference
@@ -317,10 +318,9 @@ ultralytics:
 
   # Export
   format: torchscript  # (str) export target format; e.g. torchscript|onnx|openvino|engine|coreml|...
-  keras: false         # (bool) TF SavedModel only; enable Keras layers during export
   optimize: false      # (bool) DEEPX only; higher compiler optimization (slower compile, faster inference)
-  quantize:            # (int|str, optional) inference and export precision: 8/'int8', 16/'fp16', 32/'fp32', 'w8a8', 'w8a16', 'w8a32', 'w16a16'; null = default (fp32). Replaces the removed 'half' key, which ultralytics discards whenever 'quantize' is also present — CLI: --set quantize=16
-  dynamic: false       # (bool) dynamic shapes for torchscript, onnx, openvino, engine, coreml
+  quantize:            # (int|str, optional) inference and export precision: 8/'int8', 16/'fp16', 32/'fp32', 'w8a8', 'w8a16', 'w8a32', 'w16a16'; null = default (fp32); FP16 applies on GPU only, CPU inference stays FP32. Replaces the removed 'half' key, which ultralytics discards whenever 'quantize' is also present — CLI: --set quantize=16
+  dynamic: false       # (bool) dynamic shapes for torchscript, onnx, openvino, engine, coreml, mnn
   simplify: false      # (bool) ONNX-based exports only; simplify the intermediate ONNX graph
   opset:               # (int, optional) ONNX-based exports only; intermediate ONNX opset version; leave unset for tested default
   workspace: 4         # (float, optional) TensorRT engine only; workspace size in GiB
@@ -336,7 +336,7 @@ ultralytics:
   epochs: 200          # (int) number of epochs to train for
   time:                # (float, optional) max training hours; overrides epochs if set
   patience: 50         # (int) early stop after N epochs without improvement
-  batch: 8             # (int | float) batch size as int, or 0.0–1.0 for AutoBatch fraction of GPU memory
+  batch: 8             # (int | float) batch size as int, -1 for AutoBatch, or a float in (0.0, 1.0) for a GPU memory fraction
   save_period: -1      # (int) save checkpoint every N epochs; disabled if < 1
   cache: false         # (bool | str) cache images in RAM ('ram') or on 'disk'; false disables
   workers: 8           # (int) dataloader workers (per RANK if DDP)
@@ -365,7 +365,7 @@ ultralytics:
 
   # Segmentation
   overlap_mask: true   # (bool) merge instance masks into one mask during training
-  mask_ratio: 4        # (int) mask downsample ratio (segment only)
+  mask_ratio: 4        # (int) training mask downsample ratio (segment only); does not change the predicted mask resolution
 
   # Classification
   dropout: 0.0         # (float) dropout for classification head (classify only)
@@ -389,7 +389,7 @@ ultralytics:
   dlog: 1.0            # (float) depth log (SILog) loss gain (depth tasks)
   dgrad: 0.5           # (float) depth gradient loss gain (depth tasks)
   dlam: 1.0            # (float) depth SILog variance focus: 1.0 = scale-invariant, 0.0 = log-RMSE (depth tasks)
-  nbs: 64              # (int) nominal batch size used for loss normalization
+  nbs: 64              # (int) nominal batch size; gradients accumulate over round(nbs / batch) batches per optimizer step
   hsv_h: 0.015         # (float) HSV hue augmentation fraction
   hsv_s: 0.7           # (float) HSV saturation augmentation fraction
   hsv_v: 0.4           # (float) HSV value (brightness) augmentation fraction
@@ -404,8 +404,8 @@ ultralytics:
   mosaic: 1.0          # (float) mosaic augmentation probability
   mixup: 0.0           # (float) MixUp augmentation probability
   cutmix: 0.0          # (float) CutMix augmentation probability
-  copy_paste: 0.0      # (float) segment/obb copy-paste fraction of eligible objects
-  copy_paste_mode: flip # (str) segment/obb copy-paste strategy: flip or mixup
+  copy_paste: 0.0      # (float) segment/semantic/obb copy-paste fraction of eligible objects
+  copy_paste_mode: flip # (str) segment/semantic/obb copy-paste strategy: flip or mixup
   auto_augment: randaugment # (str) classification auto augmentation: randaugment, autoaugment, augmix
   erasing: 0.4         # (float) random erasing probability for classification (0.0–1.0)
 

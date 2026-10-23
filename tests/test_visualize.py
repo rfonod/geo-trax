@@ -395,9 +395,10 @@ def _render(stop):
         raise stop
 
     config = {'main': {'output': {}, 'class_names': {}, 'visualization': {}}}
-    args = argparse.Namespace(save=True, show=False, viz_mode=[0])
+    args = argparse.Namespace(source='A1.mp4', save=True, show=False, viz_mode=[0])
     stubs = {
         'load_config_all': MagicMock(return_value=config),
+        'no_vehicles_detected': MagicMock(return_value=False),
         'resolve_stab_anchor': MagicMock(return_value=0),
         'get_and_verify_filepaths': MagicMock(return_value=(None, None, None)),
         'read_tracks': MagicMock(return_value=(None, None)),

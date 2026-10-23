@@ -540,6 +540,15 @@ def test_save_results_writes_the_tracks_file_without_leftovers(tmp_path):
     save_results(tracks, np.zeros((0, 10)), _metadata_config(source, output_cfg), logger, output_cfg)
     assert np.loadtxt(tmp_path / 'results' / 'A1.txt', delimiter=',').shape == (14,)
     assert sorted(p.name for p in (tmp_path / 'results').iterdir()) == ['A1.txt', 'A1.yaml']
+    assert yaml.safe_load((tmp_path / 'results' / 'A1.yaml').read_text())['results'] == {'vehicles': 1, 'rows': 1}
+
+
+def test_run_metadata_records_a_video_in_which_nothing_was_detected(tmp_path):
+    """No tracks file is written then, so the zero count is what tells later stages the video is done."""
+    _run_save_results(tmp_path, {'folder': 'results'})
+    written = yaml.safe_load((tmp_path / 'results' / 'A1.yaml').read_text())
+    assert written['results'] == {'vehicles': 0, 'rows': 0}
+    assert not (tmp_path / 'results' / 'A1.txt').exists()
 
 
 def test_aggregate_results_raises_instead_of_returning_empty_tracks():

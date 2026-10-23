@@ -59,7 +59,7 @@ Shared Options:
                           path is shared across all inputs in the batch. Also sets the base for
                           plots/. Defaults to cfg -> output -> folder (historical default: 'results').
     --log-path, -lp <str> : Where to write logs: a directory or a full file path; defaults to a platform-specific log directory.
-    --verbose, -v       : Set print verbosity level to INFO (default: WARNING).
+    --verbose, -v       : Also show INFO messages on the console (default: warnings and key notices only).
 
 Processing Options:
     --model, -m <str>     : Detection model to use — a local file path OR an
@@ -79,8 +79,9 @@ Processing Options:
                           an is_interpolated column to the .txt output (0 = detected, 1 = synthetic).
                           Defaults to cfg -> extraction -> interpolate (default: false).
     --sahi / --no-sahi    : Detect via SAHI sliced inference (improves small-object recall; requires
-                          'pip install geo-trax[sahi]'; roughly 5x slower per frame). Slicing parameters
-                          live in cfg -> extraction -> sahi. Defaults to cfg -> extraction -> sahi -> enable.
+                          python -m pip install 'geo-trax[sahi]'; roughly 10x the per-frame detection cost
+                          on 4K with the default slices). Slicing parameters live in cfg -> extraction -> sahi.
+                          Defaults to cfg -> extraction -> sahi -> enable.
     --stab-gpu / --no-stab-gpu, -sg : CUDA-accelerate stabilization (requires a CUDA-enabled OpenCV
                           build; no CPU fallback). Defaults to cfg -> stabilo -> gpu.
     --stab-gpu-device-id, -sgid <int> : CUDA device index used when stabilization GPU is enabled.
@@ -216,7 +217,8 @@ Notes:
   - Skip-if-exists: each stage silently skips if its output file already exists. Use
     --overwrite (with optional --yes) to force re-execution of any stage.
   - Stage dependencies: georeferencing and visualization both require .txt tracking results.
-    If these are missing, the dependent stage is skipped with an error message.
+    A video in which nothing was detected has none; it is recorded as such and counts as done,
+    not failed. A video that was never extracted fails --geo-only and --viz-only.
   - --cut-frame-right is reset to null in batch-directory mode; all videos are always
     processed through to their last frame.
   - --dry-run does not create the log file; use it freely before committing to a long run.
@@ -238,7 +240,13 @@ from geotrax.plot import add_plotting_args, default_plot_args, generate_plots
 from geotrax.utils.cli_utils import add_cfg_arg, add_common_args, finalize_cli_args
 from geotrax.utils.config_utils import load_config, sync_args_with_config
 from geotrax.utils.constants import VIDEO_FORMATS
-from geotrax.utils.file_utils import DEFAULT_OUTPUT, check_if_results_exist, determine_suffix_and_fourcc, output_folder_exclusion
+from geotrax.utils.file_utils import (
+    DEFAULT_OUTPUT,
+    check_if_results_exist,
+    determine_suffix_and_fourcc,
+    no_vehicles_detected,
+    output_folder_exclusion,
+)
 from geotrax.utils.logging_utils import BColors, setup_logger
 from geotrax.visualize import add_visualization_args, resolve_viz_modes, visualize_results
 
@@ -246,6 +254,10 @@ from geotrax.visualize import add_visualization_args, resolve_viz_modes, visuali
 ACTION_EXTRACT = "Detecting, tracking, and stabilizing"
 ACTION_GEOREF = "Georeferencing"
 ACTION_VISUALIZE = "Visualizing"
+
+
+class MissingInputError(Exception):
+    """A requested stage cannot run because the video was never extracted; the video counts as failed."""
 
 
 def process_input(args: argparse.Namespace, logger: logging.Logger) -> None:
@@ -383,7 +395,10 @@ def process_file(file: Path, args: argparse.Namespace, logger: logging.Logger, o
             process_step(file, args, logger, ACTION_VISUALIZE, visualize_results, out_cfg)
 
         if (args.plot_save is not False or args.plot_show is not False) and not args.viz_only and not args.geo_only and not args.input.is_dir():
-            run_plotting(file, args, logger)
+            if no_vehicles_detected(file, out_cfg):
+                logger.info(f"'{file}' - No vehicles were detected. Skipping plotting.")
+            else:
+                run_plotting(file, args, logger)
 
     except SystemExit:
         logger.error(f"Error with {file}: a pipeline stage stopped the run (see the error above).")
@@ -447,28 +462,40 @@ def filter_files_to_process(
 def should_process_file(file: Path, args: argparse.Namespace, logger: logging.Logger, action: str, out_cfg: dict = None) -> bool:
     """
     Determine if the video should be processed, georeferenced, or visualized based on the existing results and user input.
+
+    A video in which extraction found no vehicles has no tracks file, but its run metadata records
+    that (no_vehicles_detected): its extraction counts as done, and its later stages are skipped as
+    having nothing to do, so the video is not a failure. A missing tracks file without that record
+    means the video was never extracted. In a --dry-run that includes extraction, the later stages
+    would run after it; otherwise, as with --geo-only or --viz-only, the requested stage cannot run,
+    and MissingInputError marks the video as failed, so the batch exits with status 1.
     """
     txt_exists = check_if_results_exist(file, "processed", output_cfg=out_cfg)[0]
+    nothing_detected = not txt_exists and no_vehicles_detected(file, out_cfg)
     processing_steps = "detection, tracking, and stabilization"
 
     if action == ACTION_EXTRACT:
-        return handle_existing_results(file, args, logger, txt_exists, processing_steps)
-    elif action == ACTION_GEOREF:
-        if not txt_exists:
-            logger.error(f"'{file}' - No {processing_steps} results found. Skipping georeferencing.")
+        if nothing_detected and not args.overwrite:
+            logger.warning(f"'{file}' - An earlier extraction detected no vehicles; skipping it (pass --overwrite to rerun).")
             return False
+        return handle_existing_results(file, args, logger, txt_exists or nothing_detected, processing_steps)
+    if action not in (ACTION_GEOREF, ACTION_VISUALIZE):
+        return False
+    if nothing_detected:
+        logger.info(f"'{file}' - No vehicles were detected. Skipping {action.lower()}.")
+        return False
+    if not txt_exists:
+        if args.dry_run and not (args.geo_only or args.viz_only):
+            return True
+        raise MissingInputError(f"no {processing_steps} results found, so {action.lower()} cannot run; extract the video first.")
+    if action == ACTION_GEOREF:
         csv_exists = check_if_results_exist(file, "georeferenced", output_cfg=out_cfg)[0]
         return handle_existing_results(file, args, logger, csv_exists, action)
-    elif action == ACTION_VISUALIZE:
-        if not txt_exists:
-            logger.error(f"'{file}' - No {processing_steps} results found. Skipping visualization.")
-            return False
-        # Results count as present only if every mode the visualizer will render exists
-        suffix = determine_suffix_and_fourcc()[0]
-        viz_modes = resolve_viz_modes(args, logger)
-        vid_exists = all(check_if_results_exist(file, "visualized", mode, suffix, output_cfg=out_cfg)[0] for mode in viz_modes)
-        return handle_existing_results(file, args, logger, vid_exists, action)
-    return False
+    # Results count as present only if every mode the visualizer will render exists
+    suffix = determine_suffix_and_fourcc()[0]
+    viz_modes = resolve_viz_modes(args, logger)
+    vid_exists = all(check_if_results_exist(file, "visualized", mode, suffix, output_cfg=out_cfg)[0] for mode in viz_modes)
+    return handle_existing_results(file, args, logger, vid_exists, action)
 
 
 def handle_existing_results(file: Path, args: argparse.Namespace, logger: logging.Logger, exists: bool, action: str) -> bool:
@@ -484,9 +511,12 @@ def handle_existing_results(file: Path, args: argparse.Namespace, logger: loggin
     return True
 
 
-def parse_cli_args() -> argparse.Namespace:
+def _build_parser() -> tuple:
     """
-    Parse command-line arguments.
+    Build the batch parser and its ``dest -> CfgArg`` map.
+
+    Split out of ``parse_cli_args`` so that the documentation site renders its CLI reference
+    from the same parser the command uses (see docs/_scripts/gen_reference.py).
     """
     parser = argparse.ArgumentParser(description='Primary entry point for the full Geo-trax pipeline. Runs detection/tracking/stabilization, georeferencing, visualization, and plotting for a single video file or an entire directory tree. Stages are skipped if their output already exists; use --overwrite to force re-execution.')
 
@@ -524,6 +554,14 @@ def parse_cli_args() -> argparse.Namespace:
     plotting = parser.add_argument_group('Plotting options')
     cfg_paths |= add_plotting_args(plotting, dest_prefix='plot_')  # plot_* dests so they don't clash with the visualization args
 
+    return parser, cfg_paths
+
+
+def parse_cli_args() -> argparse.Namespace:
+    """
+    Parse command-line arguments.
+    """
+    parser, cfg_paths = _build_parser()
     return finalize_cli_args(parser, cfg_paths)
 
 

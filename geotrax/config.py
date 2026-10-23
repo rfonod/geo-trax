@@ -60,7 +60,15 @@ _PRESET_DESCRIPTIONS = {
 _COPY_SUFFIX = '_copy'
 
 
-def parse_cli_args() -> argparse.Namespace:
+def _build_parser() -> tuple:
+    """
+    Build the config parser and its (empty) ``dest -> CfgArg`` map.
+
+    Split out of ``parse_cli_args`` so that the documentation site renders its CLI reference
+    from the same parser the command uses (see docs/_scripts/gen_reference.py). The map is
+    empty because ``geotrax config`` reads no pipeline config; it is returned for the same
+    ``(parser, cfg_paths)`` shape as every other command.
+    """
     parser = argparse.ArgumentParser(
         prog='geotrax config',
         description='Pipeline configuration management (locate, inspect, and copy the bundled configs).',
@@ -97,6 +105,11 @@ def parse_cli_args() -> argparse.Namespace:
         help='Overwrite existing <name>_copy.yaml files in the destination.',
     )
 
+    return parser, {}
+
+
+def parse_cli_args() -> argparse.Namespace:
+    parser, _ = _build_parser()
     args = parser.parse_args()
     if args.action is None:
         parser.print_help()

@@ -1,6 +1,6 @@
 # Geo-trax
 
-[![GitHub Release](https://img.shields.io/github/v/release/rfonod/geo-trax?include_prereleases)](https://github.com/rfonod/geo-trax/releases) [![PyPI - Version](https://img.shields.io/pypi/v/geo-trax)](https://pypi.org/project/geo-trax/) [![PyPI - Total Downloads](https://img.shields.io/pepy/dt/geo-trax?label=total%20downloads)](https://pepy.tech/project/geo-trax) [![CI](https://github.com/rfonod/geo-trax/actions/workflows/ci.yml/badge.svg)](https://github.com/rfonod/geo-trax/actions/workflows/ci.yml) [![Python](https://img.shields.io/badge/python-3.11--3.13-blue)](https://www.python.org/) [![License](https://img.shields.io/github/license/rfonod/geo-trax)](https://github.com/rfonod/geo-trax/blob/main/LICENSE) [![Open Access](https://img.shields.io/badge/Journal-10.1016%2Fj.trc.2025.105205-blue)](https://doi.org/10.1016/j.trc.2025.105205) [![Archived Code](https://img.shields.io/badge/Zenodo-Software%20Archive-blue)](https://zenodo.org/doi/10.5281/zenodo.12119542) [![Hugging Face](https://img.shields.io/badge/🤗%20Model-rfonod%2Fgeo--trax-yellow)](https://huggingface.co/rfonod/geo-trax) [![Hugging Face Space](https://img.shields.io/badge/🤗%20Space-Live%20Demo-yellow)](https://huggingface.co/spaces/rfonod/geo-trax) [![Project Website](https://img.shields.io/badge/REAL%20Lab-Geo--trax-informational)](https://www.real-lab.ch/geo-trax) [![YouTube](https://img.shields.io/badge/YouTube-Video-red?logo=youtube&logoColor=red)](https://youtu.be/gOGivL9FFLk) [![Geo Export](https://img.shields.io/badge/Geo%20Export-GeoJSON%20%7C%20GeoPackage-4c8)](#geo-export)
+[![GitHub Release](https://img.shields.io/github/v/release/rfonod/geo-trax?include_prereleases)](https://github.com/rfonod/geo-trax/releases) [![PyPI - Version](https://img.shields.io/pypi/v/geo-trax)](https://pypi.org/project/geo-trax/) [![PyPI - Total Downloads](https://img.shields.io/pepy/dt/geo-trax?label=total%20downloads)](https://pepy.tech/project/geo-trax) [![CI](https://github.com/rfonod/geo-trax/actions/workflows/ci.yml/badge.svg)](https://github.com/rfonod/geo-trax/actions/workflows/ci.yml) [![Python](https://img.shields.io/badge/python-3.11--3.13-blue)](https://www.python.org/) [![License](https://img.shields.io/github/license/rfonod/geo-trax)](https://github.com/rfonod/geo-trax/blob/main/LICENSE) [![Open Access](https://img.shields.io/badge/Journal-10.1016%2Fj.trc.2025.105205-blue)](https://doi.org/10.1016/j.trc.2025.105205) [![Archived Code](https://img.shields.io/badge/Zenodo-Software%20Archive-blue)](https://zenodo.org/doi/10.5281/zenodo.12119542) [![Hugging Face](https://img.shields.io/badge/🤗%20Model-rfonod%2Fgeo--trax-yellow)](https://huggingface.co/rfonod/geo-trax) [![Hugging Face Space](https://img.shields.io/badge/🤗%20Space-Live%20Demo-yellow)](https://huggingface.co/spaces/rfonod/geo-trax) [![Project Website](https://img.shields.io/badge/REAL%20Lab-Geo--trax-informational)](https://www.real-lab.ch/geo-trax) [![YouTube](https://img.shields.io/badge/YouTube-Video-red?logo=youtube&logoColor=red)](https://youtu.be/gOGivL9FFLk) [![Geo Export](https://img.shields.io/badge/Geo%20Export-GeoJSON%20%7C%20GeoPackage-4c8)](https://rfonod.github.io/geo-trax/guides/export/) [![Docs](https://img.shields.io/badge/docs-rfonod.github.io%2Fgeo--trax-blue)](https://rfonod.github.io/geo-trax/)
 
 **Geo-trax** (GEO-referenced TRAjectory eXtraction) is a comprehensive pipeline that extracts high-accuracy, georeferenced vehicle trajectories from high-altitude drone imagery. Built for quasi-stationary aerial monitoring of urban traffic, it turns raw bird's-eye view (BEV) drone footage into precise, real-world vehicle trajectories. The framework combines YOLO detection, multi-object tracking, and video stabilization with a robust orthophoto-based georeferencing stage, producing geo-coordinated, lane-resolved trajectories that are spatially and temporally consistent and ready for large-scale traffic analysis and simulation. It is optimized for urban intersections and arterial corridors, where high-fidelity, vehicle-level insights drive intelligent transportation systems and digital twin applications.
 
@@ -79,16 +79,18 @@ python -m pip install -e .         # pip
 # poetry install                   # Poetry (auto-manages its own virtualenv; skip the venv step)
 ```
 
-**Optional dependency groups** (development/testing tools, ONNX export, SAHI sliced inference):
+**Optional dependency groups** (development/testing tools, ONNX export, SAHI sliced inference, documentation site):
 
 ```bash
 python -m pip install -e '.[dev]'      # development + test tooling
 python -m pip install -e '.[export]'   # ONNX export dependencies
 python -m pip install -e '.[sahi]'     # SAHI sliced inference for small-object detection (--sahi)
+python -m pip install -e '.[docs]'     # documentation site: mkdocs serve / mkdocs build --strict
 # uv pip install -e '.[dev]'           # uv equivalents
 # poetry install --extras dev          # Poetry equivalents
 # poetry install --extras export
 # poetry install --extras sahi
+# poetry install --extras docs
 ```
 
 Installed geo-trax from PyPI rather than a checkout? Use the non-editable form instead: `python -m pip install 'geo-trax[dev]'` (likewise `'geo-trax[export]'`, `'geo-trax[sahi]'`).
@@ -106,20 +108,20 @@ Installed geo-trax from PyPI rather than a checkout? Use the non-editable form i
 geotrax batch data/U_video_cut.mp4 --no-geo
 
 # Full pipeline: extract, georeference, and analyze (orthophotos required; see data/README.md)
-geotrax batch data/U_video_cut.mp4 -orf data/orthophotos -mf data/master_frames --show-lanes
+geotrax batch data/U_video_cut.mp4 -orf data/orthophotos -osf data/segmentations -mf data/master_frames --show-lanes
 
 # Scale up: process a whole project tree, then merge multi-drone results into one dataset
 geotrax batch path/to/PROCESSED/
 geotrax aggregate path/to/PROCESSED/
 ```
 
-Run `geotrax -h` or `geotrax batch -h` for all options. The scale-up commands above run flag-free with the [recommended project structure](#real-world-deployment-the-songdo-experiment); any other layout works with explicit path flags.
+Run `geotrax -h` or `geotrax batch -h` for all options. The scale-up commands above run flag-free with the [recommended project structure](#real-world-deployment-the-songdo-experiment); any other layout works with explicit path flags. To georeference your own footage, [Your own data](https://rfonod.github.io/geo-trax/guides/own-data/) lists the files each location needs and the defaults to change outside South Korea.
 
 <details>
 <summary><b>📋 Full Feature Overview</b></summary>
 
 - **Detection**: YOLOv8s on aerial BEV imagery; detects car (incl. vans), bus, truck, and motorcycle; optional per-class confidence thresholds (`extraction.class_conf`) and [SAHI](https://github.com/obss/sahi) sliced inference for improved small-object recall (`--sahi`).
-- **Tracking**: six multi-object trackers (BoT-SORT default); see [Tracking](#tracking) for a comparison; optional per-track frame-gap interpolation.
+- **Tracking**: six multi-object trackers (BoT-SORT default; see [Tracking](#tracking)); optional per-track frame-gap interpolation.
 - **Stabilization**: homography-based trajectory correction via [Stabilo](https://github.com/rfonod/stabilo) ⚖️, tuned with [Stabilo-Optimize](https://github.com/rfonod/stabilo-optimize) 🎯; optional CUDA acceleration (`--stab-gpu`).
 - **Georeferencing**: frame-to-orthophoto registration; outputs lat/lon, local CRS, speed, acceleration, and lane assignment per vehicle; optional CUDA acceleration (`--geo-gpu`).
 - **Visualization**: track overlays on original, stabilized, or static-reference video, in five rendering modes (incl. oriented bounding boxes).
@@ -131,7 +133,6 @@ Run `geotrax -h` or `geotrax batch -h` for all options. The scale-up commands ab
 <details>
 <summary><b>🚀 Planned Enhancements</b></summary>
 
-- Comprehensive documentation in a dedicated `docs/` folder. A [`tools/README.md`](tools/README.md) index already covers the auxiliary scripts.
 - Modularized, OOP-based pipeline with custom reference frame support and georeferencing leveraging Stabilo's image-matching backend.
 - Simulation and scenario export: `geotrax export --format sumo` (and/or OpenDRIVE, CommonRoad) to turn an extracted dataset into a drop-in scenario for traffic simulators and digital twins, reusing the lane and road-section geometry already carried by the orthophoto segmentations.
 - Live/online mode: ingest RTMP-style drone feeds for real-time georeferenced output, for live monitoring and incident detection rather than offline batches.
@@ -165,63 +166,13 @@ The entire pipeline is driven by a **single, self-contained YAML config**: one f
 | [`stable`](geotrax/cfg/stable.yaml) | Stabilization quality |
 
 ```bash
-geotrax batch video.mp4 -c confident   # use a bundled preset by name
-geotrax batch video.mp4 -c ./my.yaml   # use a custom config file
+geotrax batch video.mp4 -c confident                     # a bundled preset, by name
+geotrax config copy                                      # editable copies: <name>_copy.yaml
+geotrax batch video.mp4 -c default_copy.yaml             # your edited copy
+geotrax batch video.mp4 --set conf=0.35 --set iou=0.6    # one-off overrides of any key
 ```
 
-<details>
-<summary><b>⚙️ Inspect, copy, and customize configs</b></summary>
-
-Manage the bundled configs with the `geotrax config` command:
-
-```bash
-geotrax config show              # list bundled presets and their location
-geotrax config show default      # print a preset's full contents
-geotrax config copy              # copy presets into the current directory as <name>_copy.yaml
-geotrax config copy -o ~/myproj  # copy into a specific directory
-```
-
-Copy a preset, edit it, then pass it with `-c`:
-
-```bash
-geotrax config copy
-# edit default_copy.yaml ...
-geotrax extract video.mp4 -c default_copy.yaml
-```
-
-To switch the tracking algorithm, set `tracker.active` in the config (see [Tracking](#tracking)).
-
-</details>
-
-<details>
-<summary><b>✏️ One-off overrides with <code>--set</code></b></summary>
-
-Change any config value for a single run, without copying a config file. Available on every command that takes `-c`:
-
-```bash
-geotrax extract video.mp4 --set conf=0.35 --set iou=0.6     # repeat --set for several keys
-geotrax extract video.mp4 --set tracker.botsort.track_buffer=45
-geotrax georeference video.mp4 -orf ortho/ --set matching.downsample_ratio=0.25
-geotrax batch PROCESSED/ --set stabilo.max_features=4000 --set visualization.tail_length=90
-```
-
-- **KEY** is a dotted path (`ultralytics.conf`) or any unambiguous tail of one (`conf`, `matching.gpu`). An ambiguous or misspelled key stops the run and lists the candidates rather than being silently ignored. The full dotted path is the stable form: a short name that is unique today could become ambiguous once a future release adds a config key.
-- **VALUE** is read with YAML rules, exactly as in the config file, so `true`, `null`, `0.35`, and `[0, 1, 2]` all mean what they look like. A value of the wrong kind (text where a number belongs, a scalar where a list belongs) is rejected; numbers stay interchangeable.
-- **Precedence** is CLI > config file. Every override is echoed to the console, so it is never silent.
-
-Where a dedicated flag exists, prefer it: flags validate their input (`--stab-detector xfeatt` fails immediately and lists the valid detectors, while `--set` can only check the type) and they show up in `--help`. Passing both for the same key is an error, not a precedence puzzle:
-
-```console
-$ geotrax extract video.mp4 --set conf=0.1 --conf 0.5
-CRITICAL - Conflicting overrides for 'ultralytics.conf':
-  --set conf=0.1
-  --conf 0.5
-Pass only one.
-```
-
-`--set` is for experimentation; to make a change durable, copy a preset and pass it with `-c`.
-
-</details>
+The [Configuration guide](https://rfonod.github.io/geo-trax/guides/configuration/) covers inspecting and copying configs, the `--set` rules and their interplay with CLI flags, the run metadata, logs, and the update check; the [config reference](https://rfonod.github.io/geo-trax/reference/config/) documents every key.
 
 ## Detection Model
 
@@ -237,7 +188,7 @@ The default detector is **YOLOv8s** (HBB, 1920 × 1920 px, ~11 M parameters), tr
 
 > Pedestrian and bicycle classes exist in the weights but are underrepresented, unevaluated, and filtered by default. See the [model card](https://huggingface.co/rfonod/geo-trax) for full details.
 
-To use a different model, point `--model` (CLI) or `extraction.model` (config) to a local `.pt` path or `hf://<org>/<repo>/<file>.pt`; any [Ultralytics](https://github.com/ultralytics/ultralytics)-compatible model works. An `hf://` reference follows the repo's current `main`; to pin an exact version, add a revision (commit SHA, tag or branch) after the repo name: `hf://<org>/<repo>@<revision>/<file>.pt`.
+To use a different model, point `--model` (CLI) or `extraction.model` (config) to a local `.pt` path or `hf://<org>/<repo>/<file>.pt`; any [Ultralytics](https://github.com/ultralytics/ultralytics)-compatible model works. An `hf://` reference follows the repo's current `main`; to pin an exact version, add a revision (commit SHA, tag or branch) after the repo name: `hf://<org>/<repo>@<revision>/<file>.pt`. Class filtering and renaming are covered in the [Detection and tracking guide](https://rfonod.github.io/geo-trax/guides/detection-tracking/).
 
 ### Per-Class Confidence Thresholds
 
@@ -247,19 +198,18 @@ A single `ultralytics.conf` threshold rarely suits every class: rare or harder c
 geotrax extract video.mp4 --set 'class_conf={1: 0.15, 2: 0.4}'   # or set extraction.class_conf in a copied config
 ```
 
-The detector runs at the lowest of these thresholds, and each detection is then held to the threshold of its own class *before* it reaches the tracker, so rejected boxes never start or extend a track. Each track is later given a single class by a confidence-weighted vote, so the output can still hold rows of a class below its threshold: detections of another class on the same track, kept under that class's own threshold. With `class_conf: null` (the default) extraction is unchanged. The thresholds also apply in SAHI mode. Lowering a threshold lets more boxes compete for `ultralytics.max_det`, so raise it if a dense scene hits the cap.
+Each detection is held to the threshold of its own class *before* it reaches the tracker, so rejected boxes never start or extend a track; with `class_conf: null` (the default) extraction is unchanged. The [Detection and tracking guide](https://rfonod.github.io/geo-trax/guides/detection-tracking/#confidence-thresholds) explains how the thresholds interact with the per-track class vote and with `ultralytics.max_det`.
 
 ### Small-Object Detection with SAHI
 
-For footage where vehicles are near the detection floor (higher altitudes, sub-4K sensors), the extraction stage can optionally run [SAHI](https://github.com/obss/sahi) sliced inference: each frame is split into overlapping slices, the detector runs on every slice (plus one full-frame pass), and the results are merged before tracking. This substantially improves tiny-object recall at roughly 5x the per-frame detection cost with the default 1920 x 1080 slices.
+For footage where vehicles are near the detection floor (higher altitudes, sub-4K sensors), the extraction stage can optionally run [SAHI](https://github.com/obss/sahi) sliced inference: each frame is split into overlapping slices, the detector runs on every slice (plus one full-frame pass), and the results are merged before tracking. This substantially improves tiny-object recall, at a cost that grows with the number of slices. On 4K footage the default 1920 x 1080 slices with 20% overlap form a 3 x 3 grid, because two overlapping slices cover only 3456 of the 3840 px; that is nine passes plus the full-frame pass, roughly 10x the per-frame detection cost. Slightly larger slices give a 2 x 2 grid at about half that cost; see the [SAHI guide](https://rfonod.github.io/geo-trax/guides/sahi/#slice-grid).
 
 ```bash
 geotrax extract video.mp4 --sahi     # also available on 'geotrax batch'
+geotrax extract video.mp4 --sahi --set sahi.slice_width=2160 --set sahi.slice_height=1215   # 2 x 2 grid on 4K
 ```
 
-SAHI is an optional extra. If it is not installed, the run stops immediately with the exact install command for your setup.
-
-Slice size, overlap, and merge settings live in `cfg -> extraction -> sahi` (run `geotrax config copy` to edit them). SAHI mode honors the `ultralytics` config keys `conf`, `device`, `imgsz` (applied per slice), and `classes`, as well as `extraction.class_conf`; the NMS-related keys (`iou`, `max_det`, `agnostic_nms`, etc.) are superseded by the SAHI merge settings. It supports YOLO models only and cannot be combined with the `tracktrack` tracker or with ReID model `auto` (both need a live Ultralytics predictor).
+SAHI is an optional extra (`python -m pip install 'geo-trax[sahi]'`); without it, the run stops at once with the install command for your setup. It supports YOLO models only and cannot be combined with the `tracktrack` tracker or with ReID model `auto`. The [SAHI guide](https://rfonod.github.io/geo-trax/guides/sahi/) covers the slicing and merge settings and which detection settings still apply.
 
 ### Custom Model Training
 
@@ -267,72 +217,21 @@ Training and export scripts for custom YOLO detectors live in `train/`, with a S
 
 ## Tracking
 
-Six multi-object trackers ship with [Ultralytics](https://github.com/ultralytics/ultralytics) `>=8.4.63`. Selection is config-driven: set `tracker.active`, no code changes needed. Default: **BoT-SORT**.
+Six multi-object trackers from [Ultralytics](https://github.com/ultralytics/ultralytics) are available: **BoT-SORT** (`botsort`, the default), **ByteTrack** (`bytetrack`), **OC-SORT** (`ocsort`), **Deep OC-SORT** (`deepocsort`), **FastTracker** (`fasttrack`) and **TrackTrack** (`tracktrack`). Selection is config-driven, with no code changes:
 
-| Tracker | `tracker.active` | ReID | GMC¹ | Pros | Cons |
-|---------|------------------|:----:|:----:|------|------|
-| **BoT-SORT** (default) | `botsort` | opt | ✅ | Strong accuracy; motion + optional appearance | Slower; ReID adds compute |
-| **ByteTrack** | `bytetrack` | ❌ | ❌ | Fastest; two-stage association | More ID switches under occlusion |
-| **OC-SORT** | `ocsort` | ❌ | ❌ | Robust to non-linear motion; lightweight | Weaker on long occlusions |
-| **Deep OC-SORT** | `deepocsort` | opt | opt | OC-SORT + appearance; dense scenes | Heaviest variant with ReID |
-| **FastTracker** | `fasttrack` | ❌ | ❌ | Occlusion-aware ByteTrack variant | Newer; several knobs to tune |
-| **TrackTrack** | `tracktrack` | opt | ✅ | Multi-cue cost; best ID retention | Most parameters; highest compute |
+```bash
+geotrax extract video.mp4 --set tracker.active=bytetrack
+```
 
-¹ GMC (in-tracker camera-motion compensation) runs during tracking and is independent of Stabilo's post-hoc trajectory stabilization stage.
-
-> 💡 Run `geotrax config show default` to print the full `tracker:` block, with every parameter for all six trackers documented inline. Run `geotrax config copy` to get an editable local copy. For a head-to-head comparison on your own data, see [`tools/compare_tracking.py`](tools/compare_tracking.py).
+The [Detection and tracking guide](https://rfonod.github.io/geo-trax/guides/detection-tracking/#trackers) compares them (accuracy, speed, appearance ReID, in-tracker camera-motion compensation) and covers tuning their parameters. For a head-to-head comparison on your own data, see [`tools/compare_tracking.py`](tools/compare_tracking.py).
 
 ## Stabilization
 
 Quasi-stationary drone footage is never perfectly static: wind, GPS drift, and gimbal corrections shift the frame throughout a flight. Geo-trax compensates by registering every frame back to a fixed reference frame with a homography, via [Stabilo](https://github.com/rfonod/stabilo) ⚖️. Tracks are written in both raw and stabilized image coordinates, and the per-frame 3 × 3 transform is saved alongside them.
 
-Registration quality depends on the feature detector. The default is `orb`, tuned for high-altitude BEV footage with [Stabilo-Optimize](https://github.com/rfonod/stabilo-optimize) 🎯 and used for every published result:
-
-| Detector | Description |
-|---|---|
-| `orb` (default) | fast binary descriptor; the only CUDA-accelerated option |
-| `sift` | classic scale-invariant descriptor |
-| `rsift` | RootSIFT, a normalized SIFT variant with better matching accuracy |
-| `brisk` | binary, scale- and rotation-invariant |
-| `kaze` | nonlinear scale space, slower but accurate |
-| `akaze` | accelerated KAZE, a good speed/accuracy compromise |
-
-All six are classical OpenCV detectors, rotation invariant, and need no extra downloads:
-
-```bash
-geotrax extract video.mp4 --stab-detector akaze
-```
+Registration quality depends on the feature detector. The default is `orb`, tuned for high-altitude BEV footage with [Stabilo-Optimize](https://github.com/rfonod/stabilo-optimize) 🎯 and used for every published result. Five other classical OpenCV detectors and five learning-based kornia models are available through `--stab-detector`; the [Feature detectors guide](https://rfonod.github.io/geo-trax/guides/feature-detectors/) compares them and explains the rotation and memory caveats of the learned ones before you switch.
 
 Masking, RANSAC, and downsampling parameters live under `cfg -> stabilo`. To skip stabilization entirely, set `extraction.stabilize: false`.
-
-<details>
-<summary><b>Learning-based detectors</b></summary>
-
-Stabilo 1.4.0 also exposes five [kornia](https://kornia.readthedocs.io/) models: `xfeat`, `disk`, `dedode`, `keynet`, and the detector-free `loftr`, plus the learned `lightglue` matcher (which pairs only with `disk`/`dedode`/`keynet`). They are available for experimentation on both the stabilization and georeferencing stages, but they are **not** used by any geo-trax default and were not used to produce any published result. On this workload the classical detectors are faster, more predictable, and easier to reproduce.
-
-Two properties make them awkward here:
-
-- **Rotation.** `xfeat`, `disk`, `dedode`, and `loftr` are *upright* models: matching collapses once the two images differ by more than roughly 30°. That is tolerable for stabilization, where consecutive frames are nearly aligned, but a poor fit for georeferencing, where a drone frame is registered against a north-up orthophoto and arbitrary rotation is the norm. Only `keynet` estimates keypoint orientation.
-- **Memory.** They are far hungrier than classical detectors, and cost grows with the *processed* frame size. **This can exhaust system memory and hang the machine.** Pick `downsample_ratio` so that `input_pixels × downsample_ratio²` stays under the model's guideline:
-
-  | Detector | Guideline | Max ratio at 4K (8.3 MP) | Max ratio at 8000 × 8000 ortho (64 MP) |
-  |---|---|---|---|
-  | `xfeat` | 2.0 MP | `0.49` | `0.17` |
-  | `disk`, `dedode`, `keynet` | 0.5 MP | `0.24` | `0.08` |
-  | `loftr` | 0.3 MP (cost is **quadratic** in pixels) | `0.19` | `0.06` |
-
-  Stabilo warns when the processed frame exceeds its guideline but does not cap it, so heed the warning. geo-trax does cap `max_features` on the georeferencing path, since these models consume it as `top_k` and the RootSIFT-sized default of 250000 would be fatal.
-
-**Acceleration.** These models run on PyTorch, so they are GPU-accelerated straight from the CLI with `--stab-device` / `--geo-device` (`auto` picks cuda > mps > cpu, and is the default). Nothing extra is needed: unlike the OpenCV CUDA path in [GPU acceleration](#gpu-acceleration), which requires a source-built OpenCV and covers only ORB, this works on stock wheels, accelerates every learned detector and the `lightglue` matcher, and supports `mps` on Apple silicon. A GPU with dedicated VRAM is also the safer choice memory-wise, since it does not compete with system RAM. The two paths are mutually exclusive; Stabilo rejects `--stab-gpu`/`--geo-gpu` combined with a learned detector.
-
-Weights download on first use and are cached by torch (`~/.cache/torch/hub/checkpoints`; set `TORCH_HOME` to relocate), then reused offline. Set the ratio well below the maximum before the first run:
-
-```bash
-geotrax extract video.mp4 --stab-detector xfeat --stab-device cuda -c my_config.yaml
-#   my_config.yaml: stabilo.downsample_ratio: 0.25
-```
-
-</details>
 
 ## Georeferencing
 
@@ -344,378 +243,26 @@ This reuses the image-matching machinery from stabilization, but defaults to **`
 geotrax georeference video.mp4 -orf data/orthophotos --geo-detector sift
 ```
 
-Orthophotos are required; lane/road-section segmentations and per-location master frames are optional and improve lane assignment and robustness (see [Usage](#usage) and [data/README.md](data/README.md) for how to obtain them). Matching parameters live under `cfg -> georef -> matching`, kinematic filtering under `cfg -> georef -> filtering`.
+Orthophotos are required; lane/road-section segmentations and per-location master frames are optional and improve lane assignment and robustness (see the [georeferencing guide](https://rfonod.github.io/geo-trax/guides/georeference/) and [data/README.md](data/README.md) for how to obtain them). Matching parameters live under `cfg -> georef -> matching`, kinematic filtering under `cfg -> georef -> filtering`.
 
-> The [learning-based detectors](#stabilization) are a poor fit for this stage in particular: the orthophoto is north-up while the drone frame can be at any heading, and every learned model except `keynet` is upright-only.
+> ⚠️ Outside South Korea, set `georef.transformation.target_crs` to a projected CRS for your area (e.g. its UTM zone). The shipped EPSG:5186 is the Songdo one, and speeds, accelerations and dimensions are measured in it; georeferencing warns, naming the UTM zone, when it distorts distances at your site. [Your own data](https://rfonod.github.io/geo-trax/guides/own-data/) describes this and the file formats for a new location.
+
+> The [learning-based detectors](https://rfonod.github.io/geo-trax/guides/feature-detectors/#learning-based-detectors) are a poor fit for this stage in particular: the orthophoto is north-up while the drone frame can be at any heading, and every learned model except `keynet` is upright-only.
 
 ## GPU acceleration
 
 Object **detection** already runs on CUDA automatically whenever a compatible GPU and PyTorch build are present (via the `ultralytics.device` config key, auto by default). The **stabilization** (`--stab-gpu`) and **georeferencing** (`--geo-gpu`) image-matching steps can *optionally* be CUDA-accelerated too, through [Stabilo](https://github.com/rfonod/stabilo). This needs a CUDA-enabled OpenCV build and is Linux/Windows only. Stabilo accelerates the **ORB** detector only, so `--geo-gpu` additionally requires `--geo-detector orb`; there is no CPU fallback, so requesting GPU without a working CUDA device raises an error.
 
-> This section covers the **OpenCV CUDA** path, which applies to the classical detectors. The learning-based detectors use a separate torch device (`--stab-device` / `--geo-device`) and are covered under [Stabilization](#stabilization); the two cannot be combined.
+> The learning-based detectors use a separate torch device (`--stab-device` / `--geo-device`) instead; see [Feature detectors](https://rfonod.github.io/geo-trax/guides/feature-detectors/#acceleration). The two cannot be combined.
 
-<details>
-<summary><b>⚡ Full CUDA setup & benchmarking guide</b></summary>
-
-Throughout this guide, dotted names like `ultralytics.device` or `georef.matching.detector_name` are **keys in the pipeline config**, not CLI flags. To change them, copy the bundled config once and pass your copy with `-c`:
-
-```bash
-geotrax config copy                 # writes default_copy.yaml in the current directory
-# edit default_copy.yaml, then pass it to any command:
-geotrax batch <video> ... -c default_copy.yaml
-```
-
-### 1. Build OpenCV with CUDA
-
-The PyPI OpenCV wheels are CPU-only, so you must build `opencv-contrib-python` from source with CUDA. Follow Stabilo's [`docs/cuda.md`](https://github.com/rfonod/stabilo/blob/main/docs/cuda.md), then confirm it works:
-
-```bash
-python -c "import cv2; print(cv2.__version__, cv2.cuda.getCudaEnabledDeviceCount())"   # expect: <version> 1
-```
-
-> **geo-trax needs one OpenCV module beyond the minimal stabilo build: add `video` to the `BUILD_LIST`.** The minimal list in stabilo's guide omits it, but the `sparseOptFlow` global-motion-compensation (GMC) method uses `cv2.calcOpticalFlowPyrLK` from that module. It is the default for the **BoT-SORT** (active default) and **TrackTrack** trackers, and an option for **DeepOCSORT** (`tracker.<name>.gmc_method`). GMC runs during **track association on the original, pre-stabilization frames**, so Stabilo does not make it redundant. Without `video` you get a `cv2 has no attribute 'calcOpticalFlowPyrLK'` warning and GMC silently falls back to identity. If you would rather not rebuild, set `gmc_method: none` for your active tracker (step 3), but that disables camera-motion compensation in tracking; for near-nadir BEV / quasi-stationary drone footage that is often acceptable, but check your tracking quality before relying on it.
-
-### 2. Install geo-trax without clobbering your CUDA OpenCV
-
-`ultralytics[extra]` transitively requires `opencv-python` and `opencv-python-headless`, both CPU wheels. A plain install drops them on top of your compiled `cv2/` and disables CUDA. A transitive dependency cannot be excluded in `pyproject.toml`, so use one of these:
-
-**A. Install, then restore your wheel (recommended).** Let pip install everything, then overwrite the CPU OpenCV by reinstalling the CUDA `opencv_contrib_python-*.whl` you built in step 1:
-
-```bash
-pip install -e .          # installs torch/cuda/ultralytics/..., plus (temporarily) CPU opencv
-# reinstall the wheel produced by your CUDA OpenCV build in step 1 (path is wherever you built it):
-pip install --force-reinstall --no-deps /path/to/opencv_contrib_python-*.whl
-python -c "import cv2; print(cv2.cuda.getCudaEnabledDeviceCount())"   # expect: 1
-```
-
-> If the CUDA check above reports `0` devices (or a `cv2`/CUDA error such as `module 'cv2' has no attribute 'cuda'`) immediately after the reinstall, re-activate the CUDA venv (`source .venv-cuda/bin/activate`, matching stabilo's `docs/cuda.md`) and run it again; if it persists, confirm `cv2.__file__` points into that venv's `site-packages` (see the troubleshooting in stabilo's `docs/cuda.md`). It should then report `1`.
->
-> ⚠️ Afterwards `opencv-python` / `opencv-python-headless` stay registered but their recorded files now belong to your build. **Never** `pip uninstall opencv-python` / `opencv-python-headless`, or you will delete the shared `cv2/`.
-
-**B. Stub the CPU wheels first (no download, cleaner metadata).** Install two metadata-only packages so pip treats the requirements as already satisfied and never fetches a CPU wheel:
-
-```bash
-CVVER=$(python -c "import cv2; print(cv2.__version__)")
-for pkg in opencv-python opencv-python-headless; do
-  d=$(mktemp -d)
-  cat > "$d/pyproject.toml" <<EOF
-[build-system]
-requires = ["setuptools"]
-build-backend = "setuptools.build_meta"
-[project]
-name = "$pkg"
-version = "$CVVER"
-[tool.setuptools]
-py-modules = []
-EOF
-  pip install --no-deps "$d" && rm -rf "$d"
-done
-pip install -e .          # opencv is satisfied by the stubs; your CUDA build is untouched
-```
-
-### 3. Enable GPU per stage
-
-| Stage | How | Notes |
-|-------|-----|-------|
-| Detection | automatic | `ultralytics.device` (auto = CUDA when available) |
-| Stabilization | `--stab-gpu` | works out of the box (default detector is ORB) |
-| Georeferencing | `--geo-gpu --geo-detector orb` | ORB is required; RootSIFT is not CUDA-accelerated |
-
-Only ORB is CUDA-accelerated, so georeferencing must be switched to it. Since v1.4.0 `--geo-detector` does this on the command line, with no config copy needed. A copied config is still required if you did **not** add `video` to your OpenCV `BUILD_LIST` (step 1):
-
-```bash
-geotrax config copy                       # writes default_copy.yaml
-# edit default_copy.yaml:
-#   tracker.botsort.gmc_method: none      # ONLY if you did not add 'video' to BUILD_LIST (step 1); disables tracker GMC, verify tracking quality
-```
-
-These are the GPU-accelerated analogues of the two reproduce commands in [`data/README.md`](data/README.md). Their outputs are *equivalent, not identical* to the committed `data/results-pixel/` and `data/results-full/`: the CUDA path georeferences with ORB (RootSIFT is not GPU-accelerated), GPU feature extraction is not bit-identical to CPU, and with `gmc_method: none` the tracker runs without motion compensation.
-
-```bash
-# Pixel-coordinate results: GPU stabilization, no georeferencing
-geotrax batch data/U_video_cut.mp4 --no-geo --show-class-names --show-conf --stab-gpu
-
-# Full pipeline: GPU stabilization + georeferencing (needs the orthophoto/segmentation/master-frame data; see data/README.md)
-geotrax batch data/U_video_cut.mp4 -orf data/orthophotos -osf data/segmentations -mf data/master_frames \
-  --show-lanes --plot-segmentations -vm 0 3 --stab-gpu --geo-gpu --geo-detector orb
-```
-
-(Append `-c default_copy.yaml` to both if you needed the `gmc_method: none` workaround above.)
-
-### 4. Benchmark: detection-only CUDA vs fully CUDA
-
-To isolate the GPU effect, disable the CPU-bound visualization and plotting (`--no-save --no-show --no-plot-save --no-plot-show`) and wipe a scratch output folder before each run (a clean, non-skipped run that leaves your real results untouched). Do **not** pass `--recompute`: the master→orthophoto homography is a one-time, expensive registration normally cached in the master-frames folder, so leaving it cached keeps the benchmark on the per-video work (detection, stabilization, reference→master registration).
-
-Three configurations are compared:
-- **geo-trax default (CPU)**: the shipped defaults with RootSIFT georeferencing; what a CPU-only user actually runs.
-- **ORB (CPU)**: the GPU-tuned config on CPU; a controlled, same-config baseline for the GPU run.
-- **fully CUDA**: the same ORB config with `--stab-gpu --geo-gpu`.
-
-The default run needs no config file: with no `-c`, geo-trax uses its shipped defaults (RootSIFT georeferencing, CPU for both stabilization and georeferencing). The ORB runs switch the georeferencing detector with `--geo-detector orb`; add `-c default_copy.yaml` to them as well if you needed `tracker.botsort.gmc_method: none`.
-
-With [hyperfine](https://github.com/sharkdp/hyperfine):
-
-```bash
-OUT=/tmp/geotrax_bench
-COMMON="geotrax batch data/U_video_cut.mp4 -orf data/orthophotos -osf data/segmentations -mf data/master_frames --no-save --no-show --no-plot-save --no-plot-show -of $OUT"
-hyperfine --warmup 1 --runs 5 --prepare "rm -rf $OUT" \
-  -n "geo-trax default (CPU, RootSIFT)" "$COMMON" \
-  -n "ORB (CPU)"                        "$COMMON --geo-detector orb" \
-  -n "fully CUDA (ORB)"                 "$COMMON --geo-detector orb --stab-gpu --geo-gpu"
-```
-
-Or without extra tools:
-
-```bash
-bench () { local label="$1"; shift; rm -rf /tmp/geotrax_bench
-  local t0=$(date +%s.%N)
-  geotrax batch data/U_video_cut.mp4 -orf data/orthophotos -osf data/segmentations -mf data/master_frames \
-    --no-save --no-show --no-plot-save --no-plot-show -y -o -of /tmp/geotrax_bench "$@" >/tmp/bench.log 2>&1 \
-    && awk -v a="$t0" -v b="$(date +%s.%N)" -v l="$label" 'BEGIN{printf "%-28s %.1f s\n", l, b-a}' \
-    || echo "$label FAILED (see /tmp/bench.log)"; }
-bench "geo-trax default (CPU)"
-bench "ORB (CPU)"        -c default_copy.yaml
-bench "fully CUDA (ORB)" -c default_copy.yaml --stab-gpu --geo-gpu
-```
-
-Example on an **NVIDIA RTX 4090** (5-second sample clip, 150 frames; hyperfine mean ± σ over 5 runs):
-
-<details>
-<summary>Benchmark system</summary>
-
-- **OS**: Ubuntu 24.04.4 LTS (Linux 6.8, x86_64)
-- **CPU**: 13th Gen Intel Core i9-13900KF (24 cores / 32 threads)
-- **RAM**: 62 GiB
-- **GPU**: NVIDIA GeForce RTX 4090 (24 GB, driver 580.159.03)
-- **Software**: Python 3.11.5, torch 2.12.1 (CUDA 13.0), OpenCV 4.13.0, stabilo 1.3.0
-
-</details>
-
-| Pipeline | Wall time | vs default |
-|----------|-----------|------------|
-| CPU stabilization and georeferencing (geo-trax defaults) | 273.7 ± 0.9 s | 1× |
-| CPU stabilization and georeferencing (GPU-matched config) | 348.4 ± 0.4 s | 0.8× |
-| Fully CUDA (GPU-matched config) | 16.4 ± 2.0 s | **16.7×** |
-
-> Fully CUDA is **16.7× faster than the geo-trax default** and **21.3× faster than the same ORB config on CPU** (row 2). Row 1 is the shipped defaults (RootSIFT georeferencing); rows 2–3 use the GPU-matched config, which switches georeferencing to ORB so the CPU and GPU runs do identical work (only ORB is CUDA-accelerated). Row 2 is slower than row 1 because ORB at a 250k feature ceiling with brute-force matching is costlier on CPU than RootSIFT. Treat these as a **relative** comparison, not absolute throughput: geo-trax's defaults favor maximum accuracy and reliability, with detection at **1920×1920**, stabilization at only a **0.5 downscale** (roughly 2K per frame on this 4K clip) with a high `max_features` ceiling, and RootSIFT georeferencing with a very high `max_features` and conservative MAGSAC++ matcher/projection settings, all against an **8000×8000** orthophoto. Lighter settings would cut absolute times across the board; the point is the CPU→GPU ratio.
-
-</details>
+The full setup (building OpenCV with CUDA, installing geo-trax without overwriting that build, and enabling the GPU per stage) is in the [GPU acceleration guide](https://rfonod.github.io/geo-trax/guides/gpu/), together with an RTX 4090 benchmark (16.7× faster than the CPU defaults on the sample clip).
 
 ## Usage
 
-The `geotrax` CLI provides one subcommand per stage: `batch` (primary entry point), `extract`, `georeference`, `visualize`, `plot`, `aggregate`, `export`, and `config`. Run `geotrax -h` or `geotrax <subcommand> -h` for the full reference (`python -m geotrax` works identically).
-
-```bash
-# Recursively process a directory (or a single video) without georeferencing
-geotrax batch path/to/videos/ --no-geo
-
-# Run an individual stage on its own
-geotrax extract video.mp4                  # detect, track, and stabilize
-geotrax visualize video.mp4 --save         # render an annotated video from existing results
-geotrax plot video.mp4                     # trajectory and distribution plots
-geotrax export video.mp4                   # georeferenced trajectories to a GeoPackage for QGIS & co.
-```
-
-> [!TIP]
-> See [data/README.md](data/README.md) for sample data and testing examples, including a [sample GIS export](data/README.md#gis-export) of the demo clip's trajectories ([view it as a map on GitHub](data/results-full/U_video_cut_lines.geojson)).
-
-<details>
-<summary><b>💡 More Examples & Advanced Usage</b></summary>
-
-```bash
-# Use a custom config (bundled preset by name, or a path to your own file)
-geotrax batch video.mp4 -c confident
-geotrax batch video.mp4 -c path/to/custom_config.yaml
-
-# Fill per-track detection gaps with linear interpolation (adds is_interpolated column to .txt output)
-geotrax batch video.mp4 --no-geo --interpolate
-
-# SAHI sliced inference for small objects (requires: pip install 'geo-trax[sahi]')
-geotrax batch video.mp4 --no-geo --sahi
-
-# Regenerate visualization without re-running extraction
-geotrax batch video.mp4 --viz-only --save
-
-# Show lane IDs, hide the speed overlay (requires georeferencing)
-geotrax batch video.mp4 --viz-only --save --show-lanes --hide-speed
-
-# Georeference an already-extracted video against orthophotos
-geotrax georeference video.mp4 -orf path/to/orthophotos -mf path/to/master_frames
-
-# Aggregated trajectory plots, excluding buses and trucks
-geotrax batch path/to/PROCESSED/ --plot-only --plot-aggregate --plot-class-filter 1 2
-
-# Merge multi-drone results for the same locations into a unified dataset
-geotrax aggregate path/to/PROCESSED/
-
-# Export georeferenced trajectories to GIS formats: one LineString per vehicle (default) or one Point per row,
-# as GeoPackage (default) or GeoJSON, in WGS84 (default) or the local projected CRS; works on single CSVs,
-# videos, whole PROCESSED/ trees, and aggregated DATASET/ folders
-geotrax export path/to/results/video.csv
-geotrax export path/to/DATASET/ --format geojson --geometry points -of path/to/GIS/
-geotrax export video.mp4 --crs local
-
-# Rotated box modes (3/4): boxes oriented to vehicle heading, on original (3) or stabilized (4) frame
-geotrax visualize video.mp4 --save --viz-mode 3 4
-```
-
-<p align="center"><img src="https://raw.githubusercontent.com/rfonod/geo-trax/main/assets/geo-trax_visualization_obb_zoom.jpg" alt="Geo-trax mode 3 rotated bounding boxes, zoomed detail" width="70%"><br><em>Mode 3 rotated bounding boxes, zoomed detail from the same scene as the animation above.</em></p>
-
-<details>
-<summary><b>⚠️ Rotated box modes (3 and 4): known limitations</b></summary>
-
-Modes 3 and 4 replace the standard axis-aligned YOLO detections with **rotated bounding boxes**: each box is sized to the vehicle's estimated physical length and width and rotated to align with its travel direction (heading). The heading is derived from the camera-motion-free stabilized trajectory; mode 3 projects the result back onto the original frame, while mode 4 draws directly on the stabilized frame. They are the most informative rendering modes but also the most sensitive to data quality:
-
-- **Size estimation may fail.** Estimates are computed over frames where the vehicle moves in a nearly straight path with sufficient displacement. Short tracks, near-stationary vehicles, or detections close to the frame edges can yield no usable estimate. In those cases the box dimensions fall back to a per-vehicle Q25 aggregate of the raw YOLO bounding box extents (rotated to the heading), which tends to be inflated during turns since axis-aligned detections expand as the vehicle turns. Fallback boxes are rendered with a **dashed outline** so they are easy to identify.
-- **Heading may be unreliable.** For very slow or stationary vehicles the motion direction cannot be determined; the box is then aligned with the longer axis of the raw bounding box instead.
-- **Back-projection distortion (mode 3 only).** Oriented boxes are computed in stabilized space and projected back onto the original frame via the inverse stabilization homography. Under strong camera motion this can produce visibly skewed boxes.
-- **Edge clipping is approximate.** When a vehicle is entering or exiting the frame, the detection only covers its visible part, so the oriented box is clipped to that footprint instead of being drawn at full size (the clip is triggered once the detection reaches within `edge_clip_margin` pixels of the border, since the YOLO box may stop a few pixels short of the true edge). That footprint, however, is only known as an axis-aligned (HBB) detection box, whereas the rendered box is rotated to the heading — so the clip boundary only approximates where the rotated vehicle actually leaves the frame. The clip rectangle is temporally smoothed (`edge_clip_smoothing`) so the box shrinks steadily as the vehicle exits rather than jumping with per-frame detection noise.
-- Both modes require that the extraction stage was run with stabilization enabled (`stabilize: true` in the config).
-
-</details>
-
-> [!NOTE]
-> **Why use master frames?** When georeferencing, geo-trax can route each video's homography through a shared *master frame* per location ID. A master frame is a high-quality, near-nadir BEV frame chosen once per location (see [`tools/find_master_frames.py`](tools/find_master_frames.py)), used instead of registering every video's reference frame directly to the orthophoto. The mapping is split into two homographies: `reference → master` (recomputed per video) and `master → orthophoto` (computed **once per location ID and cached**, validated by hashes of the master image, the orthophoto and the `georef -> matching` settings, so the cache is recomputed when any of them changes (except `gpu`, `gpu_device_id` and `device`, which only choose where the matching runs, so switching machines or devices reuses the cache); caches written before v1.4.2 carry only the master-image hash and are still accepted, with a warning that the other two could not be checked — pass `--recompute` if they changed). This gives two benefits:
-> - **Speed**: the expensive cross-domain `master → orthophoto` registration runs once and is reused across every drone and flight at that location, instead of once per video.
-> - **Consistency & robustness**: every video is matched against the *same* master frame. This same-modality BEV-to-BEV registration is far more reliable than a direct BEV-to-orthophoto match, so trajectories from different drones, altitudes, and viewpoints resolve into one coherent coordinate system.
->
-> Master frames are enabled by default. Disable them with `--no-master`, or force re-computation of the cached `master → orthophoto` homography with `--recompute`.
-
-</details>
-
-<details>
-<summary><b>📁 Output file formats</b></summary>
-
-Suppose the input video is `video_file.mp4`. By default, outputs are written to a `results/` sub-folder next to the input; the folder and all filename postfixes are configurable via the `output:` section of the pipeline config (or `--output-folder` / `-of` for the folder).
-
-- **video_file.txt** (`<stem><tracks_postfix>.txt`): Contains the extracted vehicle trajectories in the following format:
-
-  ```text
-  frame_id, vehicle_id, x_c(unstab), y_c(unstab), w(unstab), h(unstab), x_c(stab), y_c(stab), w(stab), h(stab), class_id, confidence, vehicle_length, vehicle_width
-  ```
-
-    where:
-  - `frame_id`: Frame number (0, 1, ...).
-  - `vehicle_id`: Unique vehicle identifier (1, 2, ...).
-  - `x_c(unstab)`, `y_c(unstab)`: Unstabilized vehicle centroid coordinates.
-  - `w(unstab)`, `h(unstab)`: Unstabilized vehicle bounding box width and height.
-  - `x_c(stab)`, `y_c(stab)`: Stabilized vehicle centroid coordinates.
-  - `w(stab)`, `h(stab)`: Stabilized vehicle bounding box width and height.
-  - `class_id`: Vehicle class identifier (0: car (incl. vans), 1: bus, 2: truck, 3: motorcycle)
-  - `confidence`: Detection confidence score (0-1).
-  - `vehicle_length`, `vehicle_width`: Estimated vehicle dimensions in pixels.
-  - `is_interpolated` *(optional, 15th column)*: Present only when `extraction.interpolate: true` (CLI: `--interpolate`). `0` = real detection, `1` = linearly interpolated to fill a frame gap. Gaps larger than the active tracker's `track_buffer` are left unfilled (the tracker would not persist a lost track's ID across a longer occlusion).
-
-- **video_file_vid_transf.txt** (`<stem><stab_transform_postfix>.txt`): Contains the transformation matrix for each frame in the format:
-
-  ```text
-  frame_id, h11, h12, h13, h21, h22, h23, h31, h32, h33
-  ```
-
-    where:
-  - `frame_id`: Frame number of the stabilized frame (starts from `cut_frame_left + 1` since the reference frame itself has no transform).
-  - `hij`: Elements of the 3x3 homography matrix that maps each frame (`frame_id`) to the reference frame.
-
-- **video_file.yaml**: Video metadata and the configuration actually used to process `video_file.mp4` — the config file's values with every CLI flag and `--set` override already applied, so the file is a faithful record of the run rather than of the config it started from.
-
-- **video_file_mode_X.mp4** (`<stem><visualization_postfix>_mode_<X>.mp4`): Annotated video in five rendering modes (X = 0 / 1 / 2 / 3 / 4):
-  - **Mode 0**: overlaid on the original (unstabilized) video
-  - **Mode 1**: overlaid on the stabilized video
-  - **Mode 2**: plotted on the static reference frame (the stabilization anchor recorded in the run-metadata YAML, so the background matches the stabilized coordinates even if `visualize` runs with a different `cut_frame_left`)
-  - **Mode 3**: rotated bounding boxes on the original video, where each box is sized to the vehicle's estimated physical dimensions and rotated to its per-frame heading (derived from the camera-motion-free stabilized trajectory and projected back onto the original frame). Requires stabilization to have been run.
-  - **Mode 4**: the same rotated bounding boxes as Mode 3, but drawn directly on the stabilized video (no back-projection). Requires stabilization to have been run.
-
-  Each version can display vehicle bounding boxes, IDs, class labels, confidence scores, and short trajectory trails that fade and vary in thickness to indicate the recency of the movement. If an input `video_file.csv` file is available in the same directory as the input video, i.e., the converted flight logs, vehicle speed and lane information can also be displayed.
-
-- **video_file.csv** (`<stem><georeferenced_postfix>.csv`): Contains the georeferenced vehicle trajectories in a tabular format. This file includes both geographic and local coordinates, estimated real-world dimensions, kinematic data, road section, and lane information. The columns are:
-
-  ```text
-  Vehicle_ID, [Timestamp,] Frame_Number, Ortho_X, Ortho_Y, Local_X, Local_Y, Latitude, Longitude, Vehicle_Length, Vehicle_Width, Vehicle_Class, Vehicle_Speed, Vehicle_Acceleration, Road_Section, Lane_Number, Visibility[, Is_Interpolated]
-  ```
-
-    where:
-  - `Vehicle_ID`: Unique vehicle identifier.
-  - `Timestamp`: Timestamp of the frame (YYYY-MM-DD HH:MM:SS.ms). Present only when a flight-log CSV with timestamps is available alongside the video.
-  - `Frame_Number`: Video frame index corresponding to this detection.
-  - `Ortho_X`, `Ortho_Y`: X and Y coordinates of the vehicle centroid in the orthophoto's pixel coordinate system.
-  - `Local_X`, `Local_Y`: X and Y coordinates of the vehicle centroid in a local projected coordinate system (e.g., EPSG:5186 for KGD2002 / Central Belt 2010 used in the Songdo experiment).
-  - `Latitude`, `Longitude`: Geographic coordinates of the vehicle centroid (WGS84).
-  - `Vehicle_Length`, `Vehicle_Width`: Estimated vehicle dimensions in meters.
-  - `Vehicle_Class`: Vehicle class identifier (0: car (incl. vans), 1: bus, 2: truck, 3: motorcycle).
-  - `Vehicle_Speed`: Estimated vehicle speed in km/h.
-  - `Vehicle_Acceleration`: Estimated vehicle acceleration in m/s$^2$.
-  - `Road_Section`: Identifier for the road segment the vehicle is on.
-  - `Lane_Number`: Identifier for the lane the vehicle is in.
-  - `Visibility`: Boolean indicating if the vehicle's bounding box is fully visible within the frame.
-  - `Is_Interpolated` *(optional)*: Present only when extraction was run with `--interpolate` (`extraction.interpolate: true`). `0` = real detection, `1` = row synthesized by linear interpolation at the extraction stage to fill a frame gap; propagated from the `.txt` tracks file.
-
-- **video_file_lines.gpkg** / **video_file_points.geojson** (`<stem>_<lines|points>[_local].<gpkg|geojson>`): Written on demand by `geotrax export` next to the georeferenced CSV (or under `--output-folder`), for use in QGIS, ArcGIS, kepler.gl, or any GDAL-based tool. `lines` holds one LineString per vehicle, time-ordered, with the attributes `Vehicle_ID`, `Vehicle_Class`, `Num_Points`, `Start_Time`/`End_Time`, `Start_Frame`/`End_Frame`, `Mean_Speed`/`Max_Speed` (km/h), and the median `Vehicle_Length`/`Vehicle_Width` (m); aggregated datasets add `Drone_ID` and order by `Local_Time` instead of `Frame_Number`. `points` holds one Point per CSV row with every CSV column. Coordinates are WGS84 (EPSG:4326) by default, or `Local_X`/`Local_Y` in `georef.transformation.target_crs` with `--crs local` (marked by the `_local` suffix). See *Viewing exported GIS files* below for how to open them.
-
-- **video_file_geo_transf.txt** (`<stem><geo_transform_postfix>.txt`): Contains the 3x3 georeferencing transformation matrix (homography) that maps points from the video's reference frame to the orthomap. The format is a comma-separated list of the 9 matrix elements:
-
-  ```text
-  h11, h12, h13, h21, h22, h23, h31, h32, h33
-  ```
-
-**Note:** *All output files are saved in the configured output folder (default: `results/` sub-folder next to the input video); nothing is written next to the input video, so the source dataset can stay read-only. Trajectory and distribution plots are always written to a `plots/` sub-folder inside the output folder.*
-
-</details>
+The `geotrax` CLI provides one subcommand per stage: `batch` (primary entry point), `extract`, `georeference`, `visualize`, `plot`, `aggregate`, `export`, and `config`. Run `geotrax <subcommand> -h` for its options (`python -m geotrax` works identically).
 
 <a id="geo-export"></a>
-<details>
-<summary><b>🗺️ Viewing exported GIS files (GeoPackage / GeoJSON)</b></summary>
-
-`geotrax export` writes two open, widely supported vector formats:
-
-| Format | What it is | Best for |
-|---|---|---|
-| **GeoPackage** (`.gpkg`, default) | [OGC open standard](https://www.geopackage.org/): a single SQLite file that can hold large datasets in any coordinate system | Desktop GIS, large datasets, the local projected CRS (`--crs local`) |
-| **GeoJSON** (`.geojson`) | [RFC 7946](https://datatracker.ietf.org/doc/html/rfc7946) plain-text JSON in WGS84 | Web maps, quick sharing, small to medium datasets |
-
-Both open in QGIS, ArcGIS Pro, GDAL/OGR, Python (GeoPandas), R (`sf`), and DuckDB (spatial extension); GeoJSON also opens in most web map tools. The examples below use the sample export shipped in [`data/results-full/`](data/README.md#gis-export) (144 vehicle trajectories from the 5-second demo clip). Each LineString is one vehicle, with `Vehicle_ID`, `Vehicle_Class`, `Start_Time`/`End_Time`, `Mean_Speed`/`Max_Speed` (km/h), and `Vehicle_Length`/`Vehicle_Width` (m) as attributes.
-
-**In the browser (no install)**
-
-- **GitHub**: open [`U_video_cut_lines.geojson`](data/results-full/U_video_cut_lines.geojson) in the repository. GitHub renders any `.geojson` file as an interactive map; click a line to see its attributes.
-- **[geojson.io](https://geojson.io/)** (open source): drag and drop a `.geojson` file onto the map to view it on a basemap, inspect each feature's attributes, or edit it.
-- **[kepler.gl](https://kepler.gl/demo)** (open source, OpenJS Foundation): made for large movement datasets. Data is processed locally in your browser.
-  1. Open [kepler.gl/demo](https://kepler.gl/demo) and drag `U_video_cut_lines.geojson` into the **Add Data** dialog. A line layer appears on the basemap.
-  2. In the layer panel, open the layer and set **Stroke Color** to be based on `Mean_Speed` (speed heat map) or `Vehicle_Class`.
-  3. For playback, also add the georeferenced CSV (`data/results-full/U_video_cut.csv`). kepler.gl builds a point layer from its `Latitude`/`Longitude` columns; under **Filters**, add a filter on `Timestamp` to get a time slider with a play button that animates the vehicles.
-
-**On the desktop: [QGIS](https://qgis.org/)** (free and open source, Windows/macOS/Linux)
-
-1. Drag `U_video_cut_lines.gpkg` (or the `.geojson`) into the QGIS window.
-2. Add a basemap: in the **Browser** panel, expand **XYZ Tiles** and double-click **OpenStreetMap**, then drag it below the trajectory layer in the **Layers** panel.
-3. Color by attribute: right-click the layer, choose **Properties > Symbology**, select **Graduated** with value `Mean_Speed` (or **Categorized** with `Vehicle_Class`), and click **Classify**.
-4. Click any trajectory with the **Identify Features** tool to see its attributes. A `_local` export (EPSG:5186 here) is reprojected on the fly, so it overlays the same basemap.
-
-**In Python** (GeoPandas, Matplotlib, and Folium are already installed with geo-trax)
-
-```python
-import geopandas as gpd
-import matplotlib.pyplot as plt
-
-lines = gpd.read_file("data/results-full/U_video_cut_lines.gpkg")  # the .geojson reads the same way
-print(lines.head())
-print(lines.groupby("Vehicle_Class")["Mean_Speed"].mean())  # mean speed per class [km/h]
-
-lines.plot(column="Mean_Speed", cmap="viridis", legend=True, figsize=(8, 8))  # static map colored by speed
-plt.show()
-
-# Interactive web map, saved as HTML to open in any browser (in a Jupyter notebook, a bare `m` shows it inline)
-m = lines.explore(column="Vehicle_Class", categorical=True, tooltip=["Vehicle_ID", "Mean_Speed", "Vehicle_Length"])
-m.save("U_video_cut_map.html")
-```
-
-**Converting to other formats** with [GDAL's `ogr2ogr`](https://gdal.org/programs/ogr2ogr.html) (bundled with QGIS, or `conda install -c conda-forge gdal`), e.g. KML for Google Earth or a Shapefile for older GIS tools:
-
-```bash
-ogr2ogr -f KML U_video_cut_lines.kml data/results-full/U_video_cut_lines.gpkg
-ogr2ogr -f "ESRI Shapefile" U_video_cut_lines.shp data/results-full/U_video_cut_lines.gpkg
-```
-
-</details>
+The [documentation site](https://rfonod.github.io/geo-trax/) has a guide per stage, plus guides to [configuration](https://rfonod.github.io/geo-trax/guides/configuration/) and to preparing [your own data](https://rfonod.github.io/geo-trax/guides/own-data/). The stage guides have more examples, the [output file formats](https://rfonod.github.io/geo-trax/guides/extract/#outputs), the [rotated-box visualization modes](https://rfonod.github.io/geo-trax/guides/visualize/#rotated-boxes-modes-3-and-4), [master frames](https://rfonod.github.io/geo-trax/guides/georeference/#master-frames), and [how to view the GIS exports](https://rfonod.github.io/geo-trax/guides/export/#viewing-exported-files) in the browser, QGIS, or Python. The site's [CLI reference](https://rfonod.github.io/geo-trax/reference/cli/) and [config reference](https://rfonod.github.io/geo-trax/reference/config/) are generated from the code and the shipped config. See [data/README.md](data/README.md) for sample data, including a [sample GIS export](data/README.md#gis-export) of the demo clip.
 
 ## Real-World Deployment: The Songdo Experiment
 
@@ -858,8 +405,8 @@ If you use **Geo-trax** in your research or software, please cite:
   author = {Fonod, Robert},
   title = {Geo-trax: A Comprehensive Framework for Georeferenced Vehicle Trajectory Extraction from Drone Imagery},
   year = {2026},
-  month = sep,
-  version = {1.5.1},
+  month = oct,
+  version = {1.6.0},
   license = {MIT},
   doi = {10.5281/zenodo.12119542},
   url = {https://github.com/rfonod/geo-trax}

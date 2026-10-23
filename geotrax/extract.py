@@ -31,7 +31,7 @@ Options:
     --output-folder, -of <str> : Root folder for outputs (bare name or absolute path).
                                 Defaults to cfg -> output -> folder (historical default: 'results').
     --log-path, -lp <str>     : Where to write logs: a directory or a full file path; defaults to a platform-specific log directory.
-    --verbose, -v             : Set print verbosity level to INFO (default: WARNING).
+    --verbose, -v             : Also show INFO messages on the console (default: warnings and key notices only).
 
 Processing Options:
     --model, -m <str>         : Detection model to use — a local file path OR an
@@ -49,8 +49,9 @@ Processing Options:
                               is_interpolated column to the .txt output (0 = real detection, 1 = synthetic).
                               Defaults to cfg -> extraction -> interpolate (default: false).
     --sahi / --no-sahi        : Detect via SAHI sliced inference (improves small-object recall; requires
-                              'pip install geo-trax[sahi]'; roughly 5x slower per frame). Slicing parameters
-                              live in cfg -> extraction -> sahi. Defaults to cfg -> extraction -> sahi -> enable.
+                              python -m pip install 'geo-trax[sahi]'; roughly 10x the per-frame detection cost
+                              on 4K with the default slices). Slicing parameters live in cfg -> extraction -> sahi.
+                              Defaults to cfg -> extraction -> sahi -> enable.
     --stab-gpu / --no-stab-gpu, -sg : CUDA-accelerate stabilization image matching (requires a CUDA-enabled
                               OpenCV build; no CPU fallback). Defaults to cfg -> stabilo -> gpu.
     --stab-gpu-device-id, -sgid <int> : CUDA device index used when stabilization GPU is enabled.
@@ -854,7 +855,9 @@ def save_results(tracks: np.ndarray, transforms: np.ndarray, config: dict, logge
     interrupted or failed save therefore never leaves a tracks file that later stages would pair
     with the new metadata. Every file is written atomically (atomic_output). A transforms file this
     run does not write (stabilization or save_stab off) is removed, since visualize would otherwise
-    warp the new tracks with the old matrices. With no tracks, no tracks file is left at all.
+    warp the new tracks with the old matrices. With no tracks, no tracks file is left at all; the
+    metadata then records zero vehicles, which is how later stages and re-runs tell a video in which
+    nothing was detected from one that was never extracted (see file_utils.no_vehicles_detected).
     """
     source = config['main']['args'].source
     save_dir = increment_path(get_output_dir(source, out_cfg), exist_ok=True, mkdir=True)
@@ -887,7 +890,7 @@ def save_results(tracks: np.ndarray, transforms: np.ndarray, config: dict, logge
             f"(stabilization or save_stab disabled, or none computed), so it no longer matches the tracks."
         )
 
-    metadata = convert_to_serializable(_build_run_metadata(config, save_dir))
+    metadata = convert_to_serializable(_build_run_metadata(config, save_dir, tracks))
     with atomic_output(info_yaml_file) as tmp_file, open(tmp_file, 'w') as f:
         yaml.dump(metadata, f, default_flow_style=False, sort_keys=False)
     logger.info(f"Video info and configs saved to: '{info_yaml_file.resolve()}'")
@@ -903,12 +906,13 @@ def save_results(tracks: np.ndarray, transforms: np.ndarray, config: dict, logge
     logger.info(f"Tracking results saved to: '{tracks_txt_file.resolve()}'")
 
 
-def _build_run_metadata(config: dict, save_dir: Path) -> dict:
+def _build_run_metadata(config: dict, save_dir: Path, tracks: np.ndarray) -> dict:
     """Build a structured, human-readable record of the configuration this run actually used.
 
     Reads the config dict, which ``sync_args_with_config`` has already reconciled with the CLI
     flags and ``--set`` overrides, so the saved file reflects the run rather than the config file
-    it started from.
+    it started from. ``results`` records how many vehicles and track rows the run saved; a count of
+    zero marks a video in which nothing was detected, since no tracks file is written for it.
     """
     main = config['main']
     ul = config['ultralytics']
@@ -923,6 +927,10 @@ def _build_run_metadata(config: dict, save_dir: Path) -> dict:
             'source': str(args.source),
             'config': str(args.cfg),
             'output_folder': str(save_dir),
+        },
+        'results': {
+            'vehicles': int(np.unique(tracks[:, 1]).size) if tracks.size else 0,
+            'rows': int(tracks.shape[0]) if tracks.size else 0,
         },
         'model': {
             'configured': main.get('model_configured'),
@@ -978,7 +986,7 @@ def add_processing_args(group) -> dict:
     add_cfg_arg(group, '--interpolate', action=argparse.BooleanOptionalAction, cfg='extraction.interpolate', paths=paths,
                 help='Fill per-track frame gaps with linear interpolation; adds is_interpolated column to output.')
     add_cfg_arg(group, '--sahi', action=argparse.BooleanOptionalAction, cfg='extraction.sahi.enable', paths=paths,
-                help="Detect via SAHI sliced inference for improved small-object recall (requires: pip install 'geo-trax[sahi]'). Slicing parameters live in cfg -> extraction -> sahi.")
+                help="Detect via SAHI sliced inference for improved small-object recall (requires: python -m pip install 'geo-trax[sahi]'). Slicing parameters live in cfg -> extraction -> sahi.")
     add_cfg_arg(group, '--stab-gpu', '-sg', action=argparse.BooleanOptionalAction, cfg='stabilo.gpu', paths=paths,
                 help='CUDA-accelerate stabilization (requires a CUDA-enabled OpenCV build; no CPU fallback).')
     add_cfg_arg(group, '--stab-gpu-device-id', '-sgid', type=int, cfg='stabilo.gpu_device_id', paths=paths,
@@ -990,9 +998,12 @@ def add_processing_args(group) -> dict:
     return paths
 
 
-def parse_cli_args() -> argparse.Namespace:
+def _build_parser() -> tuple:
     """
-    Parse command-line arguments.
+    Build the extract parser and its ``dest -> CfgArg`` map.
+
+    Split out of ``parse_cli_args`` so that the documentation site renders its CLI reference
+    from the same parser the command uses (see docs/_scripts/gen_reference.py).
     """
     parser = argparse.ArgumentParser(description='Vehicle Detection, Tracking, and Stabilization Pipeline')
 
@@ -1007,6 +1018,14 @@ def parse_cli_args() -> argparse.Namespace:
         "pipeline config (run 'geotrax config copy').")
     cfg_paths |= add_processing_args(processing)
 
+    return parser, cfg_paths
+
+
+def parse_cli_args() -> argparse.Namespace:
+    """
+    Parse command-line arguments.
+    """
+    parser, cfg_paths = _build_parser()
     return finalize_cli_args(parser, cfg_paths)
 
 def main() -> None:

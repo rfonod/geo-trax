@@ -5,13 +5,16 @@
 
 import argparse
 import logging
+import re
 from pathlib import Path
 
 import pytest
 
 from geotrax.utils.cli_utils import CfgArg, add_cfg_arg, add_common_args, finalize_cli_args
+from geotrax import CFG_DIR
 from geotrax.utils.config_utils import (
     _MISSING,
+    _NULLABLE_PATHS,
     _get_by_path,
     _iter_leaf_paths,
     _set_by_path,
@@ -438,3 +441,49 @@ def test_default_note_none_suppresses_generation():
     add_cfg_arg(parser, '--thing', cfg='input.ortho_folder', paths={}, help='Phrased by hand.',
                 default_note=None)
     assert 'Defaults to cfg' not in _help(parser)
+
+
+# --- keys documented as nullable despite a non-null default ------------------
+
+@pytest.mark.parametrize('key, path', [
+    ('cutout_width_px', ('georef', 'transformation', 'cutout_width_px')),
+    ('ultralytics.line_width', ('ultralytics', 'line_width')),
+    ('workspace', ('ultralytics', 'workspace')),
+])
+def test_null_is_accepted_for_a_key_documented_as_nullable(key, path):
+    """cutout_width_px ships as 15000, but its comment documents null; --set used to reject it."""
+    full = load_config('default', logger)
+    apply_cli_overrides(full, [f'{key}=null'], None, logger)
+    node = full
+    for part in path:
+        node = node[part]
+    assert node is None
+
+
+def test_null_is_still_rejected_for_a_key_that_cannot_be_null():
+    with pytest.raises(SystemExit):
+        apply_cli_overrides(load_config('default', logger), ['conf=null'], None, logger)
+
+
+def _documented_nullable_leaves():
+    """Leaves of default.yaml with a non-null value whose inline comment documents null as valid."""
+    found, stack = set(), []
+    for line in (CFG_DIR / 'default.yaml').read_text(encoding='utf-8').splitlines():
+        m = re.match(r'^(\s*)([A-Za-z0-9_-]+):\s*([^#]*?)\s*(#.*)?$', line)
+        if not m:
+            continue
+        indent, key, value, comment = len(m.group(1)), m.group(2), m.group(3), m.group(4) or ''
+        while stack and stack[-1][0] >= indent:
+            stack.pop()
+        if not value:
+            stack.append((indent, key))
+            continue
+        documents_null = re.search(r'\bnull\b', comment) or re.search(r'\([^()]*, optional\)', comment)
+        if documents_null and value not in ('null', '~'):
+            found.add('.'.join([k for _, k in stack] + [key]))
+    return found
+
+
+def test_nullable_paths_match_the_config_comments():
+    """A new key documented as nullable must be added to _NULLABLE_PATHS, or --set KEY=null rejects it."""
+    assert _documented_nullable_leaves() == set(_NULLABLE_PATHS)
