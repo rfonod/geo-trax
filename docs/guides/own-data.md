@@ -135,13 +135,16 @@ A few defaults are tuned for the Songdo experiment:
 | Key | Shipped value | Set it to |
 |---|---|---|
 | [`georef.transformation.target_crs`](../reference/config/georef.md#georef.transformation.target_crs) | `epsg:5186` (Korea 2000 / Central Belt 2010) | a projected CRS in meters for your area, e.g. its UTM zone: `epsg:326NN` north of the equator, `epsg:327NN` south |
-| [`extraction.dimension_estimation.gsd`](../reference/config/extraction.md#extraction.dimension_estimation.gsd) | `0.02725` m/px (DJI Mavic 3, 140 to 150 m, 4K) | the ground sample distance of your footage |
+| [`extraction.dimension_estimation.gsd`](../reference/config/extraction.md#extraction.dimension_estimation.gsd) | `0.0545` m/px (DJI Mavic 3, 140 to 150 m, 4K) | the ground sample distance of your footage |
 | [`georef.transformation.cutout_width_px`](../reference/config/georef.md#georef.transformation.cutout_width_px) | `15000` | only with cut-outs; [see above](#cut-outs-of-a-larger-orthophoto) |
 
 !!! warning "Set `target_crs` outside South Korea"
     `Local_X` and `Local_Y` are written in `target_crs`, and speeds, accelerations and vehicle dimensions are measured in it. EPSG:5186 is only accurate in South Korea; elsewhere every distance comes out too long: a true 10 m measures 12.8 m in Vienna and 15.2 m in Los Angeles. geo-trax measures the distortion of `target_crs` at each location and warns when it exceeds 1%, naming the site's UTM zone, e.g. `--set target_crs=epsg:32633` for Vienna. A `target_crs` that is not projected in metres stops the run.
 
-The GSD is used only to pick the frames for estimating vehicle dimensions (it converts [`r0`](../reference/config/extraction.md#extraction.dimension_estimation.r0) from meters to pixels); the dimensions themselves are measured through the orthophoto. To find it, divide a known ground length, such as a lane width, by its length in pixels in a video frame.
+The GSD is used only to pick the frames for estimating vehicle dimensions (it converts [`r0`](../reference/config/extraction.md#extraction.dimension_estimation.r0), 2.5 m by default, from meters to pixels); the dimensions themselves are measured through the orthophoto. To find it, divide a known ground length, such as a lane width, by its length in pixels in a video frame.
+
+!!! note "GSD default corrected in v1.6.1"
+    Up to v1.6.0 the configs shipped `gsd: 0.02725` and `r0: 1.25`, about half the true GSD of the Songdo footage (measured at 0.055 m/px). v1.6.1 doubled both, so `r0` still spans the same 45.87 px and every output is unchanged. If you set one of the two by hand, in a copied config or with `--set`, rescale the other with it: a config that sets only `gsd` now gets `r0: 2.5`.
 
 Set these in a [copied config](configuration.md#your-own-config), or for one run:
 

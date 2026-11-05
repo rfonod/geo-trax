@@ -36,7 +36,7 @@ geotrax extract path/to/video.mp4 --sahi
 | Short tracks | [`extraction.min_track_length`](../reference/config/extraction.md#extraction.min_track_length) (no flag; use `--set min_track_length=5`) |
 | Dimension estimation | [`extraction.dimension_estimation`](../reference/config/extraction.md#extractiondimension_estimation), including the ground sample distance `gsd` |
 
-The `gsd` default (0.02725 m/px) is tuned for a DJI Mavic 3 at 140 to 150 m and 4K; re-tune it for other altitudes or cameras, as described in [Your own data](own-data.md#settings-to-adapt).
+The `gsd` default (0.0545 m/px) matches a DJI Mavic 3 at 140 to 150 m and 4K; re-tune it for other altitudes or cameras, as described in [Your own data](own-data.md#settings-to-adapt).
 
 The stabilization reference frame is the first processed frame, `cut_frame_left`. It is recorded in the run metadata, and [georeferencing](georeference.md) and [visualization](visualize.md) read it from there, so they stay consistent with the stabilized coordinates even if they run with a different frame range.
 

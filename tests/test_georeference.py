@@ -34,6 +34,7 @@ from geotrax.georeference import (
     read_ortho_config_file,
 )
 from geotrax.utils import registration
+from geotrax.utils.config_utils import load_config
 from geotrax.utils.registration import estimate_homography
 
 logger = logging.getLogger(__name__)
@@ -130,6 +131,26 @@ def test_compute_homography_forwards_arbitrary_matching_keys():
     assert kwargs['device'] == 'cuda'
     assert kwargs['downsample_ratio'] == 0.25
     assert kwargs['loftr_weights'] == 'indoor'
+
+
+def test_known_stabilizer_kwargs_come_from_stabilo():
+    """The accepted keys are stabilo's own, and cover geo-trax's defaults and the shipped matching block."""
+    assert registration.KNOWN_STABILIZER_KWARGS == registration.Stabilizer.configurable_keys()
+    shipped = load_config('default', logger)['georef']['matching']
+    for keys in (registration.DEFAULT_STABILIZER_KWARGS, registration.FIXED_STABILIZER_KWARGS, shipped):
+        assert set(keys) <= registration.KNOWN_STABILIZER_KWARGS
+
+
+def test_estimate_homography_warns_only_about_keys_stabilo_does_not_know(caplog):
+    """A valid stabilo key that georef.matching does not ship passes silently; a typo is flagged."""
+    img = np.zeros((4, 4), dtype=np.uint8)
+    with patch('geotrax.utils.registration.Stabilizer', return_value=_mock_stabilizer()):
+        with caplog.at_level(logging.WARNING):
+            estimate_homography(img, img, logger, akaze_threshold=0.001, mask_margin_ratio=0.1)
+        assert 'Unrecognized registration key' not in caplog.text
+        with caplog.at_level(logging.WARNING):
+            estimate_homography(img, img, logger, max_feature=1000)
+    assert "Unrecognized registration key(s) ['max_feature']" in caplog.text
 
 
 def test_estimate_homography_pins_registration_geometry():

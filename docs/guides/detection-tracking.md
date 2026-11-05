@@ -4,7 +4,7 @@
 
 ## Detection model
 
-The default model is geo-trax's YOLOv8s, trained on bird's-eye view footage taken from 140 to 150 m in 4K. It downloads from [Hugging Face](https://huggingface.co/rfonod/geo-trax) on first use and is cached by `huggingface_hub` (`~/.cache/huggingface/hub` by default; set `HF_HOME` or `HF_HUB_CACHE` to move it). Its training data and per-class test results are on the model card. At other altitudes or resolutions vehicles appear at other sizes; if small ones are missed, try [SAHI](sahi.md) or a model trained on your footage.
+The default model is geo-trax's YOLOv8s, trained on bird's-eye view footage taken from 140 to 150 m in 4K. It downloads from [Hugging Face](https://huggingface.co/rfonod/geo-trax) on first use and is cached by `huggingface_hub` (`~/.cache/huggingface/hub` by default; set `HF_HOME` or `HF_HUB_CACHE` to move it). Its test results are [below](#detection-performance), and its training data is described on the model card. At other altitudes or resolutions vehicles appear at other sizes; if small ones are missed, try [SAHI](sahi.md) or a model trained on your footage.
 
 Any Ultralytics-compatible model can replace it, via `--model` or [`extraction.model`](../reference/config/extraction.md#extraction.model):
 
@@ -15,6 +15,36 @@ geotrax extract video.mp4 --model hf://<org>/<repo>@<revision>/<file>.pt  # pinn
 ```
 
 Training and export scripts for custom detectors are in [`train/`](https://github.com/rfonod/geo-trax/blob/main/train/README.md) in the source repository.
+
+### Detection performance
+
+The table reproduces Table 3 of the [paper](https://doi.org/10.1016/j.trc.2025.105205): the default model on the [Songdo Vision v1](https://doi.org/10.5281/zenodo.13828408) test split (1,084 images, 55,124 vehicles). The bold values after the slash are the shipped model, whose training included the Songdo Vision train split. The values before the slash come from the same training without that split, which shows what the curated, high-quality annotations add.
+
+| Class | Precision | Recall | mAP@50 | mAP@50-95 |
+|---|---|---|---|---|
+| All | 0.766 / **0.911** | 0.690 / **0.935** | 0.742 / **0.951** | 0.503 / **0.711** |
+| Car (incl. vans) | 0.934 / **0.979** | 0.971 / **0.981** | 0.970 / **0.992** | 0.702 / **0.835** |
+| Bus | 0.862 / **0.952** | 0.853 / **0.977** | 0.906 / **0.988** | 0.690 / **0.826** |
+| Truck | 0.737 / **0.887** | 0.410 / **0.916** | 0.593 / **0.935** | 0.421 / **0.722** |
+| Motorcycle | 0.532 / **0.827** | 0.527 / **0.866** | 0.499 / **0.888** | 0.197 / **0.463** |
+
+Cars and buses are detected almost perfectly. Trucks and motorcycles gain the most from the Songdo Vision data; truck recall, for example, rises from 0.41 to 0.92. Motorcycles remain the hardest class: they are small and rare in the test set (805 of the 55,124 vehicles), and they account for most of the gap in mAP@50-95.
+
+The plots below are Figure 4 of the paper, for the shipped model on the same test split. In the confusion matrix each column is a true class, so the bottom row is the share of each class that was missed, and the right-hand column splits the false positives (detections with no matching ground-truth box) by predicted class. The precision-recall curves give the mAP@50 of each class in the legend.
+
+<div class="figure-pair" markdown>
+<figure markdown="span">
+  ![Normalized confusion matrix of the default model on the Songdo Vision v1 test split](../images/model/confusion_matrix_normalized.png)
+  <figcaption>Normalized confusion matrix</figcaption>
+</figure>
+<figure markdown="span">
+  ![Per-class precision-recall curves of the default model on the Songdo Vision v1 test split](../images/model/pr_curve.png)
+  <figcaption>Precision-recall curves</figcaption>
+</figure>
+</div>
+
+!!! note "Songdo Vision v2"
+    These results were measured on Songdo Vision v1. [Songdo Vision v2](https://doi.org/10.5281/zenodo.21728430) is an annotation-quality release whose test split holds 55,528 vehicles, so the numbers above should not be compared directly with results reported on v2. The model has not been retrained or re-evaluated on v2.
 
 ## Classes
 

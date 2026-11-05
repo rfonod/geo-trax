@@ -2,6 +2,11 @@
 
 `geotrax georeference` is stage 2. It registers the video's stabilization reference frame against a north-up orthophoto of the same location, maps every stabilized track point through that homography, and writes a per-vehicle CSV with orthophoto-pixel, local-CRS and WGS84 coordinates, real-world dimensions, speed, acceleration, and (with a segmentation file) road section and lane. It needs the tracks from [extract](extract.md).
 
+<figure markdown="span">
+  [![The georeferencing steps on the sample video: the reference frame is matched to the master frame, the master frame to the orthophoto, and orthophoto pixels are converted to world coordinates](../images/georeference/georeferencing_illustration.webp)](../images/georeference/georeferencing_illustration.webp)
+  <figcaption>Georeferencing the sample video. <b>1</b>: the video's reference frame is registered to the location's master frame, for every video. <b>2</b>: the master frame is registered to the north-up orthophoto once per location, and the result is cached. Together the two homographies map every stabilized track point to orthophoto pixels. <b>3</b>: the orthophoto parameters convert those pixels to latitude and longitude, and from there to local coordinates. The lines are a sample of the RANSAC inliers, the boxes are the default model's detections, and one bus is followed through every step. Select the image for full size.</figcaption>
+</figure>
+
 ## Examples
 
 ```bash
@@ -41,7 +46,7 @@ Two coordinate systems are involved. The orthophoto's georeferencing must be in 
 
 ## Master frames
 
-When georeferencing, geo-trax can route each video's homography through a shared *master frame* per location ID. A master frame is a high-quality, near-nadir BEV frame chosen once per location (see [`tools/find_master_frames.py`](https://github.com/rfonod/geo-trax/blob/main/tools/find_master_frames.py)) and used instead of registering every video's reference frame directly against the orthophoto. The mapping is split into two homographies:
+When georeferencing, geo-trax can route each video's homography through a shared *master frame* per location ID. A master frame is a high-quality, near-nadir BEV frame chosen once per location (see [`tools/find_master_frames.py`](https://github.com/rfonod/geo-trax/blob/main/tools/find_master_frames.py)) and used instead of registering every video's reference frame directly against the orthophoto. The mapping is split into two homographies, steps 1 and 2 in the figure above:
 
 - `reference → master`, recomputed for every video;
 - `master → orthophoto`, computed **once per location ID and cached** next to the master frame.

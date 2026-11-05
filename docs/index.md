@@ -24,7 +24,7 @@ python -m pip install geo-trax
 | `export` | ONNX model export | `python -m pip install 'geo-trax[export]'` |
 | `dev` | Test and lint tooling | `python -m pip install 'geo-trax[dev]'` |
 
-The default detector downloads from [Hugging Face](https://huggingface.co/rfonod/geo-trax) on first use, and geo-trax checks PyPI for a newer release at most once a day ([opt out](guides/configuration.md#update-check)). Other environments (uv, conda, Poetry) and editable installs are covered in the [README](https://github.com/rfonod/geo-trax#install); CUDA-accelerated image matching has its own [guide](guides/gpu.md).
+The default detector downloads from [Hugging Face](https://huggingface.co/rfonod/geo-trax) on first use, and geo-trax checks PyPI for a newer release at most once a day ([opt out](guides/configuration.md#update-check)). Other environments (uv, conda, Poetry) are covered in the [README](https://github.com/rfonod/geo-trax#install), and editable installs from a source checkout in [Development](development.md#install-from-source); CUDA-accelerated image matching has its own [guide](guides/gpu.md).
 
 ## Quickstart
 
@@ -47,4 +47,5 @@ geotrax export path/to/DATASET/                               # GIS layers for Q
 - **[Config reference](reference/config/index.md)**: every key of the pipeline config with its default, generated from the shipped file.
 - **[CLI reference](reference/cli/index.md)**: every flag of every `geotrax` subcommand and the config key it overrides.
 - **[API reference](reference/api/index.md)**: the registration, config and file helpers that the stages share.
+- **[Development](development.md)**: installing from source, running the tests and the linter, and building this site.
 - **[Citation](citation.md)**: the journal article, the software archive and the datasets.

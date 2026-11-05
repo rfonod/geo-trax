@@ -74,15 +74,12 @@ DEVICE_CHOICES = list(Stabilizer.VALID_DEVICES)
 DL_DETECTORS = set(Stabilizer.DL_DETECTORS)
 """The learning-based (kornia) detectors, which run on a torch device instead of OpenCV."""
 
-KNOWN_STABILIZER_KWARGS = (
-    set(DEFAULT_STABILIZER_KWARGS)
-    | set(FIXED_STABILIZER_KWARGS)
-    | {'device', 'loftr_weights', 'loftr_confidence', 'disk_weights', 'dedode_detector_weights', 'dedode_descriptor_weights'}
-)
+KNOWN_STABILIZER_KWARGS = Stabilizer.configurable_keys()
 """Every key `estimate_homography` forwards to the Stabilizer without a warning.
 
-Mirrors `georef.matching` in `default.yaml`; extend it together with that block when a new stabilo
-option is adopted.
+Taken from stabilo's `Stabilizer.configurable_keys()`, the keys of its own default config, so it
+covers every option the installed stabilo accepts, including those `georef.matching` does not ship
+(e.g. `akaze_threshold`), and needs no update when stabilo gains one.
 """
 
 
@@ -114,9 +111,10 @@ def estimate_homography(img_src: np.ndarray, img_dst: np.ndarray, logger: loggin
         logger: Receives the warnings about ignored keys, capped feature counts and retries.
         **stabilizer_kwargs: Any [`Stabilizer`](https://rfonod.github.io/stabilo/) parameter,
             typically the whole `georef.matching` block. Applied on top of
-            [`DEFAULT_STABILIZER_KWARGS`][geotrax.utils.registration.DEFAULT_STABILIZER_KWARGS],
-            so a key geo-trax does not know is still passed to stabilo, with a warning in case it
-            is a typo. The keys in
+            [`DEFAULT_STABILIZER_KWARGS`][geotrax.utils.registration.DEFAULT_STABILIZER_KWARGS].
+            A key outside
+            [`KNOWN_STABILIZER_KWARGS`][geotrax.utils.registration.KNOWN_STABILIZER_KWARGS] is
+            most likely a typo: it is passed on with a warning, and stabilo ignores it. The keys in
             [`FIXED_STABILIZER_KWARGS`][geotrax.utils.registration.FIXED_STABILIZER_KWARGS] are
             pinned, and `max_features` is capped at
             [`DL_MAX_FEATURES_CAP`][geotrax.utils.registration.DL_MAX_FEATURES_CAP] for the
@@ -153,7 +151,7 @@ def estimate_homography(img_src: np.ndarray, img_dst: np.ndarray, logger: loggin
     """
     unknown = sorted(set(stabilizer_kwargs) - KNOWN_STABILIZER_KWARGS)
     if unknown:
-        logger.warning(f"Passing unrecognized registration key(s) {unknown} to stabilo as is; check cfg -> georef -> "
+        logger.warning(f"Unrecognized registration key(s) {unknown}, which stabilo ignores; check cfg -> georef -> "
                        f"matching for typos.")
 
     kwargs = {**DEFAULT_STABILIZER_KWARGS, **stabilizer_kwargs}

@@ -154,4 +154,5 @@ nav:
       - config_utils: reference/api/config_utils.md
       - file_utils: reference/api/file_utils.md
       - logging_utils: reference/api/logging_utils.md
+  - Development: development.md
   - Citation: citation.md

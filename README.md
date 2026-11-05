@@ -93,7 +93,7 @@ python -m pip install -e '.[docs]'     # documentation site: mkdocs serve / mkdo
 # poetry install --extras docs
 ```
 
-Installed geo-trax from PyPI rather than a checkout? Use the non-editable form instead: `python -m pip install 'geo-trax[dev]'` (likewise `'geo-trax[export]'`, `'geo-trax[sahi]'`).
+Installed geo-trax from PyPI rather than a checkout? Use the non-editable form instead: `python -m pip install 'geo-trax[dev]'` (likewise `'geo-trax[export]'`, `'geo-trax[sahi]'`). Running the tests and the linter and building the documentation site are covered in the [Development guide](https://rfonod.github.io/geo-trax/development/).
 
 **Optional CUDA for image matching.** The stabilization (`--stab-gpu`) and georeferencing (`--geo-gpu`) steps can be CUDA-accelerated on top of a source-built OpenCV. Installing into such an environment needs care so the CPU OpenCV wheels do not overwrite your build; see [GPU acceleration](#gpu-acceleration). (Object *detection* already uses CUDA automatically when available.)
 
@@ -176,7 +176,7 @@ The [Configuration guide](https://rfonod.github.io/geo-trax/guides/configuration
 
 ## Detection Model
 
-The default detector is **YOLOv8s** (HBB, 1920 × 1920 px, ~11 M parameters), trained on more than 19,000 annotated aerial images (~679k labeled vehicle instances) and fine-tuned on a curated, high-quality subset. It is hosted on [🤗 Hugging Face](https://huggingface.co/rfonod/geo-trax) and **downloads automatically on first use**. Results on the [Songdo Vision **v1**](https://doi.org/10.5281/zenodo.13828408) test split (1,084 images; full results in [Table 3](https://doi.org/10.1016/j.trc.2025.105205)):
+The default detector is **YOLOv8s** (HBB, 1920 × 1920 px, ~11 M parameters), trained on more than 19,000 annotated aerial images (~679k labeled vehicle instances) and fine-tuned on a curated, high-quality subset. It is hosted on [🤗 Hugging Face](https://huggingface.co/rfonod/geo-trax) and **downloads automatically on first use**. Results on the [Songdo Vision **v1**](https://doi.org/10.5281/zenodo.13828408) test split (1,084 images; the [Detection and tracking guide](https://rfonod.github.io/geo-trax/guides/detection-tracking/#detection-performance) has the full [Table 3](https://doi.org/10.1016/j.trc.2025.105205), with and without the Songdo Vision training data, and the evaluation plots):
 
 | ID | Label | Precision | Recall | mAP@50 | mAP@50-95 |
 |---|---|---|---|---|---|
@@ -374,7 +374,7 @@ The `tools/` directory provides the wrangling scripts that take you from raw foo
 - Treat `RAW/` as read-only archival storage and derive everything under `PROCESSED/`; the wrangling steps are reproducible from the raw footage.
 - The **master frame** is an intermediary coordinate system per location: aligning every flight to one shared reference frame keeps trajectories from different drones, altitudes, and viewpoints in a single consistent coordinate system.
 - Coordinates were projected to a local CRS (EPSG:5186, KGD2002 / Central Belt 2010) alongside WGS84 lat/lon; set your own CRS in the `georef:` config section.
-- Imagery was captured at ~140–150 m altitude in 4K, giving a ground sampling distance of ≈ 0.027 m/px (the default `extraction.gsd`). Re-tune the GSD for different altitudes or cameras.
+- Imagery was captured at ~140–150 m altitude in 4K, giving a ground sampling distance of ≈ 0.055 m/px (the default `extraction.dimension_estimation.gsd` is 0.0545). Re-tune the GSD for different altitudes or cameras.
 
 </details>
 
@@ -405,8 +405,8 @@ If you use **Geo-trax** in your research or software, please cite:
   author = {Fonod, Robert},
   title = {Geo-trax: A Comprehensive Framework for Georeferenced Vehicle Trajectory Extraction from Drone Imagery},
   year = {2026},
-  month = oct,
-  version = {1.6.0},
+  month = nov,
+  version = {1.6.1},
   license = {MIT},
   doi = {10.5281/zenodo.12119542},
   url = {https://github.com/rfonod/geo-trax}
