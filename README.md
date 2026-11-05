@@ -93,7 +93,7 @@ python -m pip install -e '.[docs]'     # documentation site: mkdocs serve / mkdo
 # poetry install --extras docs
 ```
 
-Installed geo-trax from PyPI rather than a checkout? Use the non-editable form instead: `python -m pip install 'geo-trax[dev]'` (likewise `'geo-trax[export]'`, `'geo-trax[sahi]'`).
+Installed geo-trax from PyPI rather than a checkout? Use the non-editable form instead: `python -m pip install 'geo-trax[dev]'` (likewise `'geo-trax[export]'`, `'geo-trax[sahi]'`). Running the tests and the linter and building the documentation site are covered in the [Development guide](https://rfonod.github.io/geo-trax/development/).
 
 **Optional CUDA for image matching.** The stabilization (`--stab-gpu`) and georeferencing (`--geo-gpu`) steps can be CUDA-accelerated on top of a source-built OpenCV. Installing into such an environment needs care so the CPU OpenCV wheels do not overwrite your build; see [GPU acceleration](#gpu-acceleration). (Object *detection* already uses CUDA automatically when available.)
 
