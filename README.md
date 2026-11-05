@@ -176,7 +176,7 @@ The [Configuration guide](https://rfonod.github.io/geo-trax/guides/configuration
 
 ## Detection Model
 
-The default detector is **YOLOv8s** (HBB, 1920 × 1920 px, ~11 M parameters), trained on more than 19,000 annotated aerial images (~679k labeled vehicle instances) and fine-tuned on a curated, high-quality subset. It is hosted on [🤗 Hugging Face](https://huggingface.co/rfonod/geo-trax) and **downloads automatically on first use**. Results on the [Songdo Vision **v1**](https://doi.org/10.5281/zenodo.13828408) test split (1,084 images; full results in [Table 3](https://doi.org/10.1016/j.trc.2025.105205)):
+The default detector is **YOLOv8s** (HBB, 1920 × 1920 px, ~11 M parameters), trained on more than 19,000 annotated aerial images (~679k labeled vehicle instances) and fine-tuned on a curated, high-quality subset. It is hosted on [🤗 Hugging Face](https://huggingface.co/rfonod/geo-trax) and **downloads automatically on first use**. Results on the [Songdo Vision **v1**](https://doi.org/10.5281/zenodo.13828408) test split (1,084 images; the [Detection and tracking guide](https://rfonod.github.io/geo-trax/guides/detection-tracking/#detection-performance) has the full [Table 3](https://doi.org/10.1016/j.trc.2025.105205), with and without the Songdo Vision training data, and the evaluation plots):
 
 | ID | Label | Precision | Recall | mAP@50 | mAP@50-95 |
 |---|---|---|---|---|---|

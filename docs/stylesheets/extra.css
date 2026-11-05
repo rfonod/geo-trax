@@ -17,3 +17,17 @@
 .md-typeset table:not([class]) td {
   vertical-align: top;
 }
+
+/* Two figures side by side, stacking on narrow screens. */
+.figure-pair {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1em;
+  justify-content: center;
+}
+
+.figure-pair figure {
+  flex: 1 1 18em;
+  min-width: 0;
+  margin: 0;
+}
