@@ -268,8 +268,8 @@ def _make_dim_config():
         'extraction': {
             'dimension_estimation': {
                 'eps': 5,
-                'r0': 3.0,
-                'gsd': 0.02725,
+                'r0': 6.0,
+                'gsd': 0.0545,
                 'theta_bar': 15,
                 'tau_c': {-1: 1.0},  # l/w >= 1.0 → all bboxes pass ratio check
             }
@@ -402,7 +402,7 @@ def _make_postprocess_config(interpolate=False, tracker_params=None):
                 'min_track_length': 3,
                 'interpolate': interpolate,
                 'dimension_estimation': {
-                    'eps': 5, 'r0': 3.0, 'gsd': 0.02725, 'theta_bar': 15, 'tau_c': {-1: 1.0},
+                    'eps': 5, 'r0': 6.0, 'gsd': 0.0545, 'theta_bar': 15, 'tau_c': {-1: 1.0},
                 },
             },
             'tracker_active': 'botsort',

@@ -111,9 +111,9 @@ extraction:
     postprocess_match_threshold: 0.5 # Overlap threshold above which two detections are merged; [0.0, 1.0]
     class_agnostic: true             # Merge overlapping detections across classes (mirrors ultralytics -> agnostic_nms)
   dimension_estimation:
-    gsd: 0.02725    # Ground sample distance [m/px]; tuned for DJI Mavic 3 at 140–150 m altitude, 4K resolution
+    gsd: 0.0545     # Ground sample distance [m/px]; ~0.055 for DJI Mavic 3 at 140–150 m altitude, 4K resolution; used only to convert r0 to pixels; (0, inf)
     eps: 4          # Visibility margin [px]; bounding boxes closer than this to any frame edge are excluded; [0, inf)
-    r0: 1.25        # Minimum vehicle displacement [m] required before computing travel azimuth; (0, inf)
+    r0: 2.5         # Minimum vehicle displacement [m] required before computing travel azimuth; (0, inf)
     theta_bar: 15   # Maximum azimuth deviation [deg] from cardinal directions to classify a pass as parallel; [0, 90]
     tau_c:          # Per-class minimum length/width ratio used to reject stationary vehicles as non-elongated
       0: 1.83       # Car (includes vans, SUVs)

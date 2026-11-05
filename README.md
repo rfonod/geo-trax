@@ -374,7 +374,7 @@ The `tools/` directory provides the wrangling scripts that take you from raw foo
 - Treat `RAW/` as read-only archival storage and derive everything under `PROCESSED/`; the wrangling steps are reproducible from the raw footage.
 - The **master frame** is an intermediary coordinate system per location: aligning every flight to one shared reference frame keeps trajectories from different drones, altitudes, and viewpoints in a single consistent coordinate system.
 - Coordinates were projected to a local CRS (EPSG:5186, KGD2002 / Central Belt 2010) alongside WGS84 lat/lon; set your own CRS in the `georef:` config section.
-- Imagery was captured at ~140–150 m altitude in 4K, giving a ground sampling distance of ≈ 0.027 m/px (the default `extraction.gsd`). Re-tune the GSD for different altitudes or cameras.
+- Imagery was captured at ~140–150 m altitude in 4K, giving a ground sampling distance of ≈ 0.055 m/px (the default `extraction.dimension_estimation.gsd` is 0.0545). Re-tune the GSD for different altitudes or cameras.
 
 </details>
 
