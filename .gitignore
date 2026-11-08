@@ -99,3 +99,7 @@ data/**/*.yaml
 # Optional Google Drive temporary files
 .tmp.driveupload
 .tmp.drivedownload
+
+# Native sources of the social preview image (only the exported .png is tracked)
+assets/*_social_preview.pdf
+assets/*_social_preview-html.zip
