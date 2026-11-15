@@ -9,6 +9,9 @@ Both image-matching steps rely on feature detection: **stabilization** registers
 
 The stabilization default is `orb`, tuned for high-altitude BEV footage with [Stabilo-Optimize](https://github.com/rfonod/stabilo-optimize) and used for every published result. Georeferencing defaults to RootSIFT, since matching a drone frame against an orthophoto is a cross-domain match, often across years, seasons and lighting, and much harder than matching consecutive video frames.
 
+!!! info "Benchmark on dynamic urban scenes"
+    Over a busy intersection, vehicles moving together can supply mutually consistent matches that draw the stabilization homography toward their own motion rather than the camera's. The paper [*Consensus Capture in Reference-Based UAV Video Stabilization: A Benchmark on Dynamic Urban Scenes*](https://arxiv.org/abs/2611.17190) studies this effect on Songdo footage and benchmarks most of the detectors on this page, together with matchers, robust estimators and object masking, for the registration step that stabilization relies on. Its code is [Stabilo Benchmark](https://github.com/rfonod/stabilo-benchmark) and its data record is [10.5281/zenodo.23623540](https://doi.org/10.5281/zenodo.23623540).
+
 ## Classical detectors
 
 | Detector | Description |

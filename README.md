@@ -122,7 +122,7 @@ Run `geotrax -h` or `geotrax batch -h` for all options. The scale-up commands ab
 
 - **Detection**: YOLOv8s on aerial BEV imagery; detects car (incl. vans), bus, truck, and motorcycle; optional per-class confidence thresholds (`extraction.class_conf`) and [SAHI](https://github.com/obss/sahi) sliced inference for improved small-object recall (`--sahi`).
 - **Tracking**: six multi-object trackers (BoT-SORT default; see [Tracking](#tracking)); optional per-track frame-gap interpolation.
-- **Stabilization**: homography-based trajectory correction via [Stabilo](https://github.com/rfonod/stabilo) ⚖️, tuned with [Stabilo-Optimize](https://github.com/rfonod/stabilo-optimize) 🎯; optional CUDA acceleration (`--stab-gpu`).
+- **Stabilization**: homography-based trajectory correction via [Stabilo](https://github.com/rfonod/stabilo) ⚖️, tuned with [Stabilo-Optimize](https://github.com/rfonod/stabilo-optimize) 🎛️; optional CUDA acceleration (`--stab-gpu`).
 - **Georeferencing**: frame-to-orthophoto registration; outputs lat/lon, local CRS, speed, acceleration, and lane assignment per vehicle; optional CUDA acceleration (`--geo-gpu`).
 - **Visualization**: track overlays on original, stabilized, or static-reference video, in five rendering modes (incl. oriented bounding boxes).
 - **Analysis**: trajectory maps, kinematic distributions, and class/dimension charts, per-video or aggregated across drones and sessions; GIS export (GeoPackage/GeoJSON) of trajectories for QGIS, ArcGIS, or kepler.gl (`geotrax export`).
@@ -148,9 +148,11 @@ Geo-trax integrates with and complements several specialized tools:
 
 - **[Stabilo](https://github.com/rfonod/stabilo) ⚖️**: Python library for video and trajectory stabilization using robust homography transformations. Supports various feature detectors, RANSAC algorithms, and user-defined masks. Used as Geo-trax's core stabilization engine.
 
-- **[Stabilo-Optimize](https://github.com/rfonod/stabilo-optimize) 🎯**: benchmarking and hyperparameter optimization framework for Stabilo. Evaluates stabilization performance through ground truth-free assessment using random perturbations. Used to fine-tune Geo-trax stabilization parameters.
+- **[Stabilo-Optimize](https://github.com/rfonod/stabilo-optimize) 🎛️**: benchmarking and hyperparameter optimization framework for Stabilo. Evaluates stabilization performance through ground truth-free assessment using random perturbations. Used to fine-tune Geo-trax stabilization parameters.
 
-- **[HBB2OBB](https://github.com/rfonod/hbb2obb) 📦**: converts horizontal bounding boxes to oriented bounding boxes using SAM segmentation models. Can enhance Geo-trax outputs when object orientation is needed for downstream analysis.
+- **[Stabilo Benchmark](https://github.com/rfonod/stabilo-benchmark) 🎯**: static and dynamic benchmark of the complete registration pipeline behind reference-based UAV video stabilization (feature detector, matcher, robust estimator and object masking) on urban scenes where vehicles move, from the paper [*Consensus Capture in Reference-Based UAV Video Stabilization*](https://arxiv.org/abs/2611.17190). Evaluates the registration step Geo-trax's stabilization relies on, and annotates its vehicles with the Geo-trax detector.
+
+- **[HBB2OBB](https://github.com/rfonod/hbb2obb) 🔄**: converts horizontal bounding boxes to oriented bounding boxes using SAM segmentation models. Can enhance Geo-trax outputs when object orientation is needed for downstream analysis.
 
 </details>
 
@@ -229,7 +231,9 @@ The [Detection and tracking guide](https://rfonod.github.io/geo-trax/guides/dete
 
 Quasi-stationary drone footage is never perfectly static: wind, GPS drift, and gimbal corrections shift the frame throughout a flight. Geo-trax compensates by registering every frame back to a fixed reference frame with a homography, via [Stabilo](https://github.com/rfonod/stabilo) ⚖️. Tracks are written in both raw and stabilized image coordinates, and the per-frame 3 × 3 transform is saved alongside them.
 
-Registration quality depends on the feature detector. The default is `orb`, tuned for high-altitude BEV footage with [Stabilo-Optimize](https://github.com/rfonod/stabilo-optimize) 🎯 and used for every published result. Five other classical OpenCV detectors and five learning-based kornia models are available through `--stab-detector`; the [Feature detectors guide](https://rfonod.github.io/geo-trax/guides/feature-detectors/) compares them and explains the rotation and memory caveats of the learned ones before you switch.
+Registration quality depends on the feature detector. The default is `orb`, tuned for high-altitude BEV footage with [Stabilo-Optimize](https://github.com/rfonod/stabilo-optimize) 🎛️ and used for every published result. Five other classical OpenCV detectors and five learning-based kornia models are available through `--stab-detector`; the [Feature detectors guide](https://rfonod.github.io/geo-trax/guides/feature-detectors/) compares them and explains the rotation and memory caveats of the learned ones before you switch.
+
+Over a busy intersection, vehicles moving together can supply mutually consistent matches that draw the homography toward their own motion rather than the camera's. The paper [*Consensus Capture in Reference-Based UAV Video Stabilization: A Benchmark on Dynamic Urban Scenes*](https://arxiv.org/abs/2611.17190) studies this effect on Songdo footage and benchmarks detectors, matchers, robust estimators and object masking for this registration step; its code is [Stabilo Benchmark](https://github.com/rfonod/stabilo-benchmark) and its data record is [10.5281/zenodo.23623540](https://doi.org/10.5281/zenodo.23623540).
 
 Masking, RANSAC, and downsampling parameters live under `cfg -> stabilo`. To skip stabilization entirely, set `extraction.stabilize: false`.
 
@@ -266,7 +270,7 @@ The [documentation site](https://rfonod.github.io/geo-trax/) has a guide per sta
 
 ## Real-World Deployment: The Songdo Experiment
 
-Geo-trax was validated in a large-scale urban traffic monitoring campaign in Songdo, South Korea, where it processed footage from a fleet of 10 drones to produce the [**Songdo Traffic**](https://doi.org/10.5281/zenodo.13828383) dataset. The detection model was trained on the companion [**Songdo Vision v1**](https://doi.org/10.5281/zenodo.13828408) dataset (a later [v2](https://doi.org/10.5281/zenodo.21728430) annotation-quality release exists on Zenodo; the released model has not been retrained on it). The dataset is described in the [publication](#citation).
+Geo-trax was validated in a large-scale urban traffic monitoring campaign in Songdo, South Korea, where it processed footage from a fleet of 10 drones to produce the [**Songdo Traffic**](https://doi.org/10.5281/zenodo.13828383) dataset. The detection model was trained on the companion [**Songdo Vision v1**](https://doi.org/10.5281/zenodo.13828408) dataset (a later [v2](https://doi.org/10.5281/zenodo.21728430) annotation-quality release exists on Zenodo; the released model has not been retrained on it). The dataset is described in the [publication](#citation). Oriented-box annotations of the same frames are released as [**Songdo Vision OBB**](https://doi.org/10.5281/zenodo.15050578), introduced with the [stabilization benchmark](https://arxiv.org/abs/2611.17190), which also draws its imagery from this experiment.
 
 | Songdo campaign | |
 |---|---|
@@ -398,7 +402,7 @@ If you use **Geo-trax** in your research or software, please cite:
 }
 ```
 
-2. **Software archive** (when referencing or building on the code itself):
+2. **Software archive** (when referencing or building on the code itself; replace `1.x.x` with the version you used):
 
 ```bibtex
 @software{fonod2026geo-trax,
@@ -406,7 +410,7 @@ If you use **Geo-trax** in your research or software, please cite:
   title = {Geo-trax: A Comprehensive Framework for Georeferenced Vehicle Trajectory Extraction from Drone Imagery},
   year = {2026},
   month = nov,
-  version = {1.6.2},
+  version = {1.x.x},
   license = {MIT},
   doi = {10.5281/zenodo.12119542},
   url = {https://github.com/rfonod/geo-trax}

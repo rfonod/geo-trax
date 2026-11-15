@@ -543,7 +543,7 @@ def bibtex_software(cff: dict) -> str:
     months = 'jan feb mar apr may jun jul aug sep oct nov dec'.split()
     doi = next(i['value'] for i in cff['identifiers'] if i['type'] == 'doi')
     fields = [('author', f'{{{author["family-names"]}, {author["given-names"]}}}'), ('title', f'{{{cff["title"]}}}'),
-              ('year', f'{{{year}}}'), ('month', months[month - 1]), ('version', f'{{{cff["version"]}}}'),
+              ('year', f'{{{year}}}'), ('month', months[month - 1]), ('version', '{1.x.x}'),
               ('license', f'{{{cff["license"]}}}'), ('doi', f'{{{doi}}}'), ('url', f'{{{cff["repository-code"]}}}')]
     key = f'{author["family-names"].lower()}{year}{repo}'
     return f'@software{{{key},\n' + ',\n'.join(f'  {k} = {v}' for k, v in fields) + '\n}'
@@ -570,7 +570,7 @@ def render_citation() -> str:
         '```bibtex', article, '```', '',
         '## Software archive', '',
         f'When referencing or building on the code itself. The Zenodo DOI [{doi}](https://doi.org/{doi}) always '
-        f'resolves to the latest release; the entry below records version {cff["version"]}.', '',
+        'resolves to the latest release; replace `1.x.x` with the version you used.', '',
         '```bibtex', software, '```', '',
         '## Datasets', '',
         'Released on Zenodo alongside the article:', '',
@@ -580,6 +580,9 @@ def render_citation() -> str:
         '[doi:10.5281/zenodo.13828408](https://doi.org/10.5281/zenodo.13828408).',
         '- **Songdo Vision v2**: an annotation-quality release of the same images, '
         '[doi:10.5281/zenodo.21728430](https://doi.org/10.5281/zenodo.21728430).',
+        '- **Songdo Vision OBB**: oriented-box annotations of the same images, introduced with the stabilization '
+        'benchmark paper [arXiv:2611.17190](https://arxiv.org/abs/2611.17190), '
+        '[doi:10.5281/zenodo.15050578](https://doi.org/10.5281/zenodo.15050578).',
     ]
     return '\n'.join(lines) + '\n'
 
